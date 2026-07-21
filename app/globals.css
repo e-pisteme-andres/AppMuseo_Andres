@@ -100,6 +100,7 @@ button { font: inherit; }
 }
 
 .status-searching > span { animation: pulse 1.25s ease-in-out infinite; }
+.status-aiming > span { animation: pulse 1.25s ease-in-out infinite; }
 .status-failed > span { background: #ff806e; box-shadow: 0 0 0 3px rgba(255, 128, 110, 0.12); }
 
 .experience-intro { padding: 3.3rem 0 1.5rem; }
@@ -219,6 +220,53 @@ button { font: inherit; }
   animation: scan 1.8s ease-in-out infinite;
 }
 
+.placement-control {
+  position: absolute;
+  z-index: 12;
+  top: 50%;
+  left: 50%;
+  display: none;
+  min-width: 8.5rem;
+  padding: 3.5rem 0.8rem 0.65rem;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: white;
+  cursor: crosshair;
+  text-align: center;
+  text-shadow: 0 1px 0.4rem rgba(0, 0, 0, 0.9);
+}
+
+.model-viewer[ar-status="session-started"] > .placement-control,
+.model-viewer[ar-status="object-placed"] > .placement-control { display: grid; gap: 0.55rem; }
+
+.placement-reticle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2.9rem;
+  height: 2.9rem;
+  transform: translateX(-50%);
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.placement-reticle::before,
+.placement-reticle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: white;
+  transform: translate(-50%, -50%);
+}
+
+.placement-reticle::before { width: 0.8rem; height: 2px; }
+.placement-reticle::after { width: 2px; height: 0.8rem; }
+.placement-control strong { font-size: 0.72rem; }
+
 .ar-failure {
   padding: 0.7rem 1rem;
   border-radius: 0.7rem;
@@ -280,6 +328,7 @@ button { font: inherit; }
 .demo-note { margin-top: 1.2rem; text-align: center; font-size: 0.52rem; }
 
 .ar-launch:focus-visible,
+.placement-control:focus-visible,
 .model-selector button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 @keyframes scan { 0%, 100% { transform: translateX(-1.2rem) rotate(-8deg); } 50% { transform: translateX(1.2rem) rotate(8deg); } }

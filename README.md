@@ -8,6 +8,7 @@ realidad aumentada.
 - Inicia una sesión WebXR o el visor AR nativo del teléfono.
 - Permite alternar entre tres modelos 3D demostrativos.
 - Detecta planos horizontales como mesas y suelos.
+- Coloca y actualiza la posición del modelo solo cuando el visitante pulsa el control de la mira.
 - Mantiene el modelo anclado mientras el visitante mueve la cámara.
 - Permite girar, ampliar y recolocar las piezas mediante gestos.
 

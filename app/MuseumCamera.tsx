@@ -1,8 +1,27 @@
 "use client";
 
-import { createElement, useEffect, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 
-type ArStatus = "ready" | "searching" | "placed" | "failed";
+type ArStatus = "ready" | "searching" | "aiming" | "placed" | "failed";
+
+type ArMaterial = {
+  getAlphaMode: () => string;
+  setAlphaMode: (mode: string) => void;
+  pbrMetallicRoughness: {
+    baseColorFactor: readonly number[];
+    setBaseColorFactor: (factor: number[]) => void;
+  };
+};
+
+type MuseumModelViewer = HTMLElement & {
+  model?: { materials: readonly ArMaterial[] };
+};
+
+type HiddenMaterial = {
+  material: ArMaterial;
+  alphaMode: string;
+  baseColorFactor: number[];
+};
 
 const models = [
   {
@@ -28,15 +47,52 @@ const models = [
 const statusMessages: Record<ArStatus, string> = {
   ready: "Listo para colocar",
   searching: "Buscando una superficie plana",
+  aiming: "Apunta y pulsa colocar aquí",
   placed: "Pieza colocada en el espacio",
   failed: "Este dispositivo no ha podido iniciar AR",
 };
 
 export function MuseumCamera() {
-  const modelViewerRef = useRef<HTMLElement | null>(null);
+  const modelViewerRef = useRef<MuseumModelViewer | null>(null);
+  const placementButtonRef = useRef<HTMLButtonElement | null>(null);
+  const manualPlacementRef = useRef(false);
+  const hiddenMaterialsRef = useRef<HiddenMaterial[]>([]);
   const [selectedModel, setSelectedModel] = useState(0);
   const [arStatus, setArStatus] = useState<ArStatus>("ready");
   const model = models[selectedModel];
+
+  const hideModelUntilPlacement = useCallback(() => {
+    if (hiddenMaterialsRef.current.length > 0) return;
+
+    const viewer = modelViewerRef.current;
+    viewer?.setAttribute("shadow-intensity", "0");
+    const materials = viewer?.model?.materials ?? [];
+    hiddenMaterialsRef.current = materials.map((material) => {
+      const baseColorFactor = [...material.pbrMetallicRoughness.baseColorFactor];
+      const hiddenFactor = [...baseColorFactor];
+      hiddenFactor[3] = 0;
+      const alphaMode = material.getAlphaMode();
+
+      material.setAlphaMode("BLEND");
+      material.pbrMetallicRoughness.setBaseColorFactor(hiddenFactor);
+      return { material, alphaMode, baseColorFactor };
+    });
+  }, []);
+
+  const restoreModel = useCallback(() => {
+    modelViewerRef.current?.setAttribute("shadow-intensity", "1");
+    hiddenMaterialsRef.current.forEach(({ material, alphaMode, baseColorFactor }) => {
+      material.pbrMetallicRoughness.setBaseColorFactor(baseColorFactor);
+      material.setAlphaMode(alphaMode);
+    });
+    hiddenMaterialsRef.current = [];
+  }, []);
+
+  const confirmManualPlacement = useCallback(() => {
+    manualPlacementRef.current = true;
+    restoreModel();
+    setArStatus("placed");
+  }, [restoreModel]);
 
   useEffect(() => {
     const viewer = modelViewerRef.current;
@@ -44,17 +100,42 @@ export function MuseumCamera() {
 
     const handleStatus = (event: Event) => {
       const status = (event as CustomEvent<{ status: string }>).detail?.status;
-      if (status === "session-started") setArStatus("searching");
-      if (status === "object-placed") setArStatus("placed");
+      if (status === "session-started") {
+        manualPlacementRef.current = false;
+        hideModelUntilPlacement();
+        setArStatus("searching");
+      }
+      if (status === "object-placed") {
+        setArStatus(manualPlacementRef.current ? "placed" : "aiming");
+      }
       if (status === "failed") setArStatus("failed");
-      if (status === "not-presenting") setArStatus("ready");
+      if (status === "not-presenting") {
+        manualPlacementRef.current = false;
+        restoreModel();
+        setArStatus("ready");
+      }
     };
 
     viewer.addEventListener("ar-status", handleStatus);
     return () => viewer.removeEventListener("ar-status", handleStatus);
-  }, [selectedModel]);
+  }, [hideModelUntilPlacement, restoreModel, selectedModel]);
+
+  useEffect(() => {
+    const button = placementButtonRef.current;
+    if (!button) return;
+
+    // Permite que este control genere la selección XR que model-viewer usa
+    // para colocar la pieza, en vez de tratarlo como un botón de interfaz.
+    const allowXrPlacement = (event: Event) => {
+      confirmManualPlacement();
+      event.stopPropagation();
+    };
+    button.addEventListener("beforexrselect", allowXrPlacement);
+    return () => button.removeEventListener("beforexrselect", allowXrPlacement);
+  }, [confirmManualPlacement, selectedModel]);
 
   const selectModel = (index: number) => {
+    restoreModel();
     setSelectedModel(index);
     setArStatus("ready");
   };
@@ -121,6 +202,18 @@ export function MuseumCamera() {
             createElement("strong", null, "Busca una superficie plana"),
             createElement("small", null, "Mueve el teléfono lentamente de lado a lado"),
           ),
+          <button
+            ref={placementButtonRef}
+            className="placement-control"
+            type="button"
+            onClick={confirmManualPlacement}
+            aria-label={arStatus === "placed"
+              ? "Actualizar la posición de la pieza hacia donde apunta la cámara"
+              : "Colocar la pieza hacia donde apunta la cámara"}
+          >
+            <span className="placement-reticle" aria-hidden="true" />
+            <strong>{arStatus === "placed" ? "Actualizar posición" : "Colocar aquí"}</strong>
+          </button>,
           createElement(
             "div",
             { slot: "ar-failure", className: "ar-failure" },
@@ -157,7 +250,7 @@ export function MuseumCamera() {
       <section className="how-it-works" aria-label="Cómo usar la realidad aumentada">
         <div><span>1</span><p>Elige la pieza que quieres observar.</p></div>
         <div><span>2</span><p>Pulsa iniciar y permite usar la cámara.</p></div>
-        <div><span>3</span><p>Apunta a una superficie y toca para colocarla.</p></div>
+        <div><span>3</span><p>Apunta a una superficie y pulsa colocar aquí.</p></div>
       </section>
 
       <p className="demo-note">Prototipo · Modelos demostrativos</p>

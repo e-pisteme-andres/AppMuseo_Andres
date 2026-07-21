@@ -39,5 +39,8 @@ test("incluye detección de superficies y tres modelos", async () => {
   assert.match(source, /object-placed/);
   assert.equal((source.match(/src: "https:\/\/modelviewer\.dev/g) ?? []).length, 3);
   assert.match(source, /Busca una superficie plana/);
+  assert.match(source, /Actualizar posición/);
+  assert.match(source, /beforexrselect/);
+  assert.match(source, /hideModelUntilPlacement/);
   assert.doesNotMatch(source, /getUserMedia/);
 });
