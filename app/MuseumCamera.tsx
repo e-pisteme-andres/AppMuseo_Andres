@@ -23,6 +23,38 @@ type HiddenMaterial = {
   baseColorFactor: number[];
 };
 
+type ArHitTestSource = { cancel: () => void };
+type ArFrame = {
+  getHitTestResults: (source: ArHitTestSource) => unknown[];
+  getViewerPose: (referenceSpace: unknown) => {
+    views: Array<{
+      transform: {
+        position: { x: number; y: number; z: number };
+        orientation: { x: number; y: number; z: number; w: number };
+      };
+    }>;
+  } | null;
+};
+type ArSession = {
+  requestHitTestSource: (options: { space: unknown; offsetRay: unknown }) => Promise<ArHitTestSource>;
+  requestAnimationFrame: (callback: (time: number, frame: ArFrame) => void) => number;
+};
+type ArRenderer = {
+  currentSession?: ArSession;
+  frame?: ArFrame;
+  initialHitSource?: ArHitTestSource | null;
+  threeRenderer?: { xr?: { getReferenceSpace: () => unknown } };
+  getHitPoint?: (result: unknown) => unknown | null;
+  goalPosition?: { copy: (position: unknown) => void };
+  placeOnWall?: boolean;
+  moveToFloor?: (frame: ArFrame) => void;
+};
+type ArRendererOwner = { arRenderer?: ArRenderer };
+type XrRayConstructor = new (
+  origin: { x: number; y: number; z: number; w: number },
+  direction: { x: number; y: number; z: number; w: number },
+) => unknown;
+
 const models = [
   {
     name: "Traje espacial",
@@ -52,10 +84,30 @@ const statusMessages: Record<ArStatus, string> = {
   failed: "Este dispositivo no ha podido iniciar AR",
 };
 
+function getArRenderer(viewer: MuseumModelViewer): ArRenderer | undefined {
+  const owner = Reflect.ownKeys(viewer)
+    .map((key) => Reflect.get(viewer, key) as unknown)
+    .find((value): value is ArRendererOwner =>
+      typeof value === "object" && value !== null && "arRenderer" in value,
+    );
+
+  return owner?.arRenderer;
+}
+
+function cameraDirection({ x, y, z, w }: { x: number; y: number; z: number; w: number }) {
+  return {
+    x: -2 * (x * z + w * y),
+    y: 2 * (w * x - y * z),
+    z: 2 * (x * x + y * y) - 1,
+    w: 0,
+  };
+}
+
 export function MuseumCamera() {
   const modelViewerRef = useRef<MuseumModelViewer | null>(null);
   const placementButtonRef = useRef<HTMLButtonElement | null>(null);
   const manualPlacementRef = useRef(false);
+  const placementRequestRef = useRef(false);
   const hiddenMaterialsRef = useRef<HiddenMaterial[]>([]);
   const [selectedModel, setSelectedModel] = useState(0);
   const [arStatus, setArStatus] = useState<ArStatus>("ready");
@@ -88,11 +140,76 @@ export function MuseumCamera() {
     hiddenMaterialsRef.current = [];
   }, []);
 
-  const confirmManualPlacement = useCallback(() => {
+  const repositionAtCamera = useCallback(async () => {
+    if (placementRequestRef.current) return true;
+
+    const viewer = modelViewerRef.current;
+    if (!viewer) return false;
+
+    const arRenderer = getArRenderer(viewer);
+    const session = arRenderer?.currentSession;
+    const referenceSpace = arRenderer?.threeRenderer?.xr?.getReferenceSpace();
+    const frame = arRenderer?.frame;
+    const pose = frame?.getViewerPose(referenceSpace);
+    const view = pose?.views[0];
+    const XRRay = Reflect.get(globalThis, "XRRay") as XrRayConstructor | undefined;
+
+    if (!arRenderer || !session || !referenceSpace || !view || !XRRay) return false;
+
+    placementRequestRef.current = true;
+    arRenderer.initialHitSource?.cancel();
+
+    try {
+      const hitSource = await session.requestHitTestSource({
+        space: referenceSpace,
+        offsetRay: new XRRay(
+          { ...view.transform.position, w: 1 },
+          cameraDirection(view.transform.orientation),
+        ),
+      });
+      arRenderer.initialHitSource = hitSource;
+
+      let attempts = 0;
+      const updatePosition = (_time: number, nextFrame: ArFrame) => {
+        if (arRenderer.initialHitSource !== hitSource) return;
+
+        const result = nextFrame.getHitTestResults(hitSource)[0];
+        const hitPoint = result ? arRenderer.getHitPoint?.(result) : null;
+        if (hitPoint && !arRenderer.placeOnWall) {
+          arRenderer.goalPosition?.copy(hitPoint);
+        }
+        arRenderer.moveToFloor?.(nextFrame);
+        attempts += 1;
+
+        if (arRenderer.initialHitSource === hitSource && attempts < 120) {
+          session.requestAnimationFrame(updatePosition);
+          return;
+        }
+
+        if (arRenderer.initialHitSource === hitSource) {
+          hitSource.cancel();
+          arRenderer.initialHitSource = null;
+          placementRequestRef.current = false;
+          setArStatus("aiming");
+        }
+      };
+
+      session.requestAnimationFrame(updatePosition);
+      return true;
+    } catch {
+      placementRequestRef.current = false;
+      return false;
+    }
+  }, []);
+
+  const requestManualPlacement = useCallback(() => {
     manualPlacementRef.current = true;
     restoreModel();
-    setArStatus("placed");
-  }, [restoreModel]);
+    setArStatus("searching");
+    void repositionAtCamera().then((started) => {
+      if (!started) setArStatus("aiming");
+    });
+  }, [repositionAtCamera, restoreModel]);
 
   useEffect(() => {
     const viewer = modelViewerRef.current;
@@ -102,15 +219,18 @@ export function MuseumCamera() {
       const status = (event as CustomEvent<{ status: string }>).detail?.status;
       if (status === "session-started") {
         manualPlacementRef.current = false;
+        placementRequestRef.current = false;
         hideModelUntilPlacement();
         setArStatus("searching");
       }
       if (status === "object-placed") {
+        placementRequestRef.current = false;
         setArStatus(manualPlacementRef.current ? "placed" : "aiming");
       }
       if (status === "failed") setArStatus("failed");
       if (status === "not-presenting") {
         manualPlacementRef.current = false;
+        placementRequestRef.current = false;
         restoreModel();
         setArStatus("ready");
       }
@@ -126,13 +246,13 @@ export function MuseumCamera() {
 
     // Permite que este control genere la selección XR que model-viewer usa
     // para colocar la pieza, en vez de tratarlo como un botón de interfaz.
-    const allowXrPlacement = (event: Event) => {
-      confirmManualPlacement();
-      event.stopPropagation();
+    const handlePlacementRequest = (event: Event) => {
+      event.preventDefault();
+      requestManualPlacement();
     };
-    button.addEventListener("beforexrselect", allowXrPlacement);
-    return () => button.removeEventListener("beforexrselect", allowXrPlacement);
-  }, [confirmManualPlacement, selectedModel]);
+    button.addEventListener("beforexrselect", handlePlacementRequest);
+    return () => button.removeEventListener("beforexrselect", handlePlacementRequest);
+  }, [requestManualPlacement, selectedModel]);
 
   const selectModel = (index: number) => {
     restoreModel();
@@ -206,7 +326,7 @@ export function MuseumCamera() {
             ref={placementButtonRef}
             className="placement-control"
             type="button"
-            onClick={confirmManualPlacement}
+            onClick={requestManualPlacement}
             aria-label={arStatus === "placed"
               ? "Actualizar la posición de la pieza hacia donde apunta la cámara"
               : "Colocar la pieza hacia donde apunta la cámara"}

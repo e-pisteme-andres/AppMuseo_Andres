@@ -42,5 +42,8 @@ test("incluye detección de superficies y tres modelos", async () => {
   assert.match(source, /Actualizar posición/);
   assert.match(source, /beforexrselect/);
   assert.match(source, /hideModelUntilPlacement/);
+  assert.match(source, /requestHitTestSource/);
+  assert.match(source, /goalPosition\?\.copy/);
+  assert.match(source, /moveToFloor/);
   assert.doesNotMatch(source, /getUserMedia/);
 });
