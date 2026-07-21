@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f110f" />
+    <meta name="description" content="Coloca piezas 3D del museo sobre una superficie real usando la cámara." />
+    <title>Museo AR</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js"></script>
+  </head>
+  <body>
+    <main class="museum-ar">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div><p class="eyebrow">Museo</p><p class="brand-name">AR</p></div>
+        </div>
+        <div id="ar-status" class="ar-status status-ready" role="status" aria-live="polite">
+          <span></span><b>Listo para colocar</b>
+        </div>
+      </header>
+
+      <section class="experience-intro">
+        <p class="section-number">Experiencia 01</p>
+        <h1>Coloca la historia<br />en tu espacio.</h1>
+        <p class="intro-copy">Elige una pieza, inicia la cámara y mueve el teléfono despacio hasta encontrar una mesa o el suelo.</p>
+      </section>
+
+      <section id="viewer-shell" class="viewer-shell" aria-label="Pieza seleccionada: Traje espacial">
+        <div class="viewer-grid" aria-hidden="true"></div>
+        <model-viewer
+          id="museum-model"
+          class="model-viewer"
+          src="https://modelviewer.dev/shared-assets/models/NeilArmstrong.glb"
+          alt="Modelo 3D de un traje espacial histórico"
+          ar
+          ar-modes="webxr scene-viewer quick-look"
+          ar-placement="floor"
+          ar-scale="auto"
+          camera-controls
+          auto-rotate
+          autoplay
+          interaction-prompt="none"
+          shadow-intensity="1"
+          shadow-softness="1"
+          environment-image="neutral"
+          touch-action="pan-y"
+          xr-environment
+        >
+          <button slot="ar-button" class="ar-launch" type="button">
+            <span class="ar-launch-icon" aria-hidden="true"></span>Iniciar cámara AR
+          </button>
+          <div class="surface-prompt" aria-live="polite">
+            <span class="phone-motion" aria-hidden="true"></span>
+            <strong>Busca una superficie plana</strong>
+            <small>Mueve el teléfono lentamente de lado a lado</small>
+          </div>
+          <div slot="ar-failure" class="ar-failure">La realidad aumentada no está disponible en este dispositivo.</div>
+        </model-viewer>
+        <div class="piece-label" aria-live="polite">
+          <p id="piece-category">Exploración</p>
+          <h2 id="piece-name">Traje espacial</h2>
+          <span>Vista previa 3D · Arrastra para girar</span>
+        </div>
+      </section>
+
+      <section class="model-section">
+        <p class="selector-label">Selecciona una pieza</p>
+        <div class="model-selector" aria-label="Seleccionar pieza 3D">
+          <button class="selected" type="button" aria-pressed="true" data-model="0"><span>01</span><strong>Traje espacial</strong><small>Exploración</small></button>
+          <button type="button" aria-pressed="false" data-model="1"><span>02</span><strong>Caballo</strong><small>Escultura</small></button>
+          <button type="button" aria-pressed="false" data-model="2"><span>03</span><strong>Casco</strong><small>Colección digital</small></button>
+        </div>
+      </section>
+
+      <section class="how-it-works" aria-label="Cómo usar la realidad aumentada">
+        <div><span>1</span><p>Elige la pieza que quieres observar.</p></div>
+        <div><span>2</span><p>Pulsa iniciar y permite usar la cámara.</p></div>
+        <div><span>3</span><p>Apunta a una superficie y toca para colocarla.</p></div>
+      </section>
+      <p class="demo-note">Prototipo · Modelos demostrativos</p>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
