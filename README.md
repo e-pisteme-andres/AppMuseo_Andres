@@ -1,14 +1,15 @@
 # Museo AR
 
-Prototipo web móvil para mostrar piezas 3D sobre la imagen de la cámara del
-teléfono.
+Prototipo web móvil para colocar piezas 3D sobre superficies reales mediante
+realidad aumentada.
 
 ## Funcionalidad
 
-- Solicita la cámara trasera al abrir la aplicación.
+- Inicia una sesión WebXR o el visor AR nativo del teléfono.
 - Permite alternar entre tres modelos 3D demostrativos.
-- Los modelos se pueden girar y ampliar mediante gestos táctiles.
-- Muestra una alternativa clara si la cámara está bloqueada o no disponible.
+- Detecta planos horizontales como mesas y suelos.
+- Mantiene el modelo anclado mientras el visitante mueve la cámara.
+- Permite girar, ampliar y recolocar las piezas mediante gestos.
 
 La cámara requiere HTTPS en un teléfono real. La aplicación no captura,
 almacena ni transmite imágenes del dispositivo.

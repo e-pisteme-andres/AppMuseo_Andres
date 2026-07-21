@@ -20,21 +20,24 @@ test("renderiza la experiencia mínima del museo", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Museo AR<\/title>/i);
-  assert.match(html, /Vista 3D/);
+  assert.match(html, /Coloca la historia/);
+  assert.match(html, /Iniciar cámara AR/);
   assert.match(html, /Traje espacial/);
   assert.match(html, /Caballo/);
   assert.match(html, /Casco/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
 });
 
-test("incluye apertura de cámara y tres modelos", async () => {
+test("incluye detección de superficies y tres modelos", async () => {
   const source = await readFile(
     new URL("../app/MuseumCamera.tsx", import.meta.url),
     "utf8",
   );
 
-  assert.match(source, /getUserMedia/);
-  assert.match(source, /facingMode:\s*\{ ideal: "environment" \}/);
+  assert.match(source, /"ar-modes": "webxr scene-viewer quick-look"/);
+  assert.match(source, /"ar-placement": "floor"/);
+  assert.match(source, /object-placed/);
   assert.equal((source.match(/src: "https:\/\/modelviewer\.dev/g) ?? []).length, 3);
-  assert.match(source, /Abrir cámara/);
+  assert.match(source, /Busca una superficie plana/);
+  assert.doesNotMatch(source, /getUserMedia/);
 });

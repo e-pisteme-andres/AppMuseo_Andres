@@ -1,8 +1,8 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useRef, useState } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 
-type CameraState = "starting" | "active" | "denied" | "unavailable";
+type ArStatus = "ready" | "searching" | "placed" | "failed";
 
 const models = [
   {
@@ -25,136 +25,118 @@ const models = [
   },
 ] as const;
 
+const statusMessages: Record<ArStatus, string> = {
+  ready: "Listo para colocar",
+  searching: "Buscando una superficie plana",
+  placed: "Pieza colocada en el espacio",
+  failed: "Este dispositivo no ha podido iniciar AR",
+};
+
 export function MuseumCamera() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [cameraState, setCameraState] = useState<CameraState>("starting");
+  const modelViewerRef = useRef<HTMLElement | null>(null);
   const [selectedModel, setSelectedModel] = useState(0);
-
-  const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-  }, []);
-
-  const startCamera = useCallback(async () => {
-    stopCamera();
-    setCameraState("starting");
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraState("unavailable");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      });
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCameraState("active");
-    } catch {
-      setCameraState("denied");
-    }
-  }, [stopCamera]);
+  const [arStatus, setArStatus] = useState<ArStatus>("ready");
+  const model = models[selectedModel];
 
   useEffect(() => {
-    void startCamera();
-    return stopCamera;
-  }, [startCamera, stopCamera]);
+    const viewer = modelViewerRef.current;
+    if (!viewer) return;
 
-  const model = models[selectedModel];
-  const statusText =
-    cameraState === "active"
-      ? "Cámara activa"
-      : cameraState === "unavailable"
-        ? "No disponible"
-        : "Preparando cámara";
+    const handleStatus = (event: Event) => {
+      const status = (event as CustomEvent<{ status: string }>).detail?.status;
+      if (status === "session-started") setArStatus("searching");
+      if (status === "object-placed") setArStatus("placed");
+      if (status === "failed") setArStatus("failed");
+      if (status === "not-presenting") setArStatus("ready");
+    };
+
+    viewer.addEventListener("ar-status", handleStatus);
+    return () => viewer.removeEventListener("ar-status", handleStatus);
+  }, [selectedModel]);
+
+  const selectModel = (index: number) => {
+    setSelectedModel(index);
+    setArStatus("ready");
+  };
 
   return (
-    <main className="museum-camera">
-      <video
-        ref={videoRef}
-        className="camera-feed"
-        autoPlay
-        muted
-        playsInline
-        aria-hidden="true"
-      />
-      <div className="camera-shade" aria-hidden="true" />
-
+    <main className="museum-ar">
       <header className="app-header">
-        <div>
-          <p className="eyebrow">Museo</p>
-          <h1>Vista 3D</h1>
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          <div>
+            <p className="eyebrow">Museo</p>
+            <p className="brand-name">AR</p>
+          </div>
         </div>
-        <div className="camera-status" role="status" aria-live="polite">
-          <span className={`status-dot status-${cameraState}`} />
-          {statusText}
+        <div className={`ar-status status-${arStatus}`} role="status" aria-live="polite">
+          <span />
+          {statusMessages[arStatus]}
         </div>
       </header>
 
-      <section className="viewer-stage" aria-label={`Pieza seleccionada: ${model.name}`}>
-        {cameraState === "active" && (
-          <div className="focus-mark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
-        )}
-        {cameraState === "active" &&
-          createElement("model-viewer", {
+      <section className="experience-intro">
+        <p className="section-number">Experiencia 01</p>
+        <h1>Coloca la historia<br />en tu espacio.</h1>
+        <p className="intro-copy">
+          Elige una pieza, inicia la cámara y mueve el teléfono despacio hasta
+          encontrar una mesa o el suelo.
+        </p>
+      </section>
+
+      <section className="viewer-shell" aria-label={`Pieza seleccionada: ${model.name}`}>
+        <div className="viewer-grid" aria-hidden="true" />
+        {createElement(
+          "model-viewer",
+          {
             key: model.src,
+            ref: modelViewerRef,
             className: "model-viewer",
             src: model.src,
             alt: model.alt,
+            ar: true,
+            "ar-modes": "webxr scene-viewer quick-look",
+            "ar-placement": "floor",
+            "ar-scale": "auto",
             "camera-controls": true,
             "auto-rotate": true,
             autoplay: true,
             "interaction-prompt": "none",
-            "shadow-intensity": "0",
+            "shadow-intensity": "1",
+            "shadow-softness": "1",
             "environment-image": "neutral",
-            "touch-action": "none",
-          })}
+            "touch-action": "pan-y",
+            "xr-environment": true,
+          },
+          createElement(
+            "button",
+            { slot: "ar-button", className: "ar-launch", type: "button" },
+            createElement("span", { className: "ar-launch-icon", "aria-hidden": "true" }),
+            "Iniciar cámara AR",
+          ),
+          createElement(
+            "div",
+            { className: "surface-prompt", "aria-live": "polite" },
+            createElement("span", { className: "phone-motion", "aria-hidden": "true" }),
+            createElement("strong", null, "Busca una superficie plana"),
+            createElement("small", null, "Mueve el teléfono lentamente de lado a lado"),
+          ),
+          createElement(
+            "div",
+            { slot: "ar-failure", className: "ar-failure" },
+            "La realidad aumentada no está disponible en este dispositivo.",
+          ),
+        )}
+
+        <div className="piece-label" aria-live="polite">
+          <p>{model.category}</p>
+          <h2>{model.name}</h2>
+          <span>Vista previa 3D · Arrastra para girar</span>
+        </div>
       </section>
 
-      {(cameraState === "denied" || cameraState === "unavailable") && (
-        <section className="permission-card" role="alert">
-          <span className="camera-symbol" aria-hidden="true" />
-          <h2>
-            {cameraState === "denied" ? "Activa la cámara" : "Cámara no disponible"}
-          </h2>
-          <p>
-            {cameraState === "denied"
-              ? "Necesitamos permiso para mostrar las piezas sobre tu entorno."
-              : "Abre esta página en un teléfono compatible y mediante HTTPS."}
-          </p>
-          {cameraState === "denied" && (
-            <button type="button" onClick={() => void startCamera()}>
-              Abrir cámara
-            </button>
-          )}
-        </section>
-      )}
-
-      <footer className="model-panel">
-        <div className="model-heading" aria-live="polite">
-          <div>
-            <p>{model.category}</p>
-            <h2>{model.name}</h2>
-          </div>
-          <span>Arrastra para girar</span>
-        </div>
-
+      <section className="model-section">
+        <p className="selector-label">Selecciona una pieza</p>
         <div className="model-selector" aria-label="Seleccionar pieza 3D">
           {models.map((item, index) => (
             <button
@@ -162,16 +144,23 @@ export function MuseumCamera() {
               type="button"
               className={index === selectedModel ? "selected" : ""}
               aria-pressed={index === selectedModel}
-              aria-label={`Mostrar ${item.name}`}
-              onClick={() => setSelectedModel(index)}
+              onClick={() => selectModel(index)}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
-              {item.name}
+              <strong>{item.name}</strong>
+              <small>{item.category}</small>
             </button>
           ))}
         </div>
-        <p className="demo-note">Prototipo · Modelos demostrativos</p>
-      </footer>
+      </section>
+
+      <section className="how-it-works" aria-label="Cómo usar la realidad aumentada">
+        <div><span>1</span><p>Elige la pieza que quieres observar.</p></div>
+        <div><span>2</span><p>Pulsa iniciar y permite usar la cámara.</p></div>
+        <div><span>3</span><p>Apunta a una superficie y toca para colocarla.</p></div>
+      </section>
+
+      <p className="demo-note">Prototipo · Modelos demostrativos</p>
     </main>
   );
 }

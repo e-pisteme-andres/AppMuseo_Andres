@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Museo AR",
-  description: "Visor minimalista de piezas 3D con cámara para visitantes de museo.",
+  description: "Coloca piezas 3D del museo sobre una superficie real usando la cámara.",
   openGraph: {
     title: "Museo AR",
     description: "Explora piezas en 3D usando la cámara de tu teléfono.",

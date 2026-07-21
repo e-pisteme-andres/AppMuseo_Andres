@@ -3,7 +3,7 @@ import { MuseumCamera } from "./MuseumCamera";
 
 export const metadata: Metadata = {
   title: "Museo AR",
-  description: "Explora piezas del museo en 3D usando la cámara de tu dispositivo.",
+  description: "Coloca piezas 3D del museo sobre una superficie real usando la cámara.",
 };
 
 export default function Home() {
