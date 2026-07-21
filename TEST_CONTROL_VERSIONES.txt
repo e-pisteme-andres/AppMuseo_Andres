@@ -1,0 +1,46 @@
+PRUEBA DE CONTROL DE VERSIONES Y CONEXION CON GITHUB
+====================================================
+
+Fecha de la comprobacion: 2026-07-21T09:41:38+02:00
+Zona horaria: Europe/Madrid
+
+REPOSITORIO LOCAL
+-----------------
+Ruta: C:\Users\it\Documents\GitHub\AppMuseo_Andres
+Rama actual: main
+Remote configurado: origin
+URL de origin: https://github.com/e-pisteme-andres/AppMuseo_Andres.git
+HEAD local: ac621df30660d6994f19a57a92b81111ada6862a
+Version identificada: ac621df (sin etiqueta/tag de version)
+
+GITHUB
+------
+Repositorio: e-pisteme-andres/AppMuseo_Andres
+URL: https://github.com/e-pisteme-andres/AppMuseo_Andres
+Visibilidad: privada
+Rama predeterminada: main
+Ramas encontradas: main
+Permisos de la conexion: admin, maintain, pull, push y triage
+
+COMMITS
+-------
+Numero de commits encontrados en GitHub: 1
+
+1. ac621df30660d6994f19a57a92b81111ada6862a
+   Mensaje: Initial commit
+   Fecha: 2026-07-21T07:20:31Z
+   URL: https://github.com/e-pisteme-andres/AppMuseo_Andres/commit/ac621df30660d6994f19a57a92b81111ada6862a
+
+RESULTADO DE LA VALIDACION
+--------------------------
+Estado: CORRECTO
+
+- La conexion de GitHub puede localizar y leer el repositorio privado.
+- La rama local y la rama remota predeterminada son main.
+- El HEAD local coincide con el commit remoto mas reciente de main.
+- La conexion informa de permisos de lectura y escritura sobre el repositorio.
+
+Observacion: este archivo se ha creado localmente como parte de la prueba y queda
+pendiente de commit/push. Subirlo en un commit posterior permitiria completar una
+prueba de escritura extremo a extremo sin alterar el historial de forma automatica.
+
