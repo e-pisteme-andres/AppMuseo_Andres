@@ -85,20 +85,39 @@ async function repositionAtCamera() {
   const arRenderer = getArRenderer();
   const session = arRenderer?.currentSession;
   const referenceSpace = arRenderer?.threeRenderer?.xr?.getReferenceSpace();
-  const pose = arRenderer?.frame?.getViewerPose(referenceSpace);
-  const view = pose?.views[0];
 
-  if (!arRenderer || !session || !referenceSpace || !view || !window.XRRay) return false;
+  if (!arRenderer || !session || !referenceSpace || !window.XRRay) return false;
 
   placementRequestPending = true;
   arRenderer.initialHitSource?.cancel();
 
   try {
+    if (arRenderer.xrMode === "world-space") {
+      const pose = arRenderer.frame?.getViewerPose(referenceSpace);
+      const view = pose?.views[0];
+      if (!view) {
+        placementRequestPending = false;
+        return false;
+      }
+
+      const direction = cameraDirection(view.transform.orientation);
+      const distance = 1.5;
+      arRenderer.goalPosition.set(
+        view.transform.position.x + direction.x * distance,
+        view.transform.position.y + direction.y * distance,
+        view.transform.position.z + direction.z * distance,
+      );
+      placementRequestPending = false;
+      setStatus("object-placed");
+      return true;
+    }
+
+    const viewerSpace = await session.requestReferenceSpace("viewer");
     const hitSource = await session.requestHitTestSource({
-      space: referenceSpace,
+      space: viewerSpace,
       offsetRay: new XRRay(
-        { ...view.transform.position, w: 1 },
-        cameraDirection(view.transform.orientation),
+        { x: 0, y: 0, z: 0, w: 1 },
+        { x: 0, y: 0, z: -1, w: 0 },
       ),
     });
     arRenderer.initialHitSource = hitSource;

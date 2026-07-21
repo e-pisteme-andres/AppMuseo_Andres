@@ -36,6 +36,7 @@ type ArFrame = {
   } | null;
 };
 type ArSession = {
+  requestReferenceSpace: (type: "viewer") => Promise<unknown>;
   requestHitTestSource: (options: { space: unknown; offsetRay: unknown }) => Promise<ArHitTestSource>;
   requestAnimationFrame: (callback: (time: number, frame: ArFrame) => void) => number;
 };
@@ -43,9 +44,13 @@ type ArRenderer = {
   currentSession?: ArSession;
   frame?: ArFrame;
   initialHitSource?: ArHitTestSource | null;
+  xrMode?: "screen-space" | "world-space" | null;
   threeRenderer?: { xr?: { getReferenceSpace: () => unknown } };
   getHitPoint?: (result: unknown) => unknown | null;
-  goalPosition?: { copy: (position: unknown) => void };
+  goalPosition?: {
+    copy: (position: unknown) => void;
+    set: (x: number, y: number, z: number) => void;
+  };
   placeOnWall?: boolean;
   moveToFloor?: (frame: ArFrame) => void;
 };
@@ -150,21 +155,40 @@ export function MuseumCamera() {
     const session = arRenderer?.currentSession;
     const referenceSpace = arRenderer?.threeRenderer?.xr?.getReferenceSpace();
     const frame = arRenderer?.frame;
-    const pose = frame?.getViewerPose(referenceSpace);
-    const view = pose?.views[0];
     const XRRay = Reflect.get(globalThis, "XRRay") as XrRayConstructor | undefined;
 
-    if (!arRenderer || !session || !referenceSpace || !view || !XRRay) return false;
+    if (!arRenderer || !session || !referenceSpace || !XRRay) return false;
 
     placementRequestRef.current = true;
     arRenderer.initialHitSource?.cancel();
 
     try {
+      if (arRenderer.xrMode === "world-space") {
+        const pose = frame?.getViewerPose(referenceSpace);
+        const view = pose?.views[0];
+        if (!view) {
+          placementRequestRef.current = false;
+          return false;
+        }
+
+        const direction = cameraDirection(view.transform.orientation);
+        const distance = 1.5;
+        arRenderer.goalPosition?.set(
+          view.transform.position.x + direction.x * distance,
+          view.transform.position.y + direction.y * distance,
+          view.transform.position.z + direction.z * distance,
+        );
+        placementRequestRef.current = false;
+        setArStatus("placed");
+        return true;
+      }
+
+      const viewerSpace = await session.requestReferenceSpace("viewer");
       const hitSource = await session.requestHitTestSource({
-        space: referenceSpace,
+        space: viewerSpace,
         offsetRay: new XRRay(
-          { ...view.transform.position, w: 1 },
-          cameraDirection(view.transform.orientation),
+          { x: 0, y: 0, z: 0, w: 1 },
+          { x: 0, y: 0, z: -1, w: 0 },
         ),
       });
       arRenderer.initialHitSource = hitSource;
