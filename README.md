@@ -7,7 +7,7 @@ Aplicación web experimental para colocar un cubo 3D de 20 cm sobre una mesa o e
 1. Abre la aplicación mediante HTTPS en un Android compatible con ARCore.
 2. Pulsa **Ver cubo en AR** y concede permiso para usar la cámara.
 3. Mueve lentamente el teléfono hasta que la retícula confirme una superficie horizontal.
-4. Toca la pantalla para fijar una malla cian sobre la superficie.
+4. Toca la pantalla para fijar una malla cian de 1 × 1 metro sobre la superficie.
 5. Toca de nuevo para colocar el cubo; la malla permanecerá visible.
 6. Arrastra con un dedo para girar en dos ejes o gira dos dedos para el tercer eje.
 

@@ -23,8 +23,8 @@ const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superfic
 const PLACEABLE_MESSAGE = 'Superficie detectada. Toca la pantalla para colocar la malla.';
 const SURFACE_PLACED_MESSAGE = 'Malla colocada. Toca la pantalla de nuevo para colocar el cubo.';
 const PLACED_MESSAGE = 'Cubo colocado. Arrastra para girarlo; la malla permanecerá visible.';
-const SURFACE_SIZE_METERS = 3;
-const SURFACE_DIVISIONS = 30;
+const SURFACE_SIZE_METERS = 1;
+const SURFACE_DIVISIONS = 10;
 
 export class XRExperience {
   private readonly renderer: THREE.WebGLRenderer;
