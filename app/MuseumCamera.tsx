@@ -346,6 +346,7 @@ export function MuseumCamera() {
             createElement("strong", null, "Busca una superficie plana"),
             createElement("small", null, "Mueve el teléfono lentamente de lado a lado"),
           ),
+          <span className="placement-reticle" aria-hidden="true" />,
           <button
             ref={placementButtonRef}
             className="placement-control"
@@ -355,7 +356,6 @@ export function MuseumCamera() {
               ? "Actualizar la posición de la pieza hacia donde apunta la cámara"
               : "Colocar la pieza hacia donde apunta la cámara"}
           >
-            <span className="placement-reticle" aria-hidden="true" />
             <strong>{arStatus === "placed" ? "Actualizar posición" : "Colocar aquí"}</strong>
           </button>,
           createElement(
