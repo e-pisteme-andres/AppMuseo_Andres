@@ -39,6 +39,8 @@ type ArSession = {
   requestReferenceSpace: (type: "viewer") => Promise<unknown>;
   requestHitTestSource: (options: { space: unknown; offsetRay: unknown }) => Promise<ArHitTestSource>;
   requestAnimationFrame: (callback: (time: number, frame: ArFrame) => void) => number;
+  addEventListener: (type: "selectstart", listener: (event: Event) => void) => void;
+  removeEventListener: (type: "selectstart", listener: (event: Event) => void) => void;
 };
 type ArRenderer = {
   currentSession?: ArSession;
@@ -53,6 +55,10 @@ type ArRenderer = {
   };
   placeOnWall?: boolean;
   moveToFloor?: (frame: ArFrame) => void;
+  isTranslating?: boolean;
+  isRotating?: boolean;
+  isTwoHandInteraction?: boolean;
+  lastAngle?: number;
 };
 type ArRendererOwner = { arRenderer?: ArRenderer };
 type XrRayConstructor = new (
@@ -113,6 +119,8 @@ export function MuseumCamera() {
   const placementButtonRef = useRef<HTMLButtonElement | null>(null);
   const manualPlacementRef = useRef(false);
   const placementRequestRef = useRef(false);
+  const placementLockedRef = useRef(false);
+  const removeTranslationLockRef = useRef<(() => void) | null>(null);
   const hiddenMaterialsRef = useRef<HiddenMaterial[]>([]);
   const [selectedModel, setSelectedModel] = useState(0);
   const [arStatus, setArStatus] = useState<ArStatus>("ready");
@@ -179,6 +187,7 @@ export function MuseumCamera() {
           view.transform.position.z + direction.z * distance,
         );
         placementRequestRef.current = false;
+        placementLockedRef.current = true;
         setArStatus("placed");
         return true;
       }
@@ -191,31 +200,28 @@ export function MuseumCamera() {
           { x: 0, y: 0, z: -1, w: 0 },
         ),
       });
-      arRenderer.initialHitSource = hitSource;
-
       let attempts = 0;
       const updatePosition = (_time: number, nextFrame: ArFrame) => {
-        if (arRenderer.initialHitSource !== hitSource) return;
-
         const result = nextFrame.getHitTestResults(hitSource)[0];
         const hitPoint = result ? arRenderer.getHitPoint?.(result) : null;
-        if (hitPoint && !arRenderer.placeOnWall) {
+        if (hitPoint) {
           arRenderer.goalPosition?.copy(hitPoint);
+          hitSource.cancel();
+          placementRequestRef.current = false;
+          placementLockedRef.current = true;
+          setArStatus("placed");
+          return;
         }
-        arRenderer.moveToFloor?.(nextFrame);
         attempts += 1;
 
-        if (arRenderer.initialHitSource === hitSource && attempts < 120) {
+        if (attempts < 120) {
           session.requestAnimationFrame(updatePosition);
           return;
         }
 
-        if (arRenderer.initialHitSource === hitSource) {
-          hitSource.cancel();
-          arRenderer.initialHitSource = null;
-          placementRequestRef.current = false;
-          setArStatus("aiming");
-        }
+        hitSource.cancel();
+        placementRequestRef.current = false;
+        setArStatus("aiming");
       };
 
       session.requestAnimationFrame(updatePosition);
@@ -244,24 +250,59 @@ export function MuseumCamera() {
       if (status === "session-started") {
         manualPlacementRef.current = false;
         placementRequestRef.current = false;
+        placementLockedRef.current = false;
         hideModelUntilPlacement();
         setArStatus("searching");
+
+        const arRenderer = getArRenderer(viewer);
+        const session = arRenderer?.currentSession;
+        if (arRenderer && session) {
+          const keepModelFixed = (selectEvent: Event) => {
+            if (!placementLockedRef.current || arRenderer.isTwoHandInteraction) return;
+
+            const inputSource = (selectEvent as Event & {
+              inputSource?: { gamepad?: { axes?: readonly number[] } };
+            }).inputSource;
+            const horizontalAxis = inputSource?.gamepad?.axes?.[0];
+            if (typeof horizontalAxis !== "number") return;
+
+            // model-viewer interpreta un toque sobre la pieza como arrastre.
+            // Lo convertimos en giro y dejamos intactos los gestos de dos dedos
+            // (rotación y escala).
+            arRenderer.isTranslating = false;
+            arRenderer.isRotating = true;
+            arRenderer.lastAngle = 1.5 * horizontalAxis;
+          };
+
+          removeTranslationLockRef.current?.();
+          session.addEventListener("selectstart", keepModelFixed);
+          removeTranslationLockRef.current = () =>
+            session.removeEventListener("selectstart", keepModelFixed);
+        }
       }
       if (status === "object-placed") {
         placementRequestRef.current = false;
+        placementLockedRef.current = manualPlacementRef.current;
         setArStatus(manualPlacementRef.current ? "placed" : "aiming");
       }
       if (status === "failed") setArStatus("failed");
       if (status === "not-presenting") {
         manualPlacementRef.current = false;
         placementRequestRef.current = false;
+        placementLockedRef.current = false;
+        removeTranslationLockRef.current?.();
+        removeTranslationLockRef.current = null;
         restoreModel();
         setArStatus("ready");
       }
     };
 
     viewer.addEventListener("ar-status", handleStatus);
-    return () => viewer.removeEventListener("ar-status", handleStatus);
+    return () => {
+      viewer.removeEventListener("ar-status", handleStatus);
+      removeTranslationLockRef.current?.();
+      removeTranslationLockRef.current = null;
+    };
   }, [hideModelUntilPlacement, restoreModel, selectedModel]);
 
   useEffect(() => {
@@ -324,6 +365,7 @@ export function MuseumCamera() {
             "ar-placement": "floor",
             "ar-scale": "auto",
             "camera-controls": true,
+            "disable-pan": true,
             "auto-rotate": true,
             autoplay: true,
             "interaction-prompt": "none",
