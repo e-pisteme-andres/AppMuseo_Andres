@@ -6,6 +6,7 @@ describe('máquina de estados de la experiencia AR', () => {
     let state = transitionState('ready', 'starting');
     state = transitionState(state, 'scanning');
     state = transitionState(state, 'placeable');
+    state = transitionState(state, 'surfacePlaced');
     state = transitionState(state, 'placed');
     expect(state).toBe('placed');
   });
@@ -13,6 +14,7 @@ describe('máquina de estados de la experiencia AR', () => {
   it('impide mostrar el objeto saltando la exploración y la confirmación', () => {
     expect(canTransition('ready', 'placed')).toBe(false);
     expect(canTransition('scanning', 'placed')).toBe(false);
+    expect(canTransition('placeable', 'placed')).toBe(false);
     expect(() => transitionState('ready', 'placed')).toThrow(/no válida/);
   });
 

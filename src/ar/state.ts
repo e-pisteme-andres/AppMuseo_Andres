@@ -4,6 +4,7 @@ export type ExperienceState =
   | 'starting'
   | 'scanning'
   | 'placeable'
+  | 'surfacePlaced'
   | 'placed'
   | 'error';
 
@@ -12,7 +13,8 @@ const transitions: Record<ExperienceState, readonly ExperienceState[]> = {
   ready: ['starting', 'error'],
   starting: ['scanning', 'ready', 'error'],
   scanning: ['placeable', 'ready', 'error'],
-  placeable: ['scanning', 'placed', 'ready', 'error'],
+  placeable: ['scanning', 'surfacePlaced', 'ready', 'error'],
+  surfacePlaced: ['placed', 'ready', 'error'],
   placed: ['ready', 'error'],
   error: ['checking', 'ready', 'starting'],
 };

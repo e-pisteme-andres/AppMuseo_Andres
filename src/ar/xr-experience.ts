@@ -7,6 +7,9 @@ import { isHorizontalSurface, SurfaceStabilizer } from './surface';
 interface PointerSnapshot {
   x: number;
   y: number;
+  startX: number;
+  startY: number;
+  startedAt: number;
 }
 
 interface XRExperienceOptions {
@@ -17,10 +20,11 @@ interface XRExperienceOptions {
 }
 
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
-const PLACEABLE_MESSAGE = 'Superficie detectada. Coloca el cubo sobre la malla.';
-const PLACED_MESSAGE = 'Arrastra para girar. Usa dos dedos para rotar el tercer eje.';
-const SURFACE_SIZE_METERS = 0.8;
-const SURFACE_DIVISIONS = 16;
+const PLACEABLE_MESSAGE = 'Superficie detectada. Toca la pantalla para colocar la malla.';
+const SURFACE_PLACED_MESSAGE = 'Malla colocada. Toca la pantalla de nuevo para colocar el cubo.';
+const PLACED_MESSAGE = 'Cubo colocado. Arrastra para girarlo; la malla permanecerá visible.';
+const SURFACE_SIZE_METERS = 3;
+const SURFACE_DIVISIONS = 30;
 
 export class XRExperience {
   private readonly renderer: THREE.WebGLRenderer;
@@ -31,6 +35,7 @@ export class XRExperience {
   private readonly surfaceMesh = new THREE.Group();
   private readonly surfaceFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly surfaceGrid: THREE.GridHelper;
+  private readonly reticle: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
   private readonly stabilizer = new SurfaceStabilizer();
   private readonly pointers = new Map<number, PointerSnapshot>();
   private readonly options: XRExperienceOptions;
@@ -40,7 +45,7 @@ export class XRExperience {
   private referenceSpace: XRReferenceSpace | null = null;
   private hitTestSource: XRHitTestSource | null = null;
   private anchor: XRAnchor | null = null;
-  private placementRequested = false;
+  private surfacePlacementRequested = false;
   private lastTwoFingerAngle: number | null = null;
   private lastMessage = '';
   private trackingLost = false;
@@ -61,7 +66,7 @@ export class XRExperience {
     this.scene.add(keyLight);
 
     this.anchorRoot.matrixAutoUpdate = false;
-    this.anchorRoot.add(this.cubePivot);
+    this.anchorRoot.add(this.surfaceMesh, this.cubePivot);
     this.scene.add(this.anchorRoot);
     this.cubePivot.position.y = 0.1;
     this.cubePivot.visible = false;
@@ -69,23 +74,30 @@ export class XRExperience {
     this.surfaceFill = new THREE.Mesh(
       new THREE.PlaneGeometry(SURFACE_SIZE_METERS, SURFACE_SIZE_METERS).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({
-        color: 0x35e39a,
+        color: 0x35d9ff,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.08,
+        opacity: 0.055,
         depthWrite: false,
       }),
     );
     this.surfaceGrid = new THREE.GridHelper(SURFACE_SIZE_METERS, SURFACE_DIVISIONS, 0xffffff, 0xffffff);
     this.surfaceGrid.position.y = 0.002;
-    this.surfaceGrid.material.color.set(0xffc857);
+    this.surfaceGrid.material.color.set(0x6feeff);
     this.surfaceGrid.material.transparent = true;
-    this.surfaceGrid.material.opacity = 0.48;
+    this.surfaceGrid.material.opacity = 0.82;
     this.surfaceGrid.material.depthWrite = false;
     this.surfaceMesh.add(this.surfaceFill, this.surfaceGrid);
     this.surfaceMesh.matrixAutoUpdate = false;
     this.surfaceMesh.visible = false;
-    this.scene.add(this.surfaceMesh);
+
+    this.reticle = new THREE.Mesh(
+      new THREE.RingGeometry(0.065, 0.082, 48).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffc857, side: THREE.DoubleSide, transparent: true, opacity: 0.95 }),
+    );
+    this.reticle.matrixAutoUpdate = false;
+    this.reticle.visible = false;
+    this.scene.add(this.reticle);
 
     window.addEventListener('resize', this.onResize);
     options.overlay.addEventListener('pointerdown', this.onPointerDown);
@@ -156,12 +168,6 @@ export class XRExperience {
     }
   }
 
-  requestPlacement(): boolean {
-    if (this.state !== 'placeable' || !this.surfaceMesh.visible) return false;
-    this.placementRequested = true;
-    return true;
-  }
-
   private setState(next: ExperienceState, message: string): void {
     this.state = transitionState(this.state, next);
     this.emitMessage(message, true);
@@ -178,13 +184,13 @@ export class XRExperience {
 
     if (this.state === 'scanning' || this.state === 'placeable') {
       this.updateSurface(frame);
-    } else if (this.state === 'placed' && this.anchor) {
+    } else if ((this.state === 'surfacePlaced' || this.state === 'placed') && this.anchor) {
       const anchorPose = frame.getPose(this.anchor.anchorSpace, this.referenceSpace);
       if (anchorPose) {
         this.anchorRoot.matrix.fromArray(anchorPose.transform.matrix);
         if (this.trackingLost) {
           this.trackingLost = false;
-          this.emitMessage(PLACED_MESSAGE);
+          this.emitMessage(this.state === 'surfacePlaced' ? SURFACE_PLACED_MESSAGE : PLACED_MESSAGE);
         }
       } else if (!this.trackingLost) {
         this.trackingLost = true;
@@ -212,42 +218,41 @@ export class XRExperience {
     }
 
     if (!acceptedResult || !acceptedPose) {
-      this.surfaceMesh.visible = false;
+      this.reticle.visible = false;
+      this.surfacePlacementRequested = false;
       this.stabilizer.reset();
       if (this.state === 'placeable') this.setState('scanning', SCANNING_MESSAGE);
       return;
     }
 
     const matrix = new Float32Array(acceptedPose.transform.matrix);
-    this.surfaceMesh.matrix.fromArray(matrix);
-    this.surfaceMesh.visible = true;
+    this.reticle.matrix.fromArray(matrix);
+    this.reticle.visible = true;
 
     const stable = this.stabilizer.add({ matrix });
-    this.surfaceFill.material.color.set(stable ? 0x35e39a : 0xffc857);
-    this.surfaceFill.material.opacity = stable ? 0.14 : 0.07;
-    this.surfaceGrid.material.color.set(stable ? 0x6feeba : 0xffc857);
-    this.surfaceGrid.material.opacity = stable ? 0.9 : 0.48;
+    this.reticle.material.color.set(stable ? 0x6feeff : 0xffc857);
 
     if (stable && this.state === 'scanning') {
       this.setState('placeable', PLACEABLE_MESSAGE);
     } else if (!stable && this.state === 'placeable') {
+      this.surfacePlacementRequested = false;
       this.setState('scanning', SCANNING_MESSAGE);
     }
 
-    if (stable && this.state === 'placeable' && this.placementRequested) {
-      this.placementRequested = false;
-      this.commitPlacement(acceptedResult, matrix);
+    if (stable && this.state === 'placeable' && this.surfacePlacementRequested) {
+      this.surfacePlacementRequested = false;
+      this.commitSurfacePlacement(acceptedResult, matrix);
     }
   }
 
-  private commitPlacement(result: XRHitTestResult, matrix: Float32Array): void {
+  private commitSurfacePlacement(result: XRHitTestResult, matrix: Float32Array): void {
     this.anchorRoot.matrix.fromArray(matrix);
-    this.cubePivot.visible = true;
-    this.surfaceMesh.visible = false;
+    this.surfaceMesh.visible = true;
+    this.reticle.visible = false;
     this.hitTestSource?.cancel();
     this.hitTestSource = null;
     this.stabilizer.reset();
-    this.setState('placed', PLACED_MESSAGE);
+    this.setState('surfacePlaced', SURFACE_PLACED_MESSAGE);
 
     const anchorPromise = result.createAnchor?.();
     anchorPromise
@@ -260,12 +265,21 @@ export class XRExperience {
       });
   }
 
+  private commitCubePlacement(): void {
+    if (this.state !== 'surfacePlaced') return;
+    this.cubePivot.visible = true;
+    this.setState('placed', PLACED_MESSAGE);
+  }
+
   private readonly onPointerDown = (event: PointerEvent): void => {
     if ((event.target as Element).closest('[data-xr-control]')) return;
     this.options.overlay.setPointerCapture?.(event.pointerId);
     this.pointers.set(event.pointerId, {
       x: event.clientX,
       y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: performance.now(),
     });
 
     if (this.pointers.size === 2) {
@@ -299,7 +313,19 @@ export class XRExperience {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
-    if (!this.pointers.has(event.pointerId)) return;
+    const pointer = this.pointers.get(event.pointerId);
+    if (!pointer) return;
+
+    const wasOnlyPointer = this.pointers.size === 1;
+    const distance = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
+    const duration = performance.now() - pointer.startedAt;
+    const isTap = wasOnlyPointer && distance <= 12 && duration <= 650;
+
+    if (isTap && this.state === 'placeable') {
+      this.surfacePlacementRequested = true;
+    } else if (isTap && this.state === 'surfacePlaced') {
+      this.commitCubePlacement();
+    }
 
     this.pointers.delete(event.pointerId);
     if (this.pointers.size < 2) this.lastTwoFingerAngle = null;
@@ -319,10 +345,11 @@ export class XRExperience {
     this.referenceSpace = null;
     this.hitTestSource = null;
     this.anchor = null;
-    this.placementRequested = false;
+    this.surfacePlacementRequested = false;
     this.trackingLost = false;
     this.stabilizer.reset();
     this.pointers.clear();
+    this.reticle.visible = false;
     this.surfaceMesh.visible = false;
     this.cubePivot.visible = false;
     this.cubePivot.quaternion.identity();
