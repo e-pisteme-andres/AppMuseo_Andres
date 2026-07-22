@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DEPTH_SENSING_OPTIONS, getOcclusionState, type OcclusionState } from './occlusion';
 import { applyDragRotation, applyRollRotation, angleBetweenPointers, normalizeAngleDelta } from './rotation';
+import { SporeField } from './spores';
 import { type ExperienceState, transitionState } from './state';
 import { isHorizontalSurface, SurfaceStabilizer } from './surface';
 
@@ -34,6 +35,7 @@ export class XRExperience {
   private readonly camera = new THREE.PerspectiveCamera();
   private readonly anchorRoot = new THREE.Group();
   private readonly mushroomPivot = new THREE.Group();
+  private readonly sporeField = new SporeField();
   private readonly surfaceMesh = new THREE.Group();
   private readonly surfaceFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly surfaceGrid: THREE.GridHelper;
@@ -52,6 +54,7 @@ export class XRExperience {
   private lastMessage = '';
   private trackingLost = false;
   private ending: Promise<void> | null = null;
+  private lastFrameTime: number | null = null;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
@@ -70,7 +73,7 @@ export class XRExperience {
     this.scene.add(keyLight);
 
     this.anchorRoot.matrixAutoUpdate = false;
-    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot);
+    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot, this.sporeField.points);
     this.scene.add(this.anchorRoot);
     this.mushroomPivot.position.y = 0.1;
     this.mushroomPivot.visible = false;
@@ -203,7 +206,7 @@ export class XRExperience {
     this.options.onStateChange(this.state, message);
   }
 
-  private readonly renderFrame = (_time: number, frame?: XRFrame): void => {
+  private readonly renderFrame = (time: number, frame?: XRFrame): void => {
     if (!frame || !this.referenceSpace || !this.session) return;
 
     if (this.state === 'scanning' || this.state === 'placeable') {
@@ -220,6 +223,13 @@ export class XRExperience {
         this.trackingLost = true;
         this.emitMessage('Seguimiento interrumpido. Mueve el móvil lentamente para recuperar la posición.');
       }
+    }
+
+    if (this.state === 'placed') {
+      const elapsedSeconds = time * 0.001;
+      const deltaSeconds = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) * 0.001;
+      this.sporeField.update(elapsedSeconds, deltaSeconds);
+      this.lastFrameTime = time;
     }
 
     this.renderer.render(this.scene, this.camera);
@@ -292,6 +302,9 @@ export class XRExperience {
   private commitMushroomPlacement(): void {
     if (this.state !== 'surfacePlaced') return;
     this.mushroomPivot.visible = true;
+    this.sporeField.reset();
+    this.sporeField.points.visible = true;
+    this.lastFrameTime = null;
     this.setState('placed', PLACED_MESSAGE);
   }
 
@@ -378,6 +391,9 @@ export class XRExperience {
     this.surfaceMesh.visible = false;
     this.mushroomPivot.visible = false;
     this.mushroomPivot.quaternion.identity();
+    this.sporeField.points.visible = false;
+    this.sporeField.reset();
+    this.lastFrameTime = null;
     this.anchorRoot.matrix.identity();
   }
 
