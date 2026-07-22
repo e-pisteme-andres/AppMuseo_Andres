@@ -111,7 +111,11 @@ const experience = new XRExperience({
   stage,
   overlay,
   onStateChange: updateState,
-  onSessionActivity: (active) => document.body.classList.toggle('xr-active', active),
+  onSessionActivity: (active) => {
+    document.body.classList.toggle('xr-active', active);
+    closeButton.disabled = false;
+    closeButton.textContent = 'Salir';
+  },
   onOcclusionChange: (state) => {
     xrOcclusion.dataset.state = state;
     xrOcclusion.textContent = state === 'active' ? 'Oclusión real · activa' : 'Oclusión real · no disponible';
@@ -150,6 +154,18 @@ startButton.addEventListener('click', () => {
 });
 
 closeButton.addEventListener('beforexrselect', (event) => event.preventDefault());
-closeButton.addEventListener('click', () => void experience.end());
+closeButton.addEventListener('click', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (closeButton.disabled) return;
+
+  closeButton.disabled = true;
+  closeButton.textContent = 'Saliendo…';
+  void experience.end().catch(() => {
+    closeButton.disabled = false;
+    closeButton.textContent = 'Salir';
+    xrMessage.textContent = 'No se pudo cerrar la sesión. Inténtalo de nuevo.';
+  });
+});
 
 void checkCompatibility();

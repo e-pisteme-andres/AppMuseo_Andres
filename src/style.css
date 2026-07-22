@@ -90,6 +90,7 @@ footer a { color: #8be6c1; text-decoration: none; }
 .xr-occlusion[data-state="unavailable"] { border-color: rgba(255,200,87,.28); color: #ffd98c; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #6feeba; box-shadow: 0 0 12px #6feeba; }
 .close-button { pointer-events: auto; min-width: 66px; min-height: 42px; border: 1px solid rgba(255,255,255,.18); border-radius: 14px; color: #fff; background: rgba(4,14,11,.66); font-weight: 750; }
+.close-button:disabled { opacity: .68; }
 .xr-guide { position: absolute; left: 50%; bottom: max(38px, calc(env(safe-area-inset-bottom) + 28px)); width: min(430px, calc(100% - 36px)); display: flex; align-items: center; gap: 13px; padding: 15px 18px; border: 1px solid rgba(255,255,255,.17); border-radius: 17px; background: rgba(4,14,11,.72); transform: translateX(-50%); font-size: .86rem; line-height: 1.35; pointer-events: none; }
 .guide-icon { flex: 0 0 auto; width: 27px; height: 27px; border: 2px solid #ffc857; border-radius: 50%; box-shadow: 0 0 0 5px rgba(255,200,87,.1); }
 .xr-guide[data-state="placeable"] .guide-icon, .xr-guide[data-state="surfacePlaced"] .guide-icon, .xr-guide[data-state="placed"] .guide-icon { border-color: #6feeff; box-shadow: 0 0 0 5px rgba(111,238,255,.1); }

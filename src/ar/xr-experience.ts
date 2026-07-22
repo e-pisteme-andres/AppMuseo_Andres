@@ -51,12 +51,14 @@ export class XRExperience {
   private lastTwoFingerAngle: number | null = null;
   private lastMessage = '';
   private trackingLost = false;
+  private ending: Promise<void> | null = null;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType('local-floor');
+    this.renderer.xr.addEventListener('sessionend', this.onSessionEnded);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.domElement.className = 'xr-canvas';
@@ -139,7 +141,6 @@ export class XRExperience {
 
       this.session = session;
       this.options.onOcclusionChange(getOcclusionState(session));
-      session.addEventListener('end', this.onSessionEnded, { once: true });
       await this.renderer.xr.setSession(session);
 
       this.referenceSpace = await session
@@ -169,9 +170,26 @@ export class XRExperience {
   }
 
   async end(): Promise<void> {
-    if (this.session) {
-      await this.session.end();
+    const activeSession = this.session;
+    if (!activeSession) return;
+    if (this.ending) return this.ending;
+
+    this.renderer.setAnimationLoop(null);
+    const ending = this.endOnNextTask(activeSession);
+    this.ending = ending;
+
+    try {
+      await ending;
+    } finally {
+      if (this.ending === ending) this.ending = null;
     }
+  }
+
+  private async endOnNextTask(activeSession: XRSession): Promise<void> {
+    // Do not destroy an immersive session from inside Chrome's DOM-overlay
+    // input dispatch. Moving it to the next task avoids an ARCore/renderer race.
+    await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+    if (this.session === activeSession) await activeSession.end();
   }
 
   private setState(next: ExperienceState, message: string): void {
@@ -348,6 +366,7 @@ export class XRExperience {
     this.hitTestSource?.cancel();
     this.anchor?.delete();
     this.session = null;
+    this.ending = null;
     this.referenceSpace = null;
     this.hitTestSource = null;
     this.anchor = null;
