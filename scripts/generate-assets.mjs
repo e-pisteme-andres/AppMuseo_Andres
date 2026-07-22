@@ -35,7 +35,9 @@ globalThis.FileReader ??= NodeFileReader;
 
 const outputRoot = resolve('public');
 const modelPath = resolve(outputRoot, 'models', 'cube.glb');
-const qrPath = resolve(outputRoot, 'qr-app-museo.png');
+const qrFileName = process.env.QR_FILE_NAME ?? 'qr-app-museo.png';
+const qrTargetUrl = process.env.QR_TARGET_URL ?? 'https://e-pisteme-andres.github.io/AppMuseo_Andres/';
+const qrPath = resolve(outputRoot, qrFileName);
 
 await mkdir(dirname(modelPath), { recursive: true });
 
@@ -72,7 +74,7 @@ if (!(binary instanceof ArrayBuffer)) {
 }
 
 await writeFile(modelPath, Buffer.from(binary));
-await QRCode.toFile(qrPath, 'https://e-pisteme-andres.github.io/AppMuseo_Andres/', {
+await QRCode.toFile(qrPath, qrTargetUrl, {
   width: 1200,
   margin: 4,
   errorCorrectionLevel: 'H',

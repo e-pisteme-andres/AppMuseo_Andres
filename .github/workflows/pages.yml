@@ -18,8 +18,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Descargar repositorio
+      - name: Descargar main
         uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-site
+
+      - name: Descargar dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: dev-site
 
       - name: Preparar pnpm
         uses: pnpm/action-setup@v4
@@ -30,19 +39,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
-      - name: Instalar dependencias
-        run: pnpm install --frozen-lockfile
+      - name: Probar y compilar main
+        working-directory: main-site
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm generate:assets
+          pnpm test
+          pnpm build
 
-      - name: Generar modelo y QR
-        run: pnpm generate:assets
+      - name: Probar y compilar dev
+        working-directory: dev-site
+        env:
+          VITE_BASE_PATH: /AppMuseo_Andres/dev/
+          QR_TARGET_URL: https://e-pisteme-andres.github.io/AppMuseo_Andres/dev/
+          QR_FILE_NAME: qr-app-museo-dev.png
+          VITE_QR_FILE_NAME: qr-app-museo-dev.png
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm generate:assets
+          pnpm test
+          pnpm build
 
-      - name: Ejecutar pruebas
-        run: pnpm test
-
-      - name: Compilar aplicación
-        run: pnpm build
+      - name: Combinar main y preview dev
+        run: |
+          mkdir -p site/dev
+          cp -R main-site/dist/. site/
+          cp -R dev-site/dist/. site/dev/
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5
@@ -50,7 +73,7 @@ jobs:
       - name: Preparar artefacto
         uses: actions/upload-pages-artifact@v4
         with:
-          path: dist
+          path: site
 
   deploy:
     environment:

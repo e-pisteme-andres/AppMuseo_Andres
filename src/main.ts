@@ -9,6 +9,7 @@ function getRequiredElement<T extends Element>(selector: string): T {
 }
 
 const app = getRequiredElement<HTMLDivElement>('#app');
+const qrFileName = import.meta.env.VITE_QR_FILE_NAME || 'qr-app-museo.png';
 
 app.innerHTML = `
   <main class="app-shell">
@@ -52,7 +53,7 @@ app.innerHTML = `
 
       <footer>
         <span>Diseñado para Chrome en Android con ARCore</span>
-        <a href="${import.meta.env.BASE_URL}qr-app-museo.png" download="qr-app-museo.png">Descargar QR</a>
+        <a href="${import.meta.env.BASE_URL}${qrFileName}" download="${qrFileName}">Descargar QR</a>
       </footer>
     </section>
 
