@@ -7,9 +7,6 @@ import { isHorizontalSurface, SurfaceStabilizer } from './surface';
 interface PointerSnapshot {
   x: number;
   y: number;
-  startX: number;
-  startY: number;
-  startedAt: number;
 }
 
 interface XRExperienceOptions {
@@ -20,8 +17,10 @@ interface XRExperienceOptions {
 }
 
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
-const PLACEABLE_MESSAGE = 'Superficie detectada. Toca para colocar el cubo.';
+const PLACEABLE_MESSAGE = 'Superficie detectada. Coloca el cubo sobre la malla.';
 const PLACED_MESSAGE = 'Arrastra para girar. Usa dos dedos para rotar el tercer eje.';
+const SURFACE_SIZE_METERS = 0.8;
+const SURFACE_DIVISIONS = 16;
 
 export class XRExperience {
   private readonly renderer: THREE.WebGLRenderer;
@@ -29,7 +28,9 @@ export class XRExperience {
   private readonly camera = new THREE.PerspectiveCamera();
   private readonly anchorRoot = new THREE.Group();
   private readonly cubePivot = new THREE.Group();
-  private readonly reticle: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
+  private readonly surfaceMesh = new THREE.Group();
+  private readonly surfaceFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private readonly surfaceGrid: THREE.GridHelper;
   private readonly stabilizer = new SurfaceStabilizer();
   private readonly pointers = new Map<number, PointerSnapshot>();
   private readonly options: XRExperienceOptions;
@@ -65,13 +66,26 @@ export class XRExperience {
     this.cubePivot.position.y = 0.1;
     this.cubePivot.visible = false;
 
-    this.reticle = new THREE.Mesh(
-      new THREE.RingGeometry(0.065, 0.078, 48).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0xffc857, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }),
+    this.surfaceFill = new THREE.Mesh(
+      new THREE.PlaneGeometry(SURFACE_SIZE_METERS, SURFACE_SIZE_METERS).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        color: 0x35e39a,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.08,
+        depthWrite: false,
+      }),
     );
-    this.reticle.matrixAutoUpdate = false;
-    this.reticle.visible = false;
-    this.scene.add(this.reticle);
+    this.surfaceGrid = new THREE.GridHelper(SURFACE_SIZE_METERS, SURFACE_DIVISIONS, 0xffffff, 0xffffff);
+    this.surfaceGrid.position.y = 0.002;
+    this.surfaceGrid.material.color.set(0xffc857);
+    this.surfaceGrid.material.transparent = true;
+    this.surfaceGrid.material.opacity = 0.48;
+    this.surfaceGrid.material.depthWrite = false;
+    this.surfaceMesh.add(this.surfaceFill, this.surfaceGrid);
+    this.surfaceMesh.matrixAutoUpdate = false;
+    this.surfaceMesh.visible = false;
+    this.scene.add(this.surfaceMesh);
 
     window.addEventListener('resize', this.onResize);
     options.overlay.addEventListener('pointerdown', this.onPointerDown);
@@ -142,6 +156,12 @@ export class XRExperience {
     }
   }
 
+  requestPlacement(): boolean {
+    if (this.state !== 'placeable' || !this.surfaceMesh.visible) return false;
+    this.placementRequested = true;
+    return true;
+  }
+
   private setState(next: ExperienceState, message: string): void {
     this.state = transitionState(this.state, next);
     this.emitMessage(message, true);
@@ -192,18 +212,21 @@ export class XRExperience {
     }
 
     if (!acceptedResult || !acceptedPose) {
-      this.reticle.visible = false;
+      this.surfaceMesh.visible = false;
       this.stabilizer.reset();
       if (this.state === 'placeable') this.setState('scanning', SCANNING_MESSAGE);
       return;
     }
 
     const matrix = new Float32Array(acceptedPose.transform.matrix);
-    this.reticle.matrix.fromArray(matrix);
-    this.reticle.visible = true;
+    this.surfaceMesh.matrix.fromArray(matrix);
+    this.surfaceMesh.visible = true;
 
     const stable = this.stabilizer.add({ matrix });
-    this.reticle.material.color.set(stable ? 0x35e39a : 0xffc857);
+    this.surfaceFill.material.color.set(stable ? 0x35e39a : 0xffc857);
+    this.surfaceFill.material.opacity = stable ? 0.14 : 0.07;
+    this.surfaceGrid.material.color.set(stable ? 0x6feeba : 0xffc857);
+    this.surfaceGrid.material.opacity = stable ? 0.9 : 0.48;
 
     if (stable && this.state === 'scanning') {
       this.setState('placeable', PLACEABLE_MESSAGE);
@@ -220,7 +243,7 @@ export class XRExperience {
   private commitPlacement(result: XRHitTestResult, matrix: Float32Array): void {
     this.anchorRoot.matrix.fromArray(matrix);
     this.cubePivot.visible = true;
-    this.reticle.visible = false;
+    this.surfaceMesh.visible = false;
     this.hitTestSource?.cancel();
     this.hitTestSource = null;
     this.stabilizer.reset();
@@ -243,9 +266,6 @@ export class XRExperience {
     this.pointers.set(event.pointerId, {
       x: event.clientX,
       y: event.clientY,
-      startX: event.clientX,
-      startY: event.clientY,
-      startedAt: performance.now(),
     });
 
     if (this.pointers.size === 2) {
@@ -279,15 +299,7 @@ export class XRExperience {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
-    const pointer = this.pointers.get(event.pointerId);
-    if (!pointer) return;
-
-    const wasOnlyPointer = this.pointers.size === 1;
-    const distance = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
-    const duration = performance.now() - pointer.startedAt;
-    if (this.state === 'placeable' && wasOnlyPointer && distance <= 12 && duration <= 650) {
-      this.placementRequested = true;
-    }
+    if (!this.pointers.has(event.pointerId)) return;
 
     this.pointers.delete(event.pointerId);
     if (this.pointers.size < 2) this.lastTwoFingerAngle = null;
@@ -311,7 +323,7 @@ export class XRExperience {
     this.trackingLost = false;
     this.stabilizer.reset();
     this.pointers.clear();
-    this.reticle.visible = false;
+    this.surfaceMesh.visible = false;
     this.cubePivot.visible = false;
     this.cubePivot.quaternion.identity();
     this.anchorRoot.matrix.identity();

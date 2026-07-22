@@ -27,7 +27,7 @@ app.innerHTML = `
           <ol class="steps" aria-label="Cómo funciona">
             <li><span>01</span><div><strong>Activa la cámara</strong><small>Chrome solicitará permiso al comenzar.</small></div></li>
             <li><span>02</span><div><strong>Busca una superficie</strong><small>Mueve el móvil lentamente sobre una mesa o el suelo.</small></div></li>
-            <li><span>03</span><div><strong>Coloca y gira</strong><small>Toca para fijar el cubo; arrastra para rotarlo.</small></div></li>
+            <li><span>03</span><div><strong>Coloca y gira</strong><small>Confirma la malla para fijar el cubo; arrastra para rotarlo.</small></div></li>
           </ol>
 
           <button class="primary-button" id="start-ar" type="button" disabled>
@@ -65,6 +65,9 @@ app.innerHTML = `
         <span class="guide-icon"></span>
         <span id="xr-message">Preparando realidad aumentada…</span>
       </div>
+      <button class="placement-button" id="place-cube" type="button" data-xr-control hidden>
+        Colocar cubo aquí
+      </button>
       <div class="gesture-hint" id="gesture-hint" hidden>
         <span class="gesture-finger"></span>
         Arrastra con uno o dos dedos para rotar
@@ -82,11 +85,17 @@ const closeButton = getRequiredElement<HTMLButtonElement>('#close-ar');
 const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
+const placeButton = getRequiredElement<HTMLButtonElement>('#place-cube');
 
 function updateState(state: ExperienceState, message: string): void {
   xrMessage.textContent = message;
   xrGuide.dataset.state = state;
   gestureHint.hidden = state !== 'placed';
+  placeButton.hidden = state !== 'placeable';
+  if (state !== 'placeable') {
+    placeButton.disabled = false;
+    placeButton.textContent = 'Colocar cubo aquí';
+  }
 
   if (state === 'starting') {
     startButton.disabled = true;
@@ -142,5 +151,11 @@ startButton.addEventListener('click', () => {
 
 closeButton.addEventListener('beforexrselect', (event) => event.preventDefault());
 closeButton.addEventListener('click', () => void experience.end());
+placeButton.addEventListener('beforexrselect', (event) => event.preventDefault());
+placeButton.addEventListener('click', () => {
+  if (!experience.requestPlacement()) return;
+  placeButton.disabled = true;
+  placeButton.textContent = 'Colocando…';
+});
 
 void checkCompatibility();
