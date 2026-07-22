@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { applyDragRotation, applyRollRotation, normalizeAngleDelta } from './rotation';
 
-describe('rotación del cubo', () => {
+describe('rotación del modelo', () => {
   it('cambia la orientación sin alterar posición ni escala', () => {
     const object = new THREE.Object3D();
     object.position.set(2, 0.1, -3);

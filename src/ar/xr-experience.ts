@@ -23,8 +23,8 @@ interface XRExperienceOptions {
 
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
 const PLACEABLE_MESSAGE = 'Superficie detectada. Toca la pantalla para colocar la malla.';
-const SURFACE_PLACED_MESSAGE = 'Malla colocada. Toca la pantalla de nuevo para colocar el cubo.';
-const PLACED_MESSAGE = 'Cubo colocado. Arrastra para girarlo; la malla permanecerá visible.';
+const SURFACE_PLACED_MESSAGE = 'Malla colocada. Toca la pantalla de nuevo para colocar la seta.';
+const PLACED_MESSAGE = 'Seta colocada. Arrastra para girarla; la malla permanecerá visible.';
 const SURFACE_SIZE_METERS = 1;
 const SURFACE_DIVISIONS = 10;
 
@@ -33,7 +33,7 @@ export class XRExperience {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera();
   private readonly anchorRoot = new THREE.Group();
-  private readonly cubePivot = new THREE.Group();
+  private readonly mushroomPivot = new THREE.Group();
   private readonly surfaceMesh = new THREE.Group();
   private readonly surfaceFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly surfaceGrid: THREE.GridHelper;
@@ -70,10 +70,10 @@ export class XRExperience {
     this.scene.add(keyLight);
 
     this.anchorRoot.matrixAutoUpdate = false;
-    this.anchorRoot.add(this.surfaceMesh, this.cubePivot);
+    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot);
     this.scene.add(this.anchorRoot);
-    this.cubePivot.position.y = 0.1;
-    this.cubePivot.visible = false;
+    this.mushroomPivot.position.y = 0.1;
+    this.mushroomPivot.visible = false;
 
     this.surfaceFill = new THREE.Mesh(
       new THREE.PlaneGeometry(SURFACE_SIZE_METERS, SURFACE_SIZE_METERS).rotateX(-Math.PI / 2),
@@ -114,14 +114,14 @@ export class XRExperience {
 
   async loadModel(): Promise<void> {
     const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/cube.glb`);
+    const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/mushroom.glb`);
     gltf.scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
       }
     });
-    this.cubePivot.add(gltf.scene);
+    this.mushroomPivot.add(gltf.scene);
   }
 
   async start(): Promise<void> {
@@ -289,9 +289,9 @@ export class XRExperience {
       });
   }
 
-  private commitCubePlacement(): void {
+  private commitMushroomPlacement(): void {
     if (this.state !== 'surfacePlaced') return;
-    this.cubePivot.visible = true;
+    this.mushroomPivot.visible = true;
     this.setState('placed', PLACED_MESSAGE);
   }
 
@@ -325,12 +325,12 @@ export class XRExperience {
     event.preventDefault();
 
     if (this.pointers.size === 1) {
-      applyDragRotation(this.cubePivot.quaternion, deltaX, deltaY);
+      applyDragRotation(this.mushroomPivot.quaternion, deltaX, deltaY);
     } else if (this.pointers.size === 2) {
       const [first, second] = [...this.pointers.values()];
       const nextAngle = angleBetweenPointers(first, second);
       if (this.lastTwoFingerAngle !== null) {
-        applyRollRotation(this.cubePivot.quaternion, normalizeAngleDelta(nextAngle - this.lastTwoFingerAngle));
+        applyRollRotation(this.mushroomPivot.quaternion, normalizeAngleDelta(nextAngle - this.lastTwoFingerAngle));
       }
       this.lastTwoFingerAngle = nextAngle;
     }
@@ -348,7 +348,7 @@ export class XRExperience {
     if (isTap && this.state === 'placeable') {
       this.surfacePlacementRequested = true;
     } else if (isTap && this.state === 'surfacePlaced') {
-      this.commitCubePlacement();
+      this.commitMushroomPlacement();
     }
 
     this.pointers.delete(event.pointerId);
@@ -376,8 +376,8 @@ export class XRExperience {
     this.pointers.clear();
     this.reticle.visible = false;
     this.surfaceMesh.visible = false;
-    this.cubePivot.visible = false;
-    this.cubePivot.quaternion.identity();
+    this.mushroomPivot.visible = false;
+    this.mushroomPivot.quaternion.identity();
     this.anchorRoot.matrix.identity();
   }
 

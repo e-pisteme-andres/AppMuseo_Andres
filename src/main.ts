@@ -22,13 +22,13 @@ app.innerHTML = `
       <div class="hero-grid">
         <div class="hero-copy">
           <p class="eyebrow">Experimento WebXR · Android</p>
-          <h1 id="page-title">Un cubo.<br><span>En tu espacio.</span></h1>
-          <p class="intro">Coloca un cubo tridimensional de 20 cm sobre una mesa o el suelo y obsérvalo desde cualquier ángulo.</p>
+          <h1 id="page-title">Una seta.<br><span>En tu espacio.</span></h1>
+          <p class="intro">Coloca una seta tridimensional de 20 cm sobre una mesa o el suelo y obsérvala desde cualquier ángulo.</p>
 
           <ol class="steps" aria-label="Cómo funciona">
             <li><span>01</span><div><strong>Activa la cámara</strong><small>Chrome solicitará permiso al comenzar.</small></div></li>
             <li><span>02</span><div><strong>Busca una superficie</strong><small>Mueve el móvil lentamente sobre una mesa o el suelo.</small></div></li>
-            <li><span>03</span><div><strong>Malla y cubo</strong><small>Toca una vez para fijar la malla y otra vez para colocar el cubo.</small></div></li>
+            <li><span>03</span><div><strong>Malla y seta</strong><small>Toca una vez para fijar la malla y otra vez para colocar la seta.</small></div></li>
           </ol>
 
           <button class="primary-button" id="start-ar" type="button" disabled>
@@ -41,10 +41,16 @@ app.innerHTML = `
         <div class="visual" aria-hidden="true">
           <div class="orbit orbit-one"></div>
           <div class="orbit orbit-two"></div>
-          <div class="css-cube">
-            <span class="face face-front"></span><span class="face face-back"></span>
-            <span class="face face-right"></span><span class="face face-left"></span>
-            <span class="face face-top"></span><span class="face face-bottom"></span>
+          <div class="css-mushroom">
+            <div class="mushroom-cap">
+              <span class="mushroom-spot spot-one"></span>
+              <span class="mushroom-spot spot-two"></span>
+              <span class="mushroom-spot spot-three"></span>
+              <span class="mushroom-spot spot-four"></span>
+              <span class="mushroom-spot spot-five"></span>
+            </div>
+            <div class="mushroom-gills"></div>
+            <div class="mushroom-stem"><span></span></div>
           </div>
           <div class="measure-line"><span>20 cm</span></div>
           <div class="surface-line"></div>
@@ -60,7 +66,7 @@ app.innerHTML = `
     <div id="xr-overlay" class="xr-overlay">
       <div class="xr-topbar">
         <div class="xr-status-stack">
-          <div class="xr-badge"><span class="live-dot"></span> Cubo AR</div>
+          <div class="xr-badge"><span class="live-dot"></span> Seta AR</div>
           <div class="xr-occlusion" id="xr-occlusion" data-state="checking">Oclusión · comprobando</div>
         </div>
         <button class="close-button" id="close-ar" type="button" data-xr-control aria-label="Cerrar realidad aumentada">Salir</button>
@@ -103,7 +109,7 @@ function updateState(state: ExperienceState, message: string): void {
     startLabel.textContent = 'Intentar de nuevo';
   } else if (state === 'ready') {
     startButton.disabled = false;
-    startLabel.textContent = 'Ver cubo en AR';
+    startLabel.textContent = 'Ver seta en AR';
   }
 }
 
@@ -139,7 +145,7 @@ async function checkCompatibility(): Promise<void> {
     await experience.loadModel();
     compatibility.textContent = 'Compatible · Requiere Chrome y un dispositivo con ARCore';
     startButton.disabled = false;
-    startLabel.textContent = 'Ver cubo en AR';
+    startLabel.textContent = 'Ver seta en AR';
   } catch (error) {
     compatibility.textContent = error instanceof Error ? error.message : 'No se pudo comprobar la compatibilidad.';
     compatibility.dataset.error = 'true';
