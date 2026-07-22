@@ -59,6 +59,8 @@ type ArRenderer = {
   isRotating?: boolean;
   isTwoHandInteraction?: boolean;
   lastAngle?: number;
+  inputSource?: unknown;
+  onSelectStart?: (event: Event) => void;
 };
 type ArRendererOwner = { arRenderer?: ArRenderer };
 type XrRayConstructor = new (
@@ -257,27 +259,37 @@ export function MuseumCamera() {
         const arRenderer = getArRenderer(viewer);
         const session = arRenderer?.currentSession;
         if (arRenderer && session) {
-          const keepModelFixed = (selectEvent: Event) => {
-            if (!placementLockedRef.current || arRenderer.isTwoHandInteraction) return;
+          const originalSelectStart = arRenderer.onSelectStart;
+          if (originalSelectStart) {
+            const keepModelFixed = (selectEvent: Event) => {
+              if (!placementLockedRef.current) {
+                originalSelectStart(selectEvent);
+                return;
+              }
 
-            const inputSource = (selectEvent as Event & {
-              inputSource?: { gamepad?: { axes?: readonly number[] } };
-            }).inputSource;
-            const horizontalAxis = inputSource?.gamepad?.axes?.[0];
-            if (typeof horizontalAxis !== "number") return;
+              const inputSource = (selectEvent as Event & {
+                inputSource?: { gamepad?: { axes?: readonly number[] } };
+              }).inputSource;
+              const horizontalAxis = inputSource?.gamepad?.axes?.[0];
 
-            // model-viewer interpreta un toque sobre la pieza como arrastre.
-            // Lo convertimos en giro y dejamos intactos los gestos de dos dedos
-            // (rotación y escala).
-            arRenderer.isTranslating = false;
-            arRenderer.isRotating = true;
-            arRenderer.lastAngle = 1.5 * horizontalAxis;
-          };
+              // Sustituye el arrastre interno de model-viewer por un giro.
+              // El procesamiento de dos dedos sigue gestionando rotación y escala.
+              arRenderer.inputSource = inputSource;
+              arRenderer.isTranslating = false;
+              arRenderer.isRotating = true;
+              if (typeof horizontalAxis === "number") {
+                arRenderer.lastAngle = 1.5 * horizontalAxis;
+              }
+            };
 
-          removeTranslationLockRef.current?.();
-          session.addEventListener("selectstart", keepModelFixed);
-          removeTranslationLockRef.current = () =>
-            session.removeEventListener("selectstart", keepModelFixed);
+            removeTranslationLockRef.current?.();
+            session.removeEventListener("selectstart", originalSelectStart);
+            session.addEventListener("selectstart", keepModelFixed);
+            removeTranslationLockRef.current = () => {
+              session.removeEventListener("selectstart", keepModelFixed);
+              session.addEventListener("selectstart", originalSelectStart);
+            };
+          }
         }
       }
       if (status === "object-placed") {

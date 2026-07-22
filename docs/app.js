@@ -97,21 +97,34 @@ function lockTranslationGestures() {
   const session = arRenderer?.currentSession;
   if (!arRenderer || !session) return;
 
+  const originalSelectStart = arRenderer.onSelectStart;
+  if (!originalSelectStart) return;
+
   const keepModelFixed = (event) => {
-    if (!placementLocked || arRenderer.isTwoHandInteraction) return;
+    if (!placementLocked) {
+      originalSelectStart(event);
+      return;
+    }
 
     const horizontalAxis = event.inputSource?.gamepad?.axes?.[0];
-    if (typeof horizontalAxis !== "number") return;
 
-    // Un toque sobre la pieza se interpreta como giro, no como arrastre.
+    // Sustituye el arrastre interno de model-viewer por un giro.
+    // El procesamiento de dos dedos sigue gestionando rotación y escala.
+    arRenderer.inputSource = event.inputSource;
     arRenderer.isTranslating = false;
     arRenderer.isRotating = true;
-    arRenderer.lastAngle = 1.5 * horizontalAxis;
+    if (typeof horizontalAxis === "number") {
+      arRenderer.lastAngle = 1.5 * horizontalAxis;
+    }
   };
 
   removeTranslationLock?.();
+  session.removeEventListener("selectstart", originalSelectStart);
   session.addEventListener("selectstart", keepModelFixed);
-  removeTranslationLock = () => session.removeEventListener("selectstart", keepModelFixed);
+  removeTranslationLock = () => {
+    session.removeEventListener("selectstart", keepModelFixed);
+    session.addEventListener("selectstart", originalSelectStart);
+  };
 }
 
 async function repositionAtCamera() {
