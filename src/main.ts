@@ -102,7 +102,7 @@ app.innerHTML = `
         <span class="panorama-spinner"></span>
         Cargando paisaje…
       </div>
-      <div class="panorama-hint"><span aria-hidden="true">↔</span>Arrastra para mirar alrededor</div>
+      <div class="panorama-hint" id="panorama-hint"><span aria-hidden="true">◎</span><span id="panorama-hint-text">Preparando sensores…</span></div>
       <a class="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
     </section>
   </main>
@@ -123,12 +123,22 @@ const closePanoramaButton = getRequiredElement<HTMLButtonElement>('#close-panora
 const panoramaView = getRequiredElement<HTMLElement>('#panorama-view');
 const panoramaStage = getRequiredElement<HTMLElement>('#panorama-stage');
 const panoramaLoader = getRequiredElement<HTMLElement>('#panorama-loader');
+const panoramaHint = getRequiredElement<HTMLElement>('#panorama-hint');
+const panoramaHintText = getRequiredElement<HTMLElement>('#panorama-hint-text');
 
 const panorama = new PanoramaViewer({
   container: panoramaStage,
   imageUrl: `${import.meta.env.BASE_URL}panoramas/paranal-360.jpg`,
   onLoadingChange: (loading) => {
     panoramaLoader.hidden = !loading;
+  },
+  onControlModeChange: (mode) => {
+    panoramaHint.dataset.mode = mode;
+    panoramaHintText.textContent = mode === 'motion'
+      ? 'Mueve el móvil para mirar alrededor'
+      : mode === 'motion-pending'
+        ? 'Mueve el móvil para activar la vista'
+        : 'Sensor no disponible · arrastra para mirar';
   },
 });
 

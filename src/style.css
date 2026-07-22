@@ -127,11 +127,14 @@ body.xr-active .xr-overlay { display: block; }
 .panorama-spinner { width: 17px; height: 17px; border: 2px solid rgba(255,255,255,.28); border-top-color: #6feeba; border-radius: 50%; animation: panorama-spin .85s linear infinite; }
 .panorama-hint { position: absolute; left: 50%; bottom: max(34px, calc(env(safe-area-inset-bottom) + 22px)); display: flex; align-items: center; gap: 9px; padding: 10px 15px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(4,14,11,.58); transform: translateX(-50%); white-space: nowrap; font-size: .72rem; backdrop-filter: blur(14px); pointer-events: none; }
 .panorama-hint span { color: #6feeba; font-size: 1rem; }
+.panorama-hint span:last-child { color: inherit; font-size: inherit; }
+.panorama-hint[data-mode="motion"] span:first-child { animation: motion-pulse 1.8s ease-in-out infinite; }
 .panorama-credit { position: absolute; right: 22px; bottom: max(18px, env(safe-area-inset-bottom)); color: rgba(255,255,255,.72); font-size: .62rem; text-decoration: none; text-shadow: 0 2px 9px #000; }
 body.panorama-active { overflow: hidden; }
 body.panorama-active .panorama-view { display: block; }
 
 @keyframes panorama-spin { to { transform: rotate(360deg); } }
+@keyframes motion-pulse { 50% { transform: scale(1.35); text-shadow: 0 0 10px #6feeba; } }
 
 @keyframes float-mushroom {
   0%, 100% { transform: rotate(-3deg) translateY(0); }
@@ -162,5 +165,6 @@ body.panorama-active .panorama-view { display: block; }
 
 @media (prefers-reduced-motion: reduce) {
   .css-mushroom { animation: none; }
+  .panorama-hint[data-mode="motion"] span:first-child { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; }
 }
