@@ -36,6 +36,8 @@ const placementControl = document.querySelector("#placement-control");
 let manualPlacement = false;
 let hiddenMaterials = [];
 let placementRequestPending = false;
+let placementLocked = false;
+let removeTranslationLock = null;
 
 function getArRenderer() {
   const owner = Reflect.ownKeys(viewer)
@@ -79,6 +81,39 @@ function restoreModel() {
   hiddenMaterials = [];
 }
 
+function markModelPlaced() {
+  placementRequestPending = false;
+  placementLocked = true;
+  placementControl.querySelector("strong").textContent = "Actualizar posición";
+  placementControl.setAttribute(
+    "aria-label",
+    "Actualizar la posición de la pieza hacia donde apunta la cámara",
+  );
+  setStatus("object-placed");
+}
+
+function lockTranslationGestures() {
+  const arRenderer = getArRenderer();
+  const session = arRenderer?.currentSession;
+  if (!arRenderer || !session) return;
+
+  const keepModelFixed = (event) => {
+    if (!placementLocked || arRenderer.isTwoHandInteraction) return;
+
+    const horizontalAxis = event.inputSource?.gamepad?.axes?.[0];
+    if (typeof horizontalAxis !== "number") return;
+
+    // Un toque sobre la pieza se interpreta como giro, no como arrastre.
+    arRenderer.isTranslating = false;
+    arRenderer.isRotating = true;
+    arRenderer.lastAngle = 1.5 * horizontalAxis;
+  };
+
+  removeTranslationLock?.();
+  session.addEventListener("selectstart", keepModelFixed);
+  removeTranslationLock = () => session.removeEventListener("selectstart", keepModelFixed);
+}
+
 async function repositionAtCamera() {
   if (placementRequestPending) return true;
 
@@ -107,8 +142,7 @@ async function repositionAtCamera() {
         view.transform.position.y + direction.y * distance,
         view.transform.position.z + direction.z * distance,
       );
-      placementRequestPending = false;
-      setStatus("object-placed");
+      markModelPlaced();
       return true;
     }
 
@@ -120,32 +154,27 @@ async function repositionAtCamera() {
         { x: 0, y: 0, z: -1, w: 0 },
       ),
     });
-    arRenderer.initialHitSource = hitSource;
-
     let attempts = 0;
     const updatePosition = (_time, nextFrame) => {
-      if (arRenderer.initialHitSource !== hitSource) return;
-
       const result = nextFrame.getHitTestResults(hitSource)[0];
       const hitPoint = result ? arRenderer.getHitPoint(result) : null;
-      if (hitPoint && !arRenderer.placeOnWall) {
+      if (hitPoint) {
         arRenderer.goalPosition.copy(hitPoint);
+        hitSource.cancel();
+        markModelPlaced();
+        return;
       }
-      arRenderer.moveToFloor(nextFrame);
       attempts += 1;
 
-      if (arRenderer.initialHitSource === hitSource && attempts < 120) {
+      if (attempts < 120) {
         session.requestAnimationFrame(updatePosition);
         return;
       }
 
-      if (arRenderer.initialHitSource === hitSource) {
-        hitSource.cancel();
-        arRenderer.initialHitSource = null;
-        placementRequestPending = false;
-        status.className = "ar-status status-aiming";
-        status.querySelector("b").textContent = "Apunta y pulsa colocar aquí";
-      }
+      hitSource.cancel();
+      placementRequestPending = false;
+      status.className = "ar-status status-aiming";
+      status.querySelector("b").textContent = "Apunta y pulsa colocar aquí";
     };
 
     session.requestAnimationFrame(updatePosition);
@@ -179,17 +208,20 @@ viewer.addEventListener("ar-status", (event) => {
   if (arStatus === "session-started") {
     manualPlacement = false;
     placementRequestPending = false;
+    placementLocked = false;
     hideModelUntilPlacement();
+    lockTranslationGestures();
   }
 
   if (arStatus === "object-placed" && !manualPlacement) {
+    placementLocked = false;
     status.className = "ar-status status-aiming";
     status.querySelector("b").textContent = "Apunta y pulsa colocar aquí";
     return;
   }
 
   if (arStatus === "object-placed") {
-    placementRequestPending = false;
+    markModelPlaced();
     placementControl.querySelector("strong").textContent = "Actualizar posición";
     placementControl.setAttribute(
       "aria-label",
@@ -200,6 +232,9 @@ viewer.addEventListener("ar-status", (event) => {
   if (arStatus === "not-presenting") {
     manualPlacement = false;
     placementRequestPending = false;
+    placementLocked = false;
+    removeTranslationLock?.();
+    removeTranslationLock = null;
     restoreModel();
   }
   setStatus(arStatus);
@@ -227,6 +262,7 @@ buttons.forEach((button) => {
     });
     setStatus();
     manualPlacement = false;
+    placementLocked = false;
     placementControl.querySelector("strong").textContent = "Colocar aquí";
     placementControl.setAttribute(
       "aria-label",
