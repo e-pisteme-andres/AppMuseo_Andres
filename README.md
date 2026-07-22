@@ -13,6 +13,8 @@ Aplicación web experimental para colocar un cubo 3D de 20 cm sobre una mesa o e
 
 El cubo no admite desplazamiento ni cambio de tamaño. Un anchor de WebXR mantiene la ubicación física cuando el dispositivo lo soporta; en caso contrario se conserva la pose local detectada.
 
+La experiencia solicita el mapa de profundidad GPU de WebXR para que los objetos reales cercanos oculten tanto el cubo como la malla. Esta oclusión depende de que Chrome, ARCore y el hardware del dispositivo ofrezcan `depth-sensing`; durante la sesión se muestra si está activa o no disponible.
+
 ## Desarrollo
 
 Requiere Node.js 22 y pnpm.

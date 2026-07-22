@@ -59,7 +59,10 @@ app.innerHTML = `
 
     <div id="xr-overlay" class="xr-overlay">
       <div class="xr-topbar">
-        <div class="xr-badge"><span class="live-dot"></span> Cubo AR</div>
+        <div class="xr-status-stack">
+          <div class="xr-badge"><span class="live-dot"></span> Cubo AR</div>
+          <div class="xr-occlusion" id="xr-occlusion" data-state="checking">Oclusión · comprobando</div>
+        </div>
         <button class="close-button" id="close-ar" type="button" data-xr-control aria-label="Cerrar realidad aumentada">Salir</button>
       </div>
       <div class="xr-guide" id="xr-guide" role="status" aria-live="polite">
@@ -83,6 +86,7 @@ const closeButton = getRequiredElement<HTMLButtonElement>('#close-ar');
 const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
+const xrOcclusion = getRequiredElement<HTMLElement>('#xr-occlusion');
 
 function updateState(state: ExperienceState, message: string): void {
   xrMessage.textContent = message;
@@ -108,6 +112,10 @@ const experience = new XRExperience({
   overlay,
   onStateChange: updateState,
   onSessionActivity: (active) => document.body.classList.toggle('xr-active', active),
+  onOcclusionChange: (state) => {
+    xrOcclusion.dataset.state = state;
+    xrOcclusion.textContent = state === 'active' ? 'Oclusión real · activa' : 'Oclusión real · no disponible';
+  },
 });
 
 async function checkCompatibility(): Promise<void> {

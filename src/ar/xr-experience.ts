@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DEPTH_SENSING_OPTIONS, getOcclusionState, type OcclusionState } from './occlusion';
 import { applyDragRotation, applyRollRotation, angleBetweenPointers, normalizeAngleDelta } from './rotation';
 import { type ExperienceState, transitionState } from './state';
 import { isHorizontalSurface, SurfaceStabilizer } from './surface';
@@ -17,6 +18,7 @@ interface XRExperienceOptions {
   overlay: HTMLElement;
   onStateChange: (state: ExperienceState, message: string) => void;
   onSessionActivity: (active: boolean) => void;
+  onOcclusionChange: (state: OcclusionState) => void;
 }
 
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
@@ -82,7 +84,9 @@ export class XRExperience {
       }),
     );
     this.surfaceGrid = new THREE.GridHelper(SURFACE_SIZE_METERS, SURFACE_DIVISIONS, 0xffffff, 0xffffff);
-    this.surfaceGrid.position.y = 0.002;
+    // Keep the grid clear of noise from the supporting surface's depth while
+    // allowing genuinely closer objects to occlude it.
+    this.surfaceGrid.position.y = 0.008;
     this.surfaceGrid.material.color.set(0x6feeff);
     this.surfaceGrid.material.transparent = true;
     this.surfaceGrid.material.opacity = 0.82;
@@ -128,11 +132,13 @@ export class XRExperience {
 
       const session = await xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test', 'dom-overlay'],
-        optionalFeatures: ['anchors', 'local-floor'],
+        optionalFeatures: ['anchors', 'local-floor', 'depth-sensing'],
+        depthSensing: DEPTH_SENSING_OPTIONS,
         domOverlay: { root: this.options.overlay },
       });
 
       this.session = session;
+      this.options.onOcclusionChange(getOcclusionState(session));
       session.addEventListener('end', this.onSessionEnded, { once: true });
       await this.renderer.xr.setSession(session);
 

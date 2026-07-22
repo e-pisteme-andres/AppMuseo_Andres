@@ -82,8 +82,12 @@ footer a { color: #8be6c1; text-decoration: none; }
 .xr-canvas { display: block; width: 100%; height: 100%; }
 .xr-overlay { display: none; position: fixed; inset: 0; z-index: 10; padding: max(18px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom)); touch-action: none; user-select: none; }
 .xr-topbar { display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
-.xr-badge, .close-button, .xr-guide, .gesture-hint { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.xr-badge, .xr-occlusion, .close-button, .xr-guide, .gesture-hint { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.xr-status-stack { display: grid; justify-items: start; gap: 6px; }
 .xr-badge { display: flex; align-items: center; gap: 8px; padding: 10px 13px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(4,14,11,.62); font-size: .75rem; font-weight: 700; }
+.xr-occlusion { padding: 5px 9px; border: 1px solid rgba(255,255,255,.13); border-radius: 999px; background: rgba(4,14,11,.62); color: #a9bbb4; font-size: .58rem; font-weight: 700; letter-spacing: .025em; }
+.xr-occlusion[data-state="active"] { border-color: rgba(111,238,186,.32); color: #8bf5c9; }
+.xr-occlusion[data-state="unavailable"] { border-color: rgba(255,200,87,.28); color: #ffd98c; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #6feeba; box-shadow: 0 0 12px #6feeba; }
 .close-button { pointer-events: auto; min-width: 66px; min-height: 42px; border: 1px solid rgba(255,255,255,.18); border-radius: 14px; color: #fff; background: rgba(4,14,11,.66); font-weight: 750; }
 .xr-guide { position: absolute; left: 50%; bottom: max(38px, calc(env(safe-area-inset-bottom) + 28px)); width: min(430px, calc(100% - 36px)); display: flex; align-items: center; gap: 13px; padding: 15px 18px; border: 1px solid rgba(255,255,255,.17); border-radius: 17px; background: rgba(4,14,11,.72); transform: translateX(-50%); font-size: .86rem; line-height: 1.35; pointer-events: none; }
