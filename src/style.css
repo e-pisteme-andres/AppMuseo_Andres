@@ -55,11 +55,6 @@ h1 span { color: transparent; -webkit-text-stroke: 1.5px rgba(244, 247, 245, .78
 .primary-button:not(:disabled):hover { background: #8bf5c9; }
 .primary-button:disabled { cursor: not-allowed; opacity: .55; }
 .button-dot { width: 9px; height: 9px; border: 2px solid currentColor; border-radius: 50%; }
-.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.panorama-button { display: inline-flex; align-items: center; justify-content: center; gap: 11px; min-height: 58px; padding: 0 23px; border: 1px solid rgba(111,238,186,.32); border-radius: 17px; color: #d8ebe3; background: rgba(111,238,186,.055); font-weight: 780; cursor: pointer; transition: transform .2s ease, border-color .2s ease, background .2s ease; }
-.panorama-button:hover { border-color: rgba(111,238,186,.7); background: rgba(111,238,186,.11); }
-.panorama-button:active { transform: scale(.98); }
-.panorama-icon { display: grid; place-items: center; width: 38px; height: 26px; border: 1px solid rgba(111,238,186,.55); border-radius: 50%; color: #6feeba; font-size: .65rem; font-weight: 850; letter-spacing: -.02em; }
 .compatibility { min-height: 20px; margin: 13px 0 0; color: #73877e; font-size: .75rem; }
 .compatibility[data-error="true"] { color: #ff987f; }
 
@@ -112,27 +107,6 @@ body.xr-active .xr-stage { visibility: visible; }
 body.xr-active .xr-overlay { display: block; }
 .xr-overlay:where(:xr-overlay) { display: block; background: transparent; }
 
-.panorama-view { position: fixed; inset: 0; z-index: 20; display: none; overflow: hidden; color: #fff; background: #050b09; }
-.panorama-stage, .panorama-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.panorama-canvas { cursor: grab; touch-action: none; }
-.panorama-canvas.is-dragging { cursor: grabbing; }
-.panorama-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(2,8,6,.72) 0, transparent 25%, transparent 70%, rgba(2,8,6,.68) 100%); }
-.panorama-topbar { position: absolute; inset: max(20px, env(safe-area-inset-top)) 22px auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; pointer-events: none; }
-.panorama-title { display: grid; gap: 6px; text-shadow: 0 2px 15px rgba(0,0,0,.65); }
-.panorama-title strong { font-size: clamp(1.1rem, 2.4vw, 1.55rem); letter-spacing: -.025em; }
-.panorama-kicker { color: #9ef6d1; font-size: .68rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
-.panorama-close { pointer-events: auto; cursor: pointer; }
-.panorama-loader { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; gap: 12px; padding: 13px 17px; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; background: rgba(4,14,11,.72); transform: translate(-50%, -50%); font-size: .78rem; backdrop-filter: blur(14px); }
-.panorama-loader[hidden] { display: none; }
-.panorama-spinner { width: 17px; height: 17px; border: 2px solid rgba(255,255,255,.28); border-top-color: #6feeba; border-radius: 50%; animation: panorama-spin .85s linear infinite; }
-.panorama-hint { position: absolute; left: 50%; bottom: max(34px, calc(env(safe-area-inset-bottom) + 22px)); display: flex; align-items: center; gap: 9px; padding: 10px 15px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(4,14,11,.58); transform: translateX(-50%); white-space: nowrap; font-size: .72rem; backdrop-filter: blur(14px); pointer-events: none; }
-.panorama-hint span { color: #6feeba; font-size: 1rem; }
-.panorama-credit { position: absolute; right: 22px; bottom: max(18px, env(safe-area-inset-bottom)); color: rgba(255,255,255,.72); font-size: .62rem; text-decoration: none; text-shadow: 0 2px 9px #000; }
-body.panorama-active { overflow: hidden; }
-body.panorama-active .panorama-view { display: block; }
-
-@keyframes panorama-spin { to { transform: rotate(360deg); } }
-
 @keyframes float-mushroom {
   0%, 100% { transform: rotate(-3deg) translateY(0); }
   50% { transform: rotate(3deg) translateY(-15px); }
@@ -148,16 +122,11 @@ body.panorama-active .panorama-view { display: block; }
   .steps li { min-height: auto; display: flex; align-items: flex-start; gap: 15px; padding: 13px 15px; }
   .steps li > span { margin: 3px 0 0; }
   .primary-button { width: 100%; }
-  .hero-actions { display: grid; }
-  .panorama-button { width: 100%; }
   .visual { order: -1; min-height: 245px; }
   .css-mushroom { width: 112px; height: 112px; }
   .orbit { width: 210px; height: 210px; } .orbit-two { width: 260px; height: 260px; }
   .surface-line { bottom: 7%; } .measure-line { height: 112px; right: 18%; top: 25%; }
   footer { flex-direction: column; align-items: flex-start; }
-  .panorama-topbar { inset: max(16px, env(safe-area-inset-top)) 15px auto; }
-  .panorama-credit { right: 15px; bottom: max(10px, env(safe-area-inset-bottom)); }
-  .panorama-hint { bottom: max(48px, calc(env(safe-area-inset-bottom) + 38px)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
