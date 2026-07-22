@@ -1,6 +1,7 @@
 import './style.css';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
+import { PanoramaViewer } from './panorama-viewer';
 
 function getRequiredElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -31,10 +32,16 @@ app.innerHTML = `
             <li><span>03</span><div><strong>Malla y seta</strong><small>Toca una vez para fijar la malla y otra vez para colocar la seta.</small></div></li>
           </ol>
 
-          <button class="primary-button" id="start-ar" type="button" disabled>
-            <span class="button-dot"></span>
-            <span id="start-label">Comprobando compatibilidad…</span>
-          </button>
+          <div class="hero-actions">
+            <button class="primary-button" id="start-ar" type="button" disabled>
+              <span class="button-dot"></span>
+              <span id="start-label">Comprobando compatibilidad…</span>
+            </button>
+            <button class="panorama-button" id="open-panorama" type="button">
+              <span class="panorama-icon" aria-hidden="true">360°</span>
+              Explorar paisaje
+            </button>
+          </div>
           <p class="compatibility" id="compatibility" role="status" aria-live="polite"></p>
         </div>
 
@@ -80,6 +87,24 @@ app.innerHTML = `
         Arrastra con uno o dos dedos para rotar
       </div>
     </div>
+
+    <section id="panorama-view" class="panorama-view" aria-label="Paisaje panorámico de Paranal" aria-hidden="true">
+      <div id="panorama-stage" class="panorama-stage"></div>
+      <div class="panorama-shade"></div>
+      <div class="panorama-topbar">
+        <div class="panorama-title">
+          <span class="panorama-kicker">Vista inmersiva · 360°</span>
+          <strong>Observatorio Paranal, Chile</strong>
+        </div>
+        <button class="close-button panorama-close" id="close-panorama" type="button" aria-label="Cerrar paisaje 360 grados">Volver</button>
+      </div>
+      <div class="panorama-loader" id="panorama-loader" role="status" aria-live="polite">
+        <span class="panorama-spinner"></span>
+        Cargando paisaje…
+      </div>
+      <div class="panorama-hint"><span aria-hidden="true">↔</span>Arrastra para mirar alrededor</div>
+      <a class="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
+    </section>
   </main>
 `;
 
@@ -93,6 +118,19 @@ const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
 const xrOcclusion = getRequiredElement<HTMLElement>('#xr-occlusion');
+const openPanoramaButton = getRequiredElement<HTMLButtonElement>('#open-panorama');
+const closePanoramaButton = getRequiredElement<HTMLButtonElement>('#close-panorama');
+const panoramaView = getRequiredElement<HTMLElement>('#panorama-view');
+const panoramaStage = getRequiredElement<HTMLElement>('#panorama-stage');
+const panoramaLoader = getRequiredElement<HTMLElement>('#panorama-loader');
+
+const panorama = new PanoramaViewer({
+  container: panoramaStage,
+  imageUrl: `${import.meta.env.BASE_URL}panoramas/paranal-360.jpg`,
+  onLoadingChange: (loading) => {
+    panoramaLoader.hidden = !loading;
+  },
+});
 
 function updateState(state: ExperienceState, message: string): void {
   xrMessage.textContent = message;
@@ -172,6 +210,30 @@ closeButton.addEventListener('click', (event) => {
     closeButton.textContent = 'Salir';
     xrMessage.textContent = 'No se pudo cerrar la sesión. Inténtalo de nuevo.';
   });
+});
+
+openPanoramaButton.addEventListener('click', () => {
+  document.body.classList.add('panorama-active');
+  panoramaView.setAttribute('aria-hidden', 'false');
+  closePanoramaButton.focus();
+  void panorama.open().catch(() => {
+    panoramaLoader.hidden = false;
+    panoramaLoader.textContent = 'No se pudo cargar el paisaje.';
+  });
+});
+
+function closePanorama(): void {
+  panorama.pause();
+  document.body.classList.remove('panorama-active');
+  panoramaView.setAttribute('aria-hidden', 'true');
+  openPanoramaButton.focus();
+}
+
+closePanoramaButton.addEventListener('click', closePanorama);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && document.body.classList.contains('panorama-active')) {
+    closePanorama();
+  }
 });
 
 void checkCompatibility();
