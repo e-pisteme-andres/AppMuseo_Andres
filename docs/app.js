@@ -37,6 +37,7 @@ let manualPlacement = false;
 let hiddenMaterials = [];
 let placementRequestPending = false;
 let placementLocked = false;
+let lockedPosition = null;
 let removeTranslationLock = null;
 
 function getArRenderer() {
@@ -84,6 +85,10 @@ function restoreModel() {
 function markModelPlaced() {
   placementRequestPending = false;
   placementLocked = true;
+  const goalPosition = getArRenderer()?.goalPosition;
+  lockedPosition = goalPosition
+    ? { x: goalPosition.x, y: goalPosition.y, z: goalPosition.z }
+    : null;
   placementControl.querySelector("strong").textContent = "Actualizar posición";
   placementControl.setAttribute(
     "aria-label",
@@ -94,36 +99,28 @@ function markModelPlaced() {
 
 function lockTranslationGestures() {
   const arRenderer = getArRenderer();
-  const session = arRenderer?.currentSession;
-  if (!arRenderer || !session) return;
+  const originalProcessInput = arRenderer?.processInput;
+  if (!arRenderer || !originalProcessInput) return;
 
-  const originalSelectStart = arRenderer.onSelectStart;
-  if (!originalSelectStart) return;
+  const keepModelFixed = (frame) => {
+    originalProcessInput.call(arRenderer, frame);
 
-  const keepModelFixed = (event) => {
-    if (!placementLocked) {
-      originalSelectStart(event);
-      return;
-    }
-
-    const horizontalAxis = event.inputSource?.gamepad?.axes?.[0];
-
-    // Sustituye el arrastre interno de model-viewer por un giro.
-    // El procesamiento de dos dedos sigue gestionando rotación y escala.
-    arRenderer.inputSource = event.inputSource;
-    arRenderer.isTranslating = false;
-    arRenderer.isRotating = true;
-    if (typeof horizontalAxis === "number") {
-      arRenderer.lastAngle = 1.5 * horizontalAxis;
+    if (placementLocked && lockedPosition) {
+      // Mantiene giro y escala, pero descarta el cambio de posición del gesto.
+      arRenderer.goalPosition.set(
+        lockedPosition.x,
+        lockedPosition.y,
+        lockedPosition.z,
+      );
     }
   };
 
   removeTranslationLock?.();
-  session.removeEventListener("selectstart", originalSelectStart);
-  session.addEventListener("selectstart", keepModelFixed);
+  arRenderer.processInput = keepModelFixed;
   removeTranslationLock = () => {
-    session.removeEventListener("selectstart", keepModelFixed);
-    session.addEventListener("selectstart", originalSelectStart);
+    if (arRenderer.processInput === keepModelFixed) {
+      arRenderer.processInput = originalProcessInput;
+    }
   };
 }
 
@@ -222,12 +219,14 @@ viewer.addEventListener("ar-status", (event) => {
     manualPlacement = false;
     placementRequestPending = false;
     placementLocked = false;
+    lockedPosition = null;
     hideModelUntilPlacement();
     lockTranslationGestures();
   }
 
   if (arStatus === "object-placed" && !manualPlacement) {
     placementLocked = false;
+    lockedPosition = null;
     status.className = "ar-status status-aiming";
     status.querySelector("b").textContent = "Apunta y pulsa colocar aquí";
     return;
@@ -246,6 +245,7 @@ viewer.addEventListener("ar-status", (event) => {
     manualPlacement = false;
     placementRequestPending = false;
     placementLocked = false;
+    lockedPosition = null;
     removeTranslationLock?.();
     removeTranslationLock = null;
     restoreModel();
@@ -276,6 +276,7 @@ buttons.forEach((button) => {
     setStatus();
     manualPlacement = false;
     placementLocked = false;
+    lockedPosition = null;
     placementControl.querySelector("strong").textContent = "Colocar aquí";
     placementControl.setAttribute(
       "aria-label",

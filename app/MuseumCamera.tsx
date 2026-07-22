@@ -50,6 +50,9 @@ type ArRenderer = {
   threeRenderer?: { xr?: { getReferenceSpace: () => unknown } };
   getHitPoint?: (result: unknown) => unknown | null;
   goalPosition?: {
+    x: number;
+    y: number;
+    z: number;
     copy: (position: unknown) => void;
     set: (x: number, y: number, z: number) => void;
   };
@@ -59,8 +62,7 @@ type ArRenderer = {
   isRotating?: boolean;
   isTwoHandInteraction?: boolean;
   lastAngle?: number;
-  inputSource?: unknown;
-  onSelectStart?: (event: Event) => void;
+  processInput?: (frame: ArFrame) => void;
 };
 type ArRendererOwner = { arRenderer?: ArRenderer };
 type XrRayConstructor = new (
@@ -122,6 +124,7 @@ export function MuseumCamera() {
   const manualPlacementRef = useRef(false);
   const placementRequestRef = useRef(false);
   const placementLockedRef = useRef(false);
+  const lockedPositionRef = useRef<{ x: number; y: number; z: number } | null>(null);
   const removeTranslationLockRef = useRef<(() => void) | null>(null);
   const hiddenMaterialsRef = useRef<HiddenMaterial[]>([]);
   const [selectedModel, setSelectedModel] = useState(0);
@@ -188,6 +191,13 @@ export function MuseumCamera() {
           view.transform.position.y + direction.y * distance,
           view.transform.position.z + direction.z * distance,
         );
+        lockedPositionRef.current = arRenderer.goalPosition
+          ? {
+              x: arRenderer.goalPosition.x,
+              y: arRenderer.goalPosition.y,
+              z: arRenderer.goalPosition.z,
+            }
+          : null;
         placementRequestRef.current = false;
         placementLockedRef.current = true;
         setArStatus("placed");
@@ -208,6 +218,13 @@ export function MuseumCamera() {
         const hitPoint = result ? arRenderer.getHitPoint?.(result) : null;
         if (hitPoint) {
           arRenderer.goalPosition?.copy(hitPoint);
+          lockedPositionRef.current = arRenderer.goalPosition
+            ? {
+                x: arRenderer.goalPosition.x,
+                y: arRenderer.goalPosition.y,
+                z: arRenderer.goalPosition.z,
+              }
+            : null;
           hitSource.cancel();
           placementRequestRef.current = false;
           placementLockedRef.current = true;
@@ -253,41 +270,32 @@ export function MuseumCamera() {
         manualPlacementRef.current = false;
         placementRequestRef.current = false;
         placementLockedRef.current = false;
+        lockedPositionRef.current = null;
         hideModelUntilPlacement();
         setArStatus("searching");
 
         const arRenderer = getArRenderer(viewer);
         const session = arRenderer?.currentSession;
         if (arRenderer && session) {
-          const originalSelectStart = arRenderer.onSelectStart;
-          if (originalSelectStart) {
-            const keepModelFixed = (selectEvent: Event) => {
-              if (!placementLockedRef.current) {
-                originalSelectStart(selectEvent);
-                return;
-              }
+          const originalProcessInput = arRenderer.processInput;
+          if (originalProcessInput) {
+            const keepModelFixed = (nextFrame: ArFrame) => {
+              originalProcessInput.call(arRenderer, nextFrame);
 
-              const inputSource = (selectEvent as Event & {
-                inputSource?: { gamepad?: { axes?: readonly number[] } };
-              }).inputSource;
-              const horizontalAxis = inputSource?.gamepad?.axes?.[0];
-
-              // Sustituye el arrastre interno de model-viewer por un giro.
-              // El procesamiento de dos dedos sigue gestionando rotación y escala.
-              arRenderer.inputSource = inputSource;
-              arRenderer.isTranslating = false;
-              arRenderer.isRotating = true;
-              if (typeof horizontalAxis === "number") {
-                arRenderer.lastAngle = 1.5 * horizontalAxis;
+              const position = lockedPositionRef.current;
+              if (placementLockedRef.current && position) {
+                // model-viewer ya ha procesado giro y escala. Restaurar solo
+                // goalPosition elimina el arrastre sin alterar esos gestos.
+                arRenderer.goalPosition?.set(position.x, position.y, position.z);
               }
             };
 
             removeTranslationLockRef.current?.();
-            session.removeEventListener("selectstart", originalSelectStart);
-            session.addEventListener("selectstart", keepModelFixed);
+            arRenderer.processInput = keepModelFixed;
             removeTranslationLockRef.current = () => {
-              session.removeEventListener("selectstart", keepModelFixed);
-              session.addEventListener("selectstart", originalSelectStart);
+              if (arRenderer.processInput === keepModelFixed) {
+                arRenderer.processInput = originalProcessInput;
+              }
             };
           }
         }
@@ -302,6 +310,7 @@ export function MuseumCamera() {
         manualPlacementRef.current = false;
         placementRequestRef.current = false;
         placementLockedRef.current = false;
+        lockedPositionRef.current = null;
         removeTranslationLockRef.current?.();
         removeTranslationLockRef.current = null;
         restoreModel();
@@ -333,6 +342,8 @@ export function MuseumCamera() {
 
   const selectModel = (index: number) => {
     restoreModel();
+    placementLockedRef.current = false;
+    lockedPositionRef.current = null;
     setSelectedModel(index);
     setArStatus("ready");
   };
