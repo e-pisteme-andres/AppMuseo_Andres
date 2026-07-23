@@ -100,7 +100,6 @@ export class XRExperience {
     this.anchorRoot.matrixAutoUpdate = false;
     this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot);
     this.sporeField.attachTo(this.mushroomPivot);
-    this.sporeField.setClippingPlane(this.slicePlane);
     this.scene.add(this.anchorRoot);
     this.mushroomPivot.position.y = 0.1;
     this.mushroomPivot.visible = false;
@@ -491,6 +490,7 @@ export class XRExperience {
       this.sliceProgress,
     );
     this.localSlicePlane.setComponents(1, 0, 0, -sliceX);
+    this.sporeField.setSlicePosition(sliceX);
     this.anchorRoot.updateMatrixWorld(true);
     this.slicePlane.copy(this.localSlicePlane).applyMatrix4(this.mushroomPivot.matrixWorld);
   }

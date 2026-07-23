@@ -62,32 +62,31 @@ export class SporeField {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
+        sliceX: { value: -1 },
       },
       vertexShader: `
-        #include <clipping_planes_pars_vertex>
-
         attribute float sporeSize;
         attribute float sporePhase;
         uniform float time;
         varying float pulse;
+        varying float particleLocalX;
 
         void main() {
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           float objectScale = length(vec3(modelMatrix[0]));
           gl_Position = projectionMatrix * mvPosition;
-          gl_PointSize = sporeSize * objectScale * (360.0 / max(0.12, -mvPosition.z));
+          gl_PointSize = max(2.5, sporeSize * objectScale * (520.0 / max(0.12, -mvPosition.z)));
           pulse = 0.72 + 0.28 * sin(time * 2.1 + sporePhase);
-
-          #include <clipping_planes_vertex>
+          particleLocalX = position.x;
         }
       `,
       fragmentShader: `
-        #include <clipping_planes_pars_fragment>
-
+        uniform float sliceX;
         varying float pulse;
+        varying float particleLocalX;
 
         void main() {
-          #include <clipping_planes_fragment>
+          if (particleLocalX < sliceX) discard;
 
           float distanceToCenter = length(gl_PointCoord - vec2(0.5));
           if (distanceToCenter > 0.5) discard;
@@ -102,7 +101,6 @@ export class SporeField {
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
-      clipping: true,
     });
 
     this.points = new THREE.Points(geometry, material);
@@ -115,9 +113,8 @@ export class SporeField {
     parent.add(this.points);
   }
 
-  setClippingPlane(plane: THREE.Plane): void {
-    this.points.material.clippingPlanes = [plane];
-    this.points.material.needsUpdate = true;
+  setSlicePosition(positionX: number): void {
+    this.points.material.uniforms.sliceX.value = positionX;
   }
 
   update(elapsedSeconds: number, deltaSeconds: number): void {
