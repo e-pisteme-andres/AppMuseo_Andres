@@ -1,4 +1,5 @@
 import './style.css';
+import { ModelPreview } from './ar/model-preview';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
 import { PanoramaViewer } from './panorama-viewer';
@@ -29,7 +30,7 @@ app.innerHTML = `
           <ol class="steps" aria-label="Cómo funciona">
             <li><span>01</span><div><strong>Activa la cámara</strong><small>Chrome solicitará permiso al comenzar.</small></div></li>
             <li><span>02</span><div><strong>Busca una superficie</strong><small>Mueve el móvil lentamente sobre una mesa o el suelo.</small></div></li>
-            <li><span>03</span><div><strong>Malla y seta</strong><small>Toca una vez para fijar la malla y otra vez para colocar la seta.</small></div></li>
+            <li><span>03</span><div><strong>Malla y forma</strong><small>Fija la malla y elige la seta desde el menú lateral.</small></div></li>
           </ol>
 
           <div class="hero-actions">
@@ -86,6 +87,28 @@ app.innerHTML = `
         <span class="gesture-finger"></span>
         Arrastra con uno o dos dedos para rotar
       </div>
+      <aside class="xr-library" id="xr-library" data-xr-control aria-label="Herramientas de realidad aumentada" hidden>
+        <div class="xr-tool-list">
+          <button class="xr-tool-button" id="forms-toggle" type="button" aria-expanded="false" aria-controls="forms-panel">
+            <span class="xr-tool-icon xr-shape-icon" aria-hidden="true"></span>
+            <span>Formas</span>
+            <span class="xr-tool-chevron" aria-hidden="true">›</span>
+          </button>
+          <button class="xr-tool-button" id="hands-toggle" type="button" aria-disabled="true">
+            <span class="xr-tool-icon xr-hand-icon" aria-hidden="true">✋</span>
+            <span>Seguimiento<br>de manos</span>
+          </button>
+        </div>
+        <div class="xr-model-panel" id="forms-panel" aria-label="Formas disponibles" hidden>
+          <span class="xr-panel-title">Formas disponibles</span>
+          <button class="xr-model-option" id="place-mushroom" type="button">
+            <span class="xr-model-preview">
+              <canvas id="mushroom-preview" width="136" height="136" aria-hidden="true"></canvas>
+            </span>
+            <strong>Seta roja</strong>
+          </button>
+        </div>
+      </aside>
     </div>
 
     <section id="panorama-view" class="panorama-view" aria-label="Paisaje panorámico de Paranal" aria-hidden="true">
@@ -118,6 +141,12 @@ const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
 const xrOcclusion = getRequiredElement<HTMLElement>('#xr-occlusion');
+const xrLibrary = getRequiredElement<HTMLElement>('#xr-library');
+const formsToggle = getRequiredElement<HTMLButtonElement>('#forms-toggle');
+const formsPanel = getRequiredElement<HTMLElement>('#forms-panel');
+const handsToggle = getRequiredElement<HTMLButtonElement>('#hands-toggle');
+const placeMushroomButton = getRequiredElement<HTMLButtonElement>('#place-mushroom');
+const mushroomPreviewCanvas = getRequiredElement<HTMLCanvasElement>('#mushroom-preview');
 const openPanoramaButton = getRequiredElement<HTMLButtonElement>('#open-panorama');
 const closePanoramaButton = getRequiredElement<HTMLButtonElement>('#close-panorama');
 const panoramaView = getRequiredElement<HTMLElement>('#panorama-view');
@@ -142,10 +171,20 @@ const panorama = new PanoramaViewer({
   },
 });
 
+const mushroomPreview = new ModelPreview(mushroomPreviewCanvas);
+
+function closeModelMenus(): void {
+  formsToggle.setAttribute('aria-expanded', 'false');
+  formsPanel.hidden = true;
+  mushroomPreview.stop();
+}
+
 function updateState(state: ExperienceState, message: string): void {
   xrMessage.textContent = message;
   xrGuide.dataset.state = state;
   gestureHint.hidden = state !== 'placed';
+  xrLibrary.hidden = state !== 'surfacePlaced';
+  if (state !== 'surfacePlaced') closeModelMenus();
 
   if (state === 'starting') {
     startButton.disabled = true;
@@ -191,6 +230,7 @@ async function checkCompatibility(): Promise<void> {
     }
 
     await experience.loadModel();
+    await mushroomPreview.load(`${import.meta.env.BASE_URL}models/mushroom.glb`);
     compatibility.textContent = 'Compatible · Requiere Chrome y un dispositivo con ARCore';
     startButton.disabled = false;
     startLabel.textContent = 'Ver seta en AR';
@@ -220,6 +260,26 @@ closeButton.addEventListener('click', (event) => {
     closeButton.textContent = 'Salir';
     xrMessage.textContent = 'No se pudo cerrar la sesión. Inténtalo de nuevo.';
   });
+});
+
+xrLibrary.addEventListener('beforexrselect', (event) => event.preventDefault());
+formsToggle.addEventListener('click', () => {
+  const willOpen = formsPanel.hidden;
+  closeModelMenus();
+  if (willOpen) {
+    formsPanel.hidden = false;
+    formsToggle.setAttribute('aria-expanded', 'true');
+    mushroomPreview.start();
+  }
+});
+
+handsToggle.addEventListener('click', () => {
+  // Reservado para incorporar el seguimiento de manos en una fase posterior.
+});
+
+placeMushroomButton.addEventListener('click', () => {
+  if (!experience.placeModel('mushroom')) return;
+  closeModelMenus();
 });
 
 openPanoramaButton.addEventListener('click', () => {

@@ -47,3 +47,40 @@ describe('salida de la experiencia AR', () => {
     expect(session.end).not.toHaveBeenCalled();
   });
 });
+
+describe('selección explícita de modelos', () => {
+  it('solo coloca la seta después de haber fijado la malla', () => {
+    const experience = Object.create(XRExperience.prototype) as {
+      state: string;
+      mushroomPivot: { visible: boolean };
+      sporeField: { reset: ReturnType<typeof vi.fn>; points: { visible: boolean } };
+      lastFrameTime: number | null;
+      setState: (state: string) => void;
+      placeModel: (modelId: 'mushroom') => boolean;
+    };
+
+    experience.state = 'surfacePlaced';
+    experience.mushroomPivot = { visible: false };
+    experience.sporeField = { reset: vi.fn(), points: { visible: false } };
+    experience.lastFrameTime = 123;
+    experience.setState = (state) => {
+      experience.state = state;
+    };
+
+    expect(experience.placeModel('mushroom')).toBe(true);
+    expect(experience.mushroomPivot.visible).toBe(true);
+    expect(experience.sporeField.points.visible).toBe(true);
+    expect(experience.sporeField.reset).toHaveBeenCalledOnce();
+    expect(experience.state).toBe('placed');
+  });
+
+  it('ignora la selección si todavía no hay una malla colocada', () => {
+    const experience = Object.create(XRExperience.prototype) as {
+      state: string;
+      placeModel: (modelId: 'mushroom') => boolean;
+    };
+    experience.state = 'scanning';
+
+    expect(experience.placeModel('mushroom')).toBe(false);
+  });
+});

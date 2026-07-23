@@ -24,7 +24,7 @@ interface XRExperienceOptions {
 
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
 const PLACEABLE_MESSAGE = 'Superficie detectada. Toca la pantalla para colocar la malla.';
-const SURFACE_PLACED_MESSAGE = 'Malla colocada. Toca la pantalla de nuevo para colocar la seta.';
+const SURFACE_PLACED_MESSAGE = 'Malla colocada. Elige una forma en el menú de la izquierda.';
 const PLACED_MESSAGE = 'Seta colocada. Arrastra para girarla; la malla permanecerá visible.';
 const SURFACE_SIZE_METERS = 1;
 const SURFACE_DIVISIONS = 10;
@@ -125,6 +125,12 @@ export class XRExperience {
       }
     });
     this.mushroomPivot.add(gltf.scene);
+  }
+
+  placeModel(modelId: 'mushroom'): boolean {
+    if (modelId !== 'mushroom' || this.state !== 'surfacePlaced') return false;
+    this.commitMushroomPlacement();
+    return true;
   }
 
   async start(): Promise<void> {
@@ -360,8 +366,6 @@ export class XRExperience {
 
     if (isTap && this.state === 'placeable') {
       this.surfacePlacementRequested = true;
-    } else if (isTap && this.state === 'surfacePlaced') {
-      this.commitMushroomPlacement();
     }
 
     this.pointers.delete(event.pointerId);
