@@ -87,6 +87,14 @@ app.innerHTML = `
         <span class="gesture-finger"></span>
         Arrastra con uno o dos dedos para rotar
       </div>
+      <div class="xr-cut-control" id="xr-cut-control" data-xr-control hidden>
+        <label for="model-cut">
+          <span>Corte vertical</span>
+          <output id="model-cut-value" for="model-cut">0%</output>
+        </label>
+        <input id="model-cut" type="range" min="0" max="100" value="0" step="1" aria-label="Cortar el modelo de izquierda a derecha">
+        <span class="xr-cut-direction" aria-hidden="true"><span>Visible</span><span>Cortado</span></span>
+      </div>
       <aside class="xr-library" id="xr-library" data-xr-control aria-label="Herramientas de realidad aumentada" hidden>
         <div class="xr-tool-list">
           <button class="xr-tool-button" id="forms-toggle" type="button" aria-expanded="false" aria-controls="forms-panel">
@@ -140,6 +148,9 @@ const closeButton = getRequiredElement<HTMLButtonElement>('#close-ar');
 const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
+const cutControl = getRequiredElement<HTMLElement>('#xr-cut-control');
+const modelCutInput = getRequiredElement<HTMLInputElement>('#model-cut');
+const modelCutValue = getRequiredElement<HTMLOutputElement>('#model-cut-value');
 const xrOcclusion = getRequiredElement<HTMLElement>('#xr-occlusion');
 const xrLibrary = getRequiredElement<HTMLElement>('#xr-library');
 const formsToggle = getRequiredElement<HTMLButtonElement>('#forms-toggle');
@@ -183,6 +194,7 @@ function updateState(state: ExperienceState, message: string): void {
   xrMessage.textContent = message;
   xrGuide.dataset.state = state;
   gestureHint.hidden = state !== 'placed';
+  cutControl.hidden = state !== 'placed';
   xrLibrary.hidden = state !== 'surfacePlaced';
   if (state !== 'surfacePlaced') closeModelMenus();
 
@@ -206,6 +218,10 @@ const experience = new XRExperience({
   onStateChange: updateState,
   onSessionActivity: (active) => {
     document.body.classList.toggle('xr-active', active);
+    if (!active) {
+      modelCutInput.value = '0';
+      modelCutValue.value = '0%';
+    }
     closeButton.disabled = false;
     closeButton.textContent = 'Salir';
   },
@@ -263,6 +279,12 @@ closeButton.addEventListener('click', (event) => {
 });
 
 xrLibrary.addEventListener('beforexrselect', (event) => event.preventDefault());
+cutControl.addEventListener('beforexrselect', (event) => event.preventDefault());
+modelCutInput.addEventListener('input', () => {
+  const percentage = Number(modelCutInput.value);
+  modelCutValue.value = `${percentage}%`;
+  experience.setSliceProgress(percentage / 100);
+});
 formsToggle.addEventListener('click', () => {
   const willOpen = formsPanel.hidden;
   closeModelMenus();

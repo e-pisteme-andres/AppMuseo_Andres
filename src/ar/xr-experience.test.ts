@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { XRExperience } from './xr-experience';
+import { getVerticalSlicePosition, XRExperience } from './xr-experience';
 
 function createExperienceWithSession() {
   const session = { end: vi.fn(() => Promise.resolve()) };
@@ -48,6 +48,19 @@ describe('salida de la experiencia AR', () => {
   });
 });
 
+describe('corte vertical del modelo', () => {
+  it('recorre el modelo de izquierda a derecha y deja margen en los extremos', () => {
+    expect(getVerticalSlicePosition(-2, 3, 0)).toBeLessThan(-2);
+    expect(getVerticalSlicePosition(-2, 3, 0.5)).toBeCloseTo(0.5);
+    expect(getVerticalSlicePosition(-2, 3, 1)).toBeGreaterThan(3);
+  });
+
+  it('limita los valores del deslizador al intervalo visible', () => {
+    expect(getVerticalSlicePosition(0, 10, -1)).toBeCloseTo(-0.2);
+    expect(getVerticalSlicePosition(0, 10, 2)).toBeCloseTo(10.2);
+  });
+});
+
 describe('selección explícita de modelos', () => {
   it('solo coloca la seta después de haber fijado la malla', () => {
     const experience = Object.create(XRExperience.prototype) as {
@@ -56,6 +69,7 @@ describe('selección explícita de modelos', () => {
       sporeField: { reset: ReturnType<typeof vi.fn>; points: { visible: boolean } };
       lastFrameTime: number | null;
       setState: (state: string) => void;
+      setSliceProgress: ReturnType<typeof vi.fn>;
       placeModel: (modelId: 'mushroom') => boolean;
     };
 
@@ -63,6 +77,7 @@ describe('selección explícita de modelos', () => {
     experience.mushroomPivot = { visible: false };
     experience.sporeField = { reset: vi.fn(), points: { visible: false } };
     experience.lastFrameTime = 123;
+    experience.setSliceProgress = vi.fn();
     experience.setState = (state) => {
       experience.state = state;
     };
@@ -71,6 +86,7 @@ describe('selección explícita de modelos', () => {
     expect(experience.mushroomPivot.visible).toBe(true);
     expect(experience.sporeField.points.visible).toBe(true);
     expect(experience.sporeField.reset).toHaveBeenCalledOnce();
+    expect(experience.setSliceProgress).toHaveBeenCalledWith(0);
     expect(experience.state).toBe('placed');
   });
 

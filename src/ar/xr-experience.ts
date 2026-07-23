@@ -28,6 +28,14 @@ const SURFACE_PLACED_MESSAGE = 'Malla colocada. Elige una forma en el menú de l
 const PLACED_MESSAGE = 'Seta colocada. Arrastra para girarla; la malla permanecerá visible.';
 const SURFACE_SIZE_METERS = 1;
 const SURFACE_DIVISIONS = 10;
+const SLICE_PADDING_RATIO = 0.02;
+
+export function getVerticalSlicePosition(minX: number, maxX: number, progress: number): number {
+  const clampedProgress = Math.min(1, Math.max(0, progress));
+  const width = Math.max(0, maxX - minX);
+  const padding = width * SLICE_PADDING_RATIO;
+  return THREE.MathUtils.lerp(minX - padding, maxX + padding, clampedProgress);
+}
 
 export class XRExperience {
   private readonly renderer: THREE.WebGLRenderer;
@@ -43,6 +51,9 @@ export class XRExperience {
   private readonly stabilizer = new SurfaceStabilizer();
   private readonly pointers = new Map<number, PointerSnapshot>();
   private readonly options: XRExperienceOptions;
+  private readonly localSlicePlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+  private readonly slicePlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+  private readonly modelBounds = new THREE.Box3();
 
   private state: ExperienceState = 'ready';
   private session: XRSession | null = null;
@@ -55,12 +66,14 @@ export class XRExperience {
   private trackingLost = false;
   private ending: Promise<void> | null = null;
   private lastFrameTime: number | null = null;
+  private sliceProgress = 0;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType('local-floor');
+    this.renderer.localClippingEnabled = true;
     this.renderer.xr.addEventListener('sessionend', this.onSessionEnded);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -118,19 +131,32 @@ export class XRExperience {
   async loadModel(): Promise<void> {
     const loader = new GLTFLoader();
     const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/mushroom.glb`);
+    this.modelBounds.setFromObject(gltf.scene);
     gltf.scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material) => {
+          material.clippingPlanes = [this.slicePlane];
+          material.clipShadows = true;
+          material.needsUpdate = true;
+        });
       }
     });
     this.mushroomPivot.add(gltf.scene);
+    this.updateSlicePlane();
   }
 
   placeModel(modelId: 'mushroom'): boolean {
     if (modelId !== 'mushroom' || this.state !== 'surfacePlaced') return false;
     this.commitMushroomPlacement();
     return true;
+  }
+
+  setSliceProgress(progress: number): void {
+    this.sliceProgress = Math.min(1, Math.max(0, progress));
+    this.updateSlicePlane();
   }
 
   async start(): Promise<void> {
@@ -236,6 +262,7 @@ export class XRExperience {
       const deltaSeconds = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) * 0.001;
       this.sporeField.update(elapsedSeconds, deltaSeconds);
       this.lastFrameTime = time;
+      this.updateSlicePlane();
     }
 
     this.renderer.render(this.scene, this.camera);
@@ -307,6 +334,7 @@ export class XRExperience {
 
   private commitMushroomPlacement(): void {
     if (this.state !== 'surfacePlaced') return;
+    this.setSliceProgress(0);
     this.mushroomPivot.visible = true;
     this.sporeField.reset();
     this.sporeField.points.visible = true;
@@ -399,6 +427,20 @@ export class XRExperience {
     this.sporeField.reset();
     this.lastFrameTime = null;
     this.anchorRoot.matrix.identity();
+    this.setSliceProgress(0);
+  }
+
+  private updateSlicePlane(): void {
+    if (this.modelBounds.isEmpty()) return;
+
+    const sliceX = getVerticalSlicePosition(
+      this.modelBounds.min.x,
+      this.modelBounds.max.x,
+      this.sliceProgress,
+    );
+    this.localSlicePlane.setComponents(1, 0, 0, -sliceX);
+    this.anchorRoot.updateMatrixWorld(true);
+    this.slicePlane.copy(this.localSlicePlane).applyMatrix4(this.mushroomPivot.matrixWorld);
   }
 
   private async endSilently(): Promise<void> {
