@@ -209,7 +209,6 @@ export class XRExperience {
     if (!activeSession) return;
     if (this.ending) return this.ending;
 
-    this.renderer.setAnimationLoop(null);
     const ending = this.endOnNextTask(activeSession);
     this.ending = ending;
 
@@ -221,10 +220,25 @@ export class XRExperience {
   }
 
   private async endOnNextTask(activeSession: XRSession): Promise<void> {
-    // Do not destroy an immersive session from inside Chrome's DOM-overlay
-    // input dispatch. Moving it to the next task avoids an ARCore/renderer race.
+    // Do not mutate or destroy WebXR resources from inside Chrome's DOM-overlay
+    // input dispatch. Moving the whole shutdown to the next task avoids an
+    // ARCore/renderer race.
     await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
-    if (this.session === activeSession) await activeSession.end();
+    if (this.session !== activeSession) return;
+
+    this.renderer.setAnimationLoop(null);
+    this.releaseSessionResources();
+    await activeSession.end();
+  }
+
+  private releaseSessionResources(): void {
+    // XRHitTestSource and XRAnchor belong to the active XRSession. Releasing
+    // them after the session's `end` event can reach an already torn-down
+    // ARCore object and crash Chrome's renderer process.
+    this.hitTestSource?.cancel();
+    this.anchor?.delete();
+    this.hitTestSource = null;
+    this.anchor = null;
   }
 
   private setState(next: ExperienceState, message: string): void {
@@ -323,13 +337,17 @@ export class XRExperience {
 
     const anchorPromise = result.createAnchor?.();
     anchorPromise
-      ?.then((anchor) => {
-        if (this.session) this.anchor = anchor;
-        else anchor.delete();
-      })
+      ?.then((anchor) => this.retainAnchor(anchor))
       .catch(() => {
         // La pose local congelada continúa siendo un fallback válido.
       });
+  }
+
+  private retainAnchor(anchor: XRAnchor): void {
+    // A pending createAnchor() may resolve while the session is ending, or
+    // after it has ended. In either case ARCore owns the final teardown; calling
+    // delete() on that late anchor can target an invalid native session.
+    if (this.session && !this.ending) this.anchor = anchor;
   }
 
   private commitMushroomPlacement(): void {
@@ -408,8 +426,6 @@ export class XRExperience {
 
   private cleanupSession(): void {
     this.renderer.setAnimationLoop(null);
-    this.hitTestSource?.cancel();
-    this.anchor?.delete();
     this.session = null;
     this.ending = null;
     this.referenceSpace = null;
@@ -447,6 +463,8 @@ export class XRExperience {
     const activeSession = this.session;
     if (activeSession) {
       try {
+        this.renderer.setAnimationLoop(null);
+        this.releaseSessionResources();
         await activeSession.end();
       } catch {
         this.cleanupSession();

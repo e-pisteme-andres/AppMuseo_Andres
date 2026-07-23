@@ -2,37 +2,58 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getVerticalSlicePosition, XRExperience } from './xr-experience';
 
 function createExperienceWithSession() {
-  const session = { end: vi.fn(() => Promise.resolve()) };
-  const renderer = { setAnimationLoop: vi.fn() };
+  const lifecycle: string[] = [];
+  const session = {
+    end: vi.fn(() => {
+      lifecycle.push('end');
+      return Promise.resolve();
+    }),
+  };
+  const renderer = { setAnimationLoop: vi.fn(() => lifecycle.push('stop-loop')) };
+  const hitTestSource = { cancel: vi.fn(() => lifecycle.push('cancel-hit-test')) };
+  const anchor = { delete: vi.fn(() => lifecycle.push('delete-anchor')) };
   const experience = Object.create(XRExperience.prototype) as {
     session: typeof session | null;
     ending: Promise<void> | null;
     renderer: typeof renderer;
+    hitTestSource: typeof hitTestSource | null;
+    anchor: typeof anchor | null;
     end: () => Promise<void>;
   };
 
   experience.session = session;
   experience.ending = null;
   experience.renderer = renderer;
-  return { experience, renderer, session };
+  experience.hitTestSource = hitTestSource;
+  experience.anchor = anchor;
+  return { experience, renderer, session, hitTestSource, anchor, lifecycle };
 }
 
 describe('salida de la experiencia AR', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('aplaza el cierre y evita terminar dos veces la misma sesión', async () => {
+  it('aplaza todo el cierre, libera los recursos XR y termina una sola vez', async () => {
     vi.useFakeTimers();
-    const { experience, renderer, session } = createExperienceWithSession();
+    const { experience, renderer, session, hitTestSource, anchor, lifecycle } =
+      createExperienceWithSession();
 
     const firstExit = experience.end();
     const secondExit = experience.end();
 
-    expect(renderer.setAnimationLoop).toHaveBeenCalledOnce();
+    expect(renderer.setAnimationLoop).not.toHaveBeenCalled();
+    expect(hitTestSource.cancel).not.toHaveBeenCalled();
+    expect(anchor.delete).not.toHaveBeenCalled();
     expect(session.end).not.toHaveBeenCalled();
 
     await vi.runAllTimersAsync();
     await Promise.all([firstExit, secondExit]);
+    expect(renderer.setAnimationLoop).toHaveBeenCalledOnce();
+    expect(hitTestSource.cancel).toHaveBeenCalledOnce();
+    expect(anchor.delete).toHaveBeenCalledOnce();
     expect(session.end).toHaveBeenCalledOnce();
+    expect(lifecycle).toEqual(['stop-loop', 'cancel-hit-test', 'delete-anchor', 'end']);
+    expect(experience.hitTestSource).toBeNull();
+    expect(experience.anchor).toBeNull();
   });
 
   it('no intenta cerrar una sesión que ya dejó de estar activa', async () => {
@@ -45,6 +66,31 @@ describe('salida de la experiencia AR', () => {
     await vi.runAllTimersAsync();
     await exit;
     expect(session.end).not.toHaveBeenCalled();
+  });
+
+  it('ignora un anchor que llega cuando la sesión ya se está cerrando', () => {
+    const experience = Object.create(XRExperience.prototype) as {
+      session: object | null;
+      ending: Promise<void> | null;
+      anchor: object | null;
+      retainAnchor: (anchor: object) => void;
+    };
+    const lateAnchor = { delete: vi.fn() };
+
+    experience.session = {};
+    experience.ending = Promise.resolve();
+    experience.anchor = null;
+    experience.retainAnchor(lateAnchor);
+
+    expect(experience.anchor).toBeNull();
+    expect(lateAnchor.delete).not.toHaveBeenCalled();
+
+    experience.session = null;
+    experience.ending = null;
+    experience.retainAnchor(lateAnchor);
+
+    expect(experience.anchor).toBeNull();
+    expect(lateAnchor.delete).not.toHaveBeenCalled();
   });
 });
 
