@@ -95,6 +95,17 @@ app.innerHTML = `
         <input id="model-cut" type="range" min="0" max="100" value="0" step="1" aria-label="Cortar el modelo de izquierda a derecha">
         <span class="xr-cut-direction" aria-hidden="true"><span>Visible</span><span>Cortado</span></span>
       </div>
+      <div class="xr-scale-control" id="xr-scale-control" data-xr-control hidden>
+        <label for="model-size">
+          <span>Tamaño</span>
+          <output id="model-size-value" for="model-size">20 cm</output>
+        </label>
+        <div class="xr-scale-slider">
+          <span aria-hidden="true">1 m</span>
+          <input id="model-size" type="range" min="1" max="100" value="20" step="1" orient="vertical" aria-label="Tamaño uniforme del modelo, de 1 centímetro a 1 metro">
+          <span aria-hidden="true">1 cm</span>
+        </div>
+      </div>
       <aside class="xr-library" id="xr-library" data-xr-control aria-label="Herramientas de realidad aumentada" hidden>
         <div class="xr-tool-list">
           <button class="xr-tool-button" id="forms-toggle" type="button" aria-expanded="false" aria-controls="forms-panel">
@@ -151,6 +162,9 @@ const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
 const cutControl = getRequiredElement<HTMLElement>('#xr-cut-control');
 const modelCutInput = getRequiredElement<HTMLInputElement>('#model-cut');
 const modelCutValue = getRequiredElement<HTMLOutputElement>('#model-cut-value');
+const scaleControl = getRequiredElement<HTMLElement>('#xr-scale-control');
+const modelSizeInput = getRequiredElement<HTMLInputElement>('#model-size');
+const modelSizeValue = getRequiredElement<HTMLOutputElement>('#model-size-value');
 const xrOcclusion = getRequiredElement<HTMLElement>('#xr-occlusion');
 const xrLibrary = getRequiredElement<HTMLElement>('#xr-library');
 const formsToggle = getRequiredElement<HTMLButtonElement>('#forms-toggle');
@@ -195,6 +209,7 @@ function updateState(state: ExperienceState, message: string): void {
   xrGuide.dataset.state = state;
   gestureHint.hidden = state !== 'placed';
   cutControl.hidden = state !== 'placed';
+  scaleControl.hidden = state !== 'placed';
   xrLibrary.hidden = state !== 'surfacePlaced';
   if (state !== 'surfacePlaced') closeModelMenus();
 
@@ -221,6 +236,8 @@ const experience = new XRExperience({
     if (!active) {
       modelCutInput.value = '0';
       modelCutValue.value = '0%';
+      modelSizeInput.value = '20';
+      modelSizeValue.value = '20 cm';
     }
     closeButton.disabled = false;
     closeButton.textContent = 'Salir';
@@ -280,10 +297,16 @@ closeButton.addEventListener('click', (event) => {
 
 xrLibrary.addEventListener('beforexrselect', (event) => event.preventDefault());
 cutControl.addEventListener('beforexrselect', (event) => event.preventDefault());
+scaleControl.addEventListener('beforexrselect', (event) => event.preventDefault());
 modelCutInput.addEventListener('input', () => {
   const percentage = Number(modelCutInput.value);
   modelCutValue.value = `${percentage}%`;
   experience.setSliceProgress(percentage / 100);
+});
+modelSizeInput.addEventListener('input', () => {
+  const sizeCentimeters = Number(modelSizeInput.value);
+  modelSizeValue.value = sizeCentimeters === 100 ? '1 m' : `${sizeCentimeters} cm`;
+  experience.setModelSizeMeters(sizeCentimeters / 100);
 });
 formsToggle.addEventListener('click', () => {
   const willOpen = formsPanel.hidden;

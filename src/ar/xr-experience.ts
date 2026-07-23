@@ -29,12 +29,23 @@ const PLACED_MESSAGE = 'Seta colocada. Arrastra para girarla; la malla permanece
 const SURFACE_SIZE_METERS = 1;
 const SURFACE_DIVISIONS = 10;
 const SLICE_PADDING_RATIO = 0.02;
+export const MIN_MODEL_SIZE_METERS = 0.01;
+export const MAX_MODEL_SIZE_METERS = 1;
+export const DEFAULT_MODEL_SIZE_METERS = 0.2;
 
 export function getVerticalSlicePosition(minX: number, maxX: number, progress: number): number {
   const clampedProgress = Math.min(1, Math.max(0, progress));
   const width = Math.max(0, maxX - minX);
   const padding = width * SLICE_PADDING_RATIO;
   return THREE.MathUtils.lerp(minX - padding, maxX + padding, clampedProgress);
+}
+
+export function getUniformModelScale(largestDimension: number, sizeMeters: number): number {
+  const clampedSize = Math.min(
+    MAX_MODEL_SIZE_METERS,
+    Math.max(MIN_MODEL_SIZE_METERS, sizeMeters),
+  );
+  return largestDimension > 0 ? clampedSize / largestDimension : 1;
 }
 
 export class XRExperience {
@@ -67,6 +78,7 @@ export class XRExperience {
   private ending: Promise<void> | null = null;
   private lastFrameTime: number | null = null;
   private sliceProgress = 0;
+  private modelSizeMeters = DEFAULT_MODEL_SIZE_METERS;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
@@ -145,6 +157,7 @@ export class XRExperience {
       }
     });
     this.mushroomPivot.add(gltf.scene);
+    this.updateModelScale();
     this.updateSlicePlane();
   }
 
@@ -156,6 +169,15 @@ export class XRExperience {
 
   setSliceProgress(progress: number): void {
     this.sliceProgress = Math.min(1, Math.max(0, progress));
+    this.updateSlicePlane();
+  }
+
+  setModelSizeMeters(sizeMeters: number): void {
+    this.modelSizeMeters = Math.min(
+      MAX_MODEL_SIZE_METERS,
+      Math.max(MIN_MODEL_SIZE_METERS, sizeMeters),
+    );
+    this.updateModelScale();
     this.updateSlicePlane();
   }
 
@@ -353,6 +375,7 @@ export class XRExperience {
   private commitMushroomPlacement(): void {
     if (this.state !== 'surfacePlaced') return;
     this.setSliceProgress(0);
+    this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
     this.mushroomPivot.visible = true;
     this.sporeField.reset();
     this.sporeField.points.visible = true;
@@ -444,6 +467,17 @@ export class XRExperience {
     this.lastFrameTime = null;
     this.anchorRoot.matrix.identity();
     this.setSliceProgress(0);
+    this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
+  }
+
+  private updateModelScale(): void {
+    if (this.modelBounds.isEmpty()) return;
+
+    const modelSize = this.modelBounds.getSize(new THREE.Vector3());
+    const largestDimension = Math.max(modelSize.x, modelSize.y, modelSize.z);
+    const scale = getUniformModelScale(largestDimension, this.modelSizeMeters);
+    this.mushroomPivot.scale.setScalar(scale);
+    this.mushroomPivot.position.y = -this.modelBounds.min.y * scale;
   }
 
   private updateSlicePlane(): void {

@@ -16,6 +16,7 @@ La seta no admite desplazamiento ni cambio de tamaño. Un anchor de WebXR mantie
 La experiencia solicita el mapa de profundidad GPU de WebXR para que los objetos reales cercanos oculten tanto la seta como la malla. Esta oclusión depende de que Chrome, ARCore y el hardware del dispositivo ofrezcan `depth-sensing`; durante la sesión se muestra si está activa o no disponible.
 
 Una vez colocada, el deslizador **Corte vertical** permite seccionar la seta de izquierda a derecha.
+El control vertical **Tamaño** escala el modelo uniformemente entre 1 cm y 1 m.
 
 ## Panorama 360°
 

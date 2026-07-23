@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getVerticalSlicePosition, XRExperience } from './xr-experience';
+import {
+  DEFAULT_MODEL_SIZE_METERS,
+  getUniformModelScale,
+  getVerticalSlicePosition,
+  XRExperience,
+} from './xr-experience';
 
 function createExperienceWithSession() {
   const lifecycle: string[] = [];
@@ -107,6 +112,19 @@ describe('corte vertical del modelo', () => {
   });
 });
 
+describe('escala uniforme del modelo', () => {
+  it('convierte el tamaño solicitado en una escala uniforme', () => {
+    expect(getUniformModelScale(0.2, 0.01)).toBeCloseTo(0.05);
+    expect(getUniformModelScale(0.2, 0.2)).toBeCloseTo(1);
+    expect(getUniformModelScale(0.2, 1)).toBeCloseTo(5);
+  });
+
+  it('respeta los límites de 1 centímetro y 1 metro', () => {
+    expect(getUniformModelScale(0.2, 0)).toBeCloseTo(0.05);
+    expect(getUniformModelScale(0.2, 2)).toBeCloseTo(5);
+  });
+});
+
 describe('selección explícita de modelos', () => {
   it('solo coloca la seta después de haber fijado la malla', () => {
     const experience = Object.create(XRExperience.prototype) as {
@@ -116,6 +134,7 @@ describe('selección explícita de modelos', () => {
       lastFrameTime: number | null;
       setState: (state: string) => void;
       setSliceProgress: ReturnType<typeof vi.fn>;
+      setModelSizeMeters: ReturnType<typeof vi.fn>;
       placeModel: (modelId: 'mushroom') => boolean;
     };
 
@@ -124,6 +143,7 @@ describe('selección explícita de modelos', () => {
     experience.sporeField = { reset: vi.fn(), points: { visible: false } };
     experience.lastFrameTime = 123;
     experience.setSliceProgress = vi.fn();
+    experience.setModelSizeMeters = vi.fn();
     experience.setState = (state) => {
       experience.state = state;
     };
@@ -133,6 +153,7 @@ describe('selección explícita de modelos', () => {
     expect(experience.sporeField.points.visible).toBe(true);
     expect(experience.sporeField.reset).toHaveBeenCalledOnce();
     expect(experience.setSliceProgress).toHaveBeenCalledWith(0);
+    expect(experience.setModelSizeMeters).toHaveBeenCalledWith(DEFAULT_MODEL_SIZE_METERS);
     expect(experience.state).toBe('placed');
   });
 
