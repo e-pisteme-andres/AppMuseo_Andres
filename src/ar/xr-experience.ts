@@ -98,7 +98,9 @@ export class XRExperience {
     this.scene.add(keyLight);
 
     this.anchorRoot.matrixAutoUpdate = false;
-    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot, this.sporeField.points);
+    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot);
+    this.sporeField.attachTo(this.mushroomPivot);
+    this.sporeField.setClippingPlane(this.slicePlane);
     this.scene.add(this.anchorRoot);
     this.mushroomPivot.position.y = 0.1;
     this.mushroomPivot.visible = false;

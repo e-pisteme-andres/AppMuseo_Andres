@@ -17,6 +17,7 @@ La experiencia solicita el mapa de profundidad GPU de WebXR para que los objetos
 
 Una vez colocada, el deslizador **Corte vertical** permite seccionar la seta de izquierda a derecha.
 El control vertical **Tamaño** escala el modelo uniformemente entre 1 cm y 1 m.
+Las esporas forman parte del modelo y responden a su rotación, escala y corte.
 
 ## Panorama 360°
 
