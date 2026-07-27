@@ -48,6 +48,10 @@ export function getUniformModelScale(largestDimension: number, sizeMeters: numbe
   return largestDimension > 0 ? clampedSize / largestDimension : 1;
 }
 
+export function shouldInterruptArSession(visibilityState: XRVisibilityState): boolean {
+  return visibilityState === 'hidden';
+}
+
 export class XRExperience {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -198,6 +202,7 @@ export class XRExperience {
       });
 
       this.session = session;
+      session.addEventListener('visibilitychange', this.onSessionVisibilityChange);
       this.options.onOcclusionChange(getOcclusionState(session));
       await this.renderer.xr.setSession(session);
 
@@ -242,6 +247,21 @@ export class XRExperience {
     }
   }
 
+  async interrupt(): Promise<void> {
+    const activeSession = this.session;
+    if (!activeSession) return;
+    if (this.ending) return this.ending;
+
+    const ending = this.endImmediately(activeSession);
+    this.ending = ending;
+
+    try {
+      await ending;
+    } finally {
+      if (this.ending === ending) this.ending = null;
+    }
+  }
+
   private async endOnNextTask(activeSession: XRSession): Promise<void> {
     // Do not mutate or destroy WebXR resources from inside Chrome's DOM-overlay
     // input dispatch. Moving the whole shutdown to the next task avoids an
@@ -254,12 +274,20 @@ export class XRExperience {
     await activeSession.end();
   }
 
+  private async endImmediately(activeSession: XRSession): Promise<void> {
+    if (this.session !== activeSession) return;
+    this.renderer.setAnimationLoop(null);
+    this.releaseSessionResources();
+    await activeSession.end();
+  }
+
   private releaseSessionResources(): void {
     // XRHitTestSource and XRAnchor belong to the active XRSession. Releasing
     // them after the session's `end` event can reach an already torn-down
     // ARCore object and crash Chrome's renderer process.
     this.hitTestSource?.cancel();
     this.anchor?.delete();
+    this.session?.removeEventListener?.('visibilitychange', this.onSessionVisibilityChange);
     this.hitTestSource = null;
     this.anchor = null;
   }
@@ -446,6 +474,11 @@ export class XRExperience {
     this.cleanupSession();
     this.options.onSessionActivity(false);
     if (this.state !== 'error') this.setState('ready', 'Todo listo para iniciar otra sesión.');
+  };
+
+  private readonly onSessionVisibilityChange = (event: XRSessionEvent): void => {
+    if (!shouldInterruptArSession(event.session.visibilityState)) return;
+    void this.interrupt().catch(() => undefined);
   };
 
   private cleanupSession(): void {

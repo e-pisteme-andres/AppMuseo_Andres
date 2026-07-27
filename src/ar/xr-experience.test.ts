@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL_SIZE_METERS,
   getUniformModelScale,
   getVerticalSlicePosition,
+  shouldInterruptArSession,
   XRExperience,
 } from './xr-experience';
 
@@ -24,6 +25,7 @@ function createExperienceWithSession() {
     hitTestSource: typeof hitTestSource | null;
     anchor: typeof anchor | null;
     end: () => Promise<void>;
+    interrupt: () => Promise<void>;
   };
 
   experience.session = session;
@@ -71,6 +73,25 @@ describe('salida de la experiencia AR', () => {
     await vi.runAllTimersAsync();
     await exit;
     expect(session.end).not.toHaveBeenCalled();
+  });
+
+  it('cierra inmediatamente cuando la pestaña deja de estar visible', async () => {
+    const { experience, renderer, session, hitTestSource, anchor, lifecycle } =
+      createExperienceWithSession();
+
+    await experience.interrupt();
+
+    expect(renderer.setAnimationLoop).toHaveBeenCalledOnce();
+    expect(hitTestSource.cancel).toHaveBeenCalledOnce();
+    expect(anchor.delete).toHaveBeenCalledOnce();
+    expect(session.end).toHaveBeenCalledOnce();
+    expect(lifecycle).toEqual(['stop-loop', 'cancel-hit-test', 'delete-anchor', 'end']);
+  });
+
+  it('solo interrumpe AR cuando la propia sesión WebXR queda oculta', () => {
+    expect(shouldInterruptArSession('visible')).toBe(false);
+    expect(shouldInterruptArSession('visible-blurred')).toBe(false);
+    expect(shouldInterruptArSession('hidden')).toBe(true);
   });
 
   it('ignora un anchor que llega cuando la sesión ya se está cerrando', () => {

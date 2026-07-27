@@ -9,11 +9,25 @@ import { ModelPreview } from './ar/model-preview';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
 import { PanoramaViewer } from './panorama-viewer';
+import {
+  loadAppProgress,
+  saveAppProgress,
+  type ProgressStorage,
+  type ResumableView,
+} from './progress-cache';
 
 function getRequiredElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
   if (!element) throw new Error(`No se encontró el elemento ${selector}.`);
   return element;
+}
+
+function getProgressStorage(): ProgressStorage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 const app = getRequiredElement<HTMLDivElement>('#app');
@@ -251,9 +265,43 @@ const panoramaLoader = getRequiredElement<HTMLElement>('#panorama-loader');
 const panoramaHint = getRequiredElement<HTMLElement>('#panorama-hint');
 const panoramaHintText = getRequiredElement<HTMLElement>('#panorama-hint-text');
 
+const progressStorage = getProgressStorage();
+let appProgress = loadAppProgress(progressStorage);
+let resumableView: ResumableView = appProgress.view;
+let panoramaCheckpointTimer: number | undefined;
+let arSessionActive = false;
+let arFlowPending = false;
+let arAttemptId = 0;
+let interruptedArAttemptId = -1;
+
+function checkpoint(action: string, view: ResumableView = resumableView): void {
+  appProgress = saveAppProgress(progressStorage, {
+    view,
+    panorama: panorama.getViewState(),
+    lastAction: action,
+  });
+}
+
+function schedulePanoramaCheckpoint(): void {
+  if (panoramaCheckpointTimer !== undefined) window.clearTimeout(panoramaCheckpointTimer);
+  panoramaCheckpointTimer = window.setTimeout(() => {
+    panoramaCheckpointTimer = undefined;
+    checkpoint('panorama:navigate', 'panorama');
+  }, 150);
+}
+
+function flushPanoramaCheckpoint(action: string, view: ResumableView = resumableView): void {
+  if (panoramaCheckpointTimer !== undefined) {
+    window.clearTimeout(panoramaCheckpointTimer);
+    panoramaCheckpointTimer = undefined;
+  }
+  checkpoint(action, view);
+}
+
 const panorama = new PanoramaViewer({
   container: panoramaStage,
   imageUrl: `${import.meta.env.BASE_URL}panoramas/paranal-360.jpg`,
+  initialView: appProgress.panorama,
   onLoadingChange: (loading) => {
     panoramaLoader.hidden = !loading;
   },
@@ -265,6 +313,7 @@ const panorama = new PanoramaViewer({
         ? 'Mueve el móvil para activar la vista'
         : 'Sensor no disponible · arrastra para mirar';
   },
+  onViewChange: schedulePanoramaCheckpoint,
 });
 
 const mushroomPreview = new ModelPreview(mushroomPreviewCanvas);
@@ -335,6 +384,8 @@ function updateState(state: ExperienceState, message: string): void {
     startButton.disabled = false;
     startLabel.textContent = 'Ver seta en AR';
   }
+
+  checkpoint(`ar:state:${state}`, 'landing');
 }
 
 const experience = new XRExperience({
@@ -342,6 +393,9 @@ const experience = new XRExperience({
   overlay,
   onStateChange: updateState,
   onSessionActivity: (active) => {
+    arSessionActive = active;
+    arFlowPending = false;
+    resumableView = 'landing';
     document.body.classList.toggle('xr-active', active);
     if (!active) {
       modelCutInput.value = '0';
@@ -351,6 +405,7 @@ const experience = new XRExperience({
     }
     closeButton.disabled = false;
     closeButton.textContent = 'Salir';
+    checkpoint(active ? 'ar:session-started' : 'ar:session-ended', 'landing');
   },
   onOcclusionChange: (state) => {
     xrOcclusion.dataset.state = state;
@@ -484,29 +539,47 @@ async function refreshCameraPreflight(): Promise<void> {
 }
 
 startButton.addEventListener('click', () => {
+  checkpoint('camera-dialog:open', 'landing');
   openCameraDialog();
   void refreshCameraPreflight();
 });
 
-cameraCancelButton.addEventListener('click', closeCameraDialog);
+cameraCancelButton.addEventListener('click', () => {
+  closeCameraDialog();
+  checkpoint('camera-dialog:cancel', 'landing');
+});
 cameraDialog.addEventListener('click', (event) => {
-  if (event.target === cameraDialog) closeCameraDialog();
+  if (event.target === cameraDialog) {
+    closeCameraDialog();
+    checkpoint('camera-dialog:backdrop-close', 'landing');
+  }
 });
 cameraRetryButton.addEventListener('click', () => {
+  checkpoint('camera-dialog:retry', 'landing');
   void refreshCameraPreflight();
 });
 cameraAlternativeButton.addEventListener('click', () => {
   closeCameraDialog();
+  checkpoint('camera-dialog:panorama-alternative', 'landing');
   openPanoramaButton.click();
 });
 cameraConfirmButton.addEventListener('click', () => {
+  const attemptId = ++arAttemptId;
+  arFlowPending = true;
+  resumableView = 'landing';
+  checkpoint('ar:start-requested', 'landing');
   cameraConfirmButton.disabled = true;
   closeCameraDialog();
   compatibility.textContent = '';
   compatibility.dataset.error = 'false';
   void experience.start()
+    .then(() => {
+      if (interruptedArAttemptId === attemptId) return experience.interrupt();
+      return undefined;
+    })
     .catch(() => undefined)
     .finally(() => {
+      arFlowPending = false;
       cameraConfirmButton.disabled = false;
     });
 });
@@ -517,6 +590,7 @@ closeButton.addEventListener('click', (event) => {
   event.stopPropagation();
   if (closeButton.disabled) return;
 
+  checkpoint('ar:exit-requested', 'landing');
   closeButton.disabled = true;
   closeButton.textContent = 'Saliendo…';
   void experience.end().catch(() => {
@@ -533,11 +607,13 @@ modelCutInput.addEventListener('input', () => {
   const percentage = Number(modelCutInput.value);
   modelCutValue.value = `${percentage}%`;
   experience.setSliceProgress(percentage / 100);
+  checkpoint('ar:model-cut', 'landing');
 });
 modelSizeInput.addEventListener('input', () => {
   const sizeCentimeters = Number(modelSizeInput.value);
   modelSizeValue.value = sizeCentimeters === 100 ? '1 m' : `${sizeCentimeters} cm`;
   experience.setModelSizeMeters(sizeCentimeters / 100);
+  checkpoint('ar:model-size', 'landing');
 });
 formsToggle.addEventListener('click', () => {
   const willOpen = formsPanel.hidden;
@@ -547,28 +623,37 @@ formsToggle.addEventListener('click', () => {
     formsToggle.setAttribute('aria-expanded', 'true');
     mushroomPreview.start();
   }
+  checkpoint(willOpen ? 'ar:forms-open' : 'ar:forms-close', 'landing');
 });
 
 handsToggle.addEventListener('click', () => {
   // Reservado para incorporar el seguimiento de manos en una fase posterior.
+  checkpoint('ar:hands-unavailable', 'landing');
 });
 
 placeMushroomButton.addEventListener('click', () => {
   if (!experience.placeModel('mushroom')) return;
   closeModelMenus();
+  checkpoint('ar:model-placed', 'landing');
 });
 
-openPanoramaButton.addEventListener('click', () => {
+function openPanorama(recordAction = true): void {
+  resumableView = 'panorama';
   document.body.classList.add('panorama-active');
   panoramaView.setAttribute('aria-hidden', 'false');
   closePanoramaButton.focus();
+  if (recordAction) checkpoint('panorama:open', 'panorama');
   void panorama.open().catch(() => {
     panoramaLoader.hidden = false;
     panoramaLoader.textContent = 'No se pudo cargar el paisaje.';
   });
-});
+}
+
+openPanoramaButton.addEventListener('click', () => openPanorama());
 
 function closePanorama(): void {
+  flushPanoramaCheckpoint('panorama:close', 'landing');
+  resumableView = 'landing';
   panorama.pause();
   document.body.classList.remove('panorama-active');
   panoramaView.setAttribute('aria-hidden', 'true');
@@ -582,4 +667,37 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+function interruptTransientExperience(action: string): void {
+  if (arSessionActive || arFlowPending) {
+    interruptedArAttemptId = arAttemptId;
+    resumableView = 'landing';
+    closeCameraDialog();
+    closeModelMenus();
+    checkpoint(action, 'landing');
+    void experience.interrupt().catch(() => undefined);
+    return;
+  }
+
+  flushPanoramaCheckpoint(action);
+  if (resumableView === 'panorama') panorama.pause();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    interruptTransientExperience('lifecycle:hidden');
+  } else if (resumableView === 'panorama') {
+    void panorama.open().catch(() => undefined);
+  }
+});
+
+window.addEventListener('pagehide', () => {
+  interruptTransientExperience('lifecycle:pagehide');
+});
+
+window.addEventListener('pageshow', () => {
+  if (resumableView === 'panorama') void panorama.open().catch(() => undefined);
+  if (arSessionActive) void experience.interrupt().catch(() => undefined);
+});
+
+if (appProgress.view === 'panorama') openPanorama(false);
 void checkCompatibility();
