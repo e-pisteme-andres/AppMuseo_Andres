@@ -139,8 +139,14 @@ h1 span { color: transparent; -webkit-text-stroke: 1.5px rgba(244, 247, 245, .78
 .camera-check[data-state="blocked"], .camera-check[data-state="unavailable"] { border-color: rgba(255, 125, 100, .3); background: rgba(255, 125, 100, .055); }
 .camera-check[data-state="blocked"] .camera-check-indicator, .camera-check[data-state="unavailable"] .camera-check-indicator { border-color: #ff8d76; }
 .camera-help { margin-top: 10px; padding: 13px 15px; border-left: 2px solid #ffc857; border-radius: 0 12px 12px 0; background: rgba(255, 200, 87, .055); }
-.camera-help strong { color: #ffe1a5; font-size: .73rem; }
+.camera-help > strong { color: #ffe1a5; font-size: .76rem; }
 .camera-help p { margin: 5px 0 0; color: #a99f88; font-size: .69rem; line-height: 1.5; }
+.camera-help ol { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.camera-help li { display: flex; align-items: flex-start; gap: 9px; padding: 10px; border: 1px solid rgba(255, 200, 87, .12); border-radius: 10px; background: rgba(3, 11, 8, .2); }
+.camera-help li > span { display: grid; flex: 0 0 auto; place-items: center; width: 21px; height: 21px; border: 1px solid rgba(255, 200, 87, .42); border-radius: 50%; color: #ffd98c; font-size: .62rem; font-weight: 850; }
+.camera-help li strong, .camera-help li small { display: block; }
+.camera-help li strong { margin-bottom: 3px; color: #f5ead3; font-size: .68rem; }
+.camera-help li small { color: #a99f88; font-size: .62rem; line-height: 1.45; }
 .camera-dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 20px; }
 .camera-dialog-actions button { min-height: 46px; padding: 0 16px; border-radius: 13px; font-size: .75rem; font-weight: 800; cursor: pointer; }
 .camera-secondary-button, .camera-retry-button { border: 1px solid rgba(180, 212, 199, .2); color: #c7d6d0; background: rgba(255, 255, 255, .035); }
@@ -300,6 +306,7 @@ body.panorama-active .panorama-view { display: block; }
   .camera-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .camera-dialog-actions button { width: 100%; padding-inline: 10px; }
   .camera-confirm-button { grid-column: 1 / -1; margin-left: 0; }
+  .camera-help ol { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

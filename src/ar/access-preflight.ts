@@ -19,6 +19,13 @@ export interface ArPermissionSnapshot {
   effective: AccessPermissionState;
 }
 
+const CAMERA_ACCESS_ERROR_NAMES = new Set([
+  'NotAllowedError',
+  'PermissionDeniedError',
+  'SecurityError',
+  'NotReadableError',
+]);
+
 interface XrSupport {
   isSessionSupported(mode: XRSessionMode): Promise<boolean>;
 }
@@ -104,4 +111,9 @@ export async function inspectArPermissions(
     spatialTracking,
     effective: getEffectivePermissionState(camera, spatialTracking),
   };
+}
+
+export function isCameraAccessBlockedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('name' in error)) return false;
+  return CAMERA_ACCESS_ERROR_NAMES.has(String(error.name));
 }

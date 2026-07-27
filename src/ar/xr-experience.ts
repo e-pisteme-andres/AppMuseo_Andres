@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { isCameraAccessBlockedError } from './access-preflight';
 import { DEPTH_SENSING_OPTIONS, getOcclusionState, type OcclusionState } from './occlusion';
 import { applyDragRotation, applyRollRotation, angleBetweenPointers, normalizeAngleDelta } from './rotation';
 import { SporeField } from './spores';
@@ -217,10 +218,9 @@ export class XRExperience {
       this.renderer.setAnimationLoop(this.renderFrame);
     } catch (error) {
       await this.endSilently();
-      const domError = error instanceof DOMException ? error : null;
       const message =
-        domError?.name === 'NotAllowedError'
-          ? 'No se concedió acceso a la cámara. Activa el permiso de cámara del navegador e inténtalo de nuevo.'
+        isCameraAccessBlockedError(error)
+          ? 'La cámara está desactivada o bloqueada. Sigue los pasos indicados para activarla.'
           : 'No se pudo iniciar la realidad aumentada. Actualiza el navegador y los servicios AR del dispositivo.';
       this.setState('error', message);
       throw error;

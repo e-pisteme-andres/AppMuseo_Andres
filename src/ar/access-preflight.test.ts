@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { assessArAvailability, inspectArPermissions } from './access-preflight';
+import {
+  assessArAvailability,
+  inspectArPermissions,
+  isCameraAccessBlockedError,
+} from './access-preflight';
 
 describe('comprobación previa de compatibilidad AR', () => {
   it('rechaza una página que no se sirve en un contexto seguro', async () => {
@@ -92,5 +96,20 @@ describe('inspección previa de permisos', () => {
       spatialTracking: 'unknown',
       effective: 'unknown',
     });
+  });
+});
+
+describe('errores de acceso a la cámara', () => {
+  it.each(['NotAllowedError', 'PermissionDeniedError', 'SecurityError', 'NotReadableError'])(
+    'reconoce %s como un bloqueo o indisponibilidad de cámara',
+    (name) => {
+      expect(isCameraAccessBlockedError({ name })).toBe(true);
+    },
+  );
+
+  it('no confunde un fallo general de WebXR con un bloqueo de cámara', () => {
+    expect(isCameraAccessBlockedError({ name: 'NotSupportedError' })).toBe(false);
+    expect(isCameraAccessBlockedError(new Error('fallo'))).toBe(false);
+    expect(isCameraAccessBlockedError(null)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import './style.css';
 import {
   assessArAvailability,
   inspectArPermissions,
+  isCameraAccessBlockedError,
   type ArAvailability,
   type ArAvailabilityCode,
 } from './ar/access-preflight';
@@ -111,9 +112,15 @@ app.innerHTML = `
           </div>
         </div>
 
-        <div class="camera-help" id="camera-help" hidden>
-          <strong>¿Cómo puedes desbloquearlo?</strong>
-          <p>Abre la información o los ajustes de este sitio en el navegador, permite la cámara y vuelve a comprobar. Si sigue bloqueada, revisa también los permisos del navegador en los ajustes del dispositivo.</p>
+        <div class="camera-help" id="camera-help" role="region" aria-labelledby="camera-help-title" hidden>
+          <strong id="camera-help-title">Cómo activar la cámara</strong>
+          <p>Los nombres pueden variar según el dispositivo y el navegador:</p>
+          <ol>
+            <li><span>1</span><div><strong>Abre los ajustes del dispositivo</strong><small>Busca “Privacidad”, “Permisos” o “Cámara” y activa el acceso general a la cámara.</small></div></li>
+            <li><span>2</span><div><strong>Permite la cámara para tu navegador</strong><small>Dentro de Aplicaciones o Permisos, selecciona el navegador que estás usando y permite la cámara.</small></div></li>
+            <li><span>3</span><div><strong>Revisa el permiso de este sitio</strong><small>En el navegador, abre la información o ajustes de esta página y configura Cámara como “Permitir”.</small></div></li>
+            <li><span>4</span><div><strong>Vuelve y comprueba de nuevo</strong><small>Cierra cualquier otra aplicación que esté usando la cámara y pulsa el botón de comprobación.</small></div></li>
+          </ol>
         </div>
 
         <div class="camera-dialog-actions">
@@ -402,6 +409,19 @@ function setCameraCheck(state: string, title: string, detail: string): void {
   cameraCheckDetail.textContent = detail;
 }
 
+function showBlockedCameraGuidance(detail: string): void {
+  openCameraDialog();
+  setCameraCheck(
+    'blocked',
+    'La cámara está desactivada o bloqueada',
+    detail,
+  );
+  cameraHelp.hidden = false;
+  cameraConfirmButton.hidden = true;
+  cameraRetryButton.hidden = false;
+  cameraCancelButton.textContent = 'Cerrar';
+}
+
 function openCameraDialog(): void {
   if (cameraDialog.open) return;
   if (typeof cameraDialog.showModal === 'function') {
@@ -436,6 +456,19 @@ async function refreshCameraPreflight(): Promise<void> {
     await checkCompatibility();
   }
 
+  const shouldInspectCameraPermission = arAvailability
+    && ['ready', 'immersive-ar-unsupported', 'check-failed'].includes(arAvailability.code);
+  const permissions = shouldInspectCameraPermission
+    ? await inspectArPermissions(navigator.permissions)
+    : null;
+
+  if (permissions?.effective === 'denied') {
+    showBlockedCameraGuidance(
+      'El dispositivo o el navegador no permiten usarla. Después de activarla volveremos a comprobar si la realidad aumentada es compatible.',
+    );
+    return;
+  }
+
   if (!arAvailability?.canStart) {
     const copy = AVAILABILITY_COPY[arAvailability?.code ?? 'check-failed'];
     setCameraCheck('unavailable', copy.title, copy.detail);
@@ -444,27 +477,14 @@ async function refreshCameraPreflight(): Promise<void> {
     return;
   }
 
-  const permissions = await inspectArPermissions(navigator.permissions);
-  if (permissions.effective === 'denied') {
-    setCameraCheck(
-      'blocked',
-      'El acceso figura como bloqueado',
-      'El navegador no mostrará una nueva solicitud mientras el permiso continúe bloqueado.',
-    );
-    cameraHelp.hidden = false;
-    cameraRetryButton.hidden = false;
-    cameraCancelButton.textContent = 'Cerrar';
-    return;
-  }
-
-  if (permissions.effective === 'granted') {
+  if (permissions?.effective === 'granted') {
     setCameraCheck(
       'available',
       'Acceso previamente permitido',
       'Puedes iniciar la experiencia. El navegador podría mostrar una confirmación adicional de realidad aumentada.',
     );
     cameraConfirmButton.textContent = 'Iniciar experiencia AR';
-  } else if (permissions.effective === 'prompt') {
+  } else if (permissions?.effective === 'prompt') {
     setCameraCheck(
       'available',
       'El navegador pedirá tu permiso',
@@ -505,10 +525,26 @@ cameraConfirmButton.addEventListener('click', () => {
   compatibility.textContent = '';
   compatibility.dataset.error = 'false';
   void experience.start()
-    .catch(() => undefined)
+    .catch((error: unknown) => {
+      if (isCameraAccessBlockedError(error)) {
+        showBlockedCameraGuidance(
+          'No se pudo abrir la cámara. Puede estar desactivada en el dispositivo, bloqueada para el navegador o denegada para este sitio.',
+        );
+      }
+    })
     .finally(() => {
       cameraConfirmButton.disabled = false;
     });
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (
+    document.visibilityState === 'visible'
+    && cameraDialog.open
+    && !cameraHelp.hidden
+  ) {
+    void refreshCameraPreflight();
+  }
 });
 
 closeButton.addEventListener('beforexrselect', (event) => event.preventDefault());
