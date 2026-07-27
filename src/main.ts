@@ -1,5 +1,6 @@
 import './style.css';
 import { ModelPreview } from './ar/model-preview';
+import { selectARMode, supportsAppleQuickLook, type ARMode } from './ar/platform';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
 import { PanoramaViewer } from './panorama-viewer';
@@ -23,12 +24,12 @@ app.innerHTML = `
       <div class="brand"><span class="brand-mark">M</span><span>App Museo · Laboratorio AR</span></div>
       <div class="hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">Experimento WebXR · Android</p>
+          <p class="eyebrow">Experiencia AR · Android + iOS</p>
           <h1 id="page-title">Una seta.<br><span>En tu espacio.</span></h1>
           <p class="intro">Coloca una seta tridimensional de 20 cm sobre una mesa o el suelo y obsérvala desde cualquier ángulo.</p>
 
           <ol class="steps" aria-label="Cómo funciona">
-            <li><span>01</span><div><strong>Activa la cámara</strong><small>Chrome solicitará permiso al comenzar.</small></div></li>
+            <li><span>01</span><div><strong>Activa la cámara</strong><small>El navegador solicitará permiso al comenzar.</small></div></li>
             <li><span>02</span><div><strong>Busca una superficie</strong><small>Mueve el móvil lentamente sobre una mesa o el suelo.</small></div></li>
             <li><span>03</span><div><strong>Malla y forma</strong><small>Fija la malla y elige la seta desde el menú lateral.</small></div></li>
           </ol>
@@ -66,10 +67,19 @@ app.innerHTML = `
       </div>
 
       <footer>
-        <span>Diseñado para Chrome en Android con ARCore</span>
+        <span>Compatible con ARCore en Android y ARKit en iPhone/iPad</span>
         <a href="${import.meta.env.BASE_URL}${qrFileName}" download="${qrFileName}">Descargar QR</a>
       </footer>
     </section>
+
+    <a
+      id="ios-ar-link"
+      class="ios-ar-link"
+      rel="ar"
+      href="${import.meta.env.BASE_URL}models/mushroom.usdz"
+      aria-hidden="true"
+      tabindex="-1"
+    ><img src="${import.meta.env.BASE_URL}app-museo-icon.png" alt=""></a>
 
     <div id="xr-overlay" class="xr-overlay">
       <div class="xr-topbar">
@@ -179,6 +189,8 @@ const panoramaStage = getRequiredElement<HTMLElement>('#panorama-stage');
 const panoramaLoader = getRequiredElement<HTMLElement>('#panorama-loader');
 const panoramaHint = getRequiredElement<HTMLElement>('#panorama-hint');
 const panoramaHintText = getRequiredElement<HTMLElement>('#panorama-hint-text');
+const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
+let arMode: ARMode = 'unavailable';
 
 const panorama = new PanoramaViewer({
   container: panoramaStage,
@@ -251,15 +263,26 @@ const experience = new XRExperience({
 async function checkCompatibility(): Promise<void> {
   compatibility.dataset.error = 'false';
   try {
-    if (!window.isSecureContext && location.hostname !== 'localhost') {
-      throw new Error('Esta experiencia necesita abrirse mediante una conexión HTTPS segura.');
+    arMode = await selectARMode({
+      secureContext: window.isSecureContext,
+      hostname: location.hostname,
+      xr: navigator.xr,
+      quickLookSupported: supportsAppleQuickLook(),
+    });
+
+    if (arMode === 'unavailable') {
+      if (!window.isSecureContext && location.hostname !== 'localhost') {
+        throw new Error('Esta experiencia necesita abrirse mediante una conexión HTTPS segura.');
+      }
+      throw new Error('La realidad aumentada no está disponible en este dispositivo. Puedes seguir usando el panorama 360°.');
     }
-    if (!navigator.xr) {
-      throw new Error('WebXR no está disponible. Abre esta página en Chrome para Android.');
-    }
-    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    if (!supported) {
-      throw new Error('Este dispositivo no es compatible con ARCore o necesita actualizar sus servicios de realidad aumentada.');
+
+    if (arMode === 'quick-look') {
+      await mushroomPreview.load(`${import.meta.env.BASE_URL}models/mushroom.glb`);
+      compatibility.textContent = 'Compatible · ARKit mediante AR Quick Look en iPhone y iPad';
+      startButton.disabled = false;
+      startLabel.textContent = 'Ver seta en AR';
+      return;
     }
 
     await experience.loadModel();
@@ -277,6 +300,11 @@ async function checkCompatibility(): Promise<void> {
 
 startButton.addEventListener('click', () => {
   compatibility.textContent = '';
+  if (arMode === 'quick-look') {
+    iosARLink.click();
+    compatibility.textContent = 'AR Quick Look abierto · vuelve a esta página para continuar';
+    return;
+  }
   void experience.start().catch(() => undefined);
 });
 

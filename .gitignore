@@ -4,3 +4,6 @@ dist/
 *.tsbuildinfo
 .vite/
 .DS_Store
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/DerivedData/
