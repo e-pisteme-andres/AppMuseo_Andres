@@ -220,8 +220,8 @@ export class XRExperience {
       const domError = error instanceof DOMException ? error : null;
       const message =
         domError?.name === 'NotAllowedError'
-          ? 'No se concedió acceso a la cámara. Activa el permiso de cámara de Chrome e inténtalo de nuevo.'
-          : 'No se pudo iniciar la realidad aumentada. Comprueba que Chrome y Google Play Services for AR estén actualizados.';
+          ? 'No se concedió acceso a la cámara. Activa el permiso de cámara del navegador e inténtalo de nuevo.'
+          : 'No se pudo iniciar la realidad aumentada. Actualiza el navegador y los servicios AR del dispositivo.';
       this.setState('error', message);
       throw error;
     }

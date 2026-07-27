@@ -1,4 +1,10 @@
 import './style.css';
+import {
+  assessArAvailability,
+  inspectArPermissions,
+  type ArAvailability,
+  type ArAvailabilityCode,
+} from './ar/access-preflight';
 import { ModelPreview } from './ar/model-preview';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
@@ -28,7 +34,7 @@ app.innerHTML = `
           <p class="intro">Coloca una seta tridimensional de 20 cm sobre una mesa o el suelo y obsérvala desde cualquier ángulo.</p>
 
           <ol class="steps" aria-label="Cómo funciona">
-            <li><span>01</span><div><strong>Activa la cámara</strong><small>Chrome solicitará permiso al comenzar.</small></div></li>
+            <li><span>01</span><div><strong>Activa la cámara</strong><small>Te informaremos antes de que el navegador solicite permiso.</small></div></li>
             <li><span>02</span><div><strong>Busca una superficie</strong><small>Mueve el móvil lentamente sobre una mesa o el suelo.</small></div></li>
             <li><span>03</span><div><strong>Malla y forma</strong><small>Fija la malla y elige la seta desde el menú lateral.</small></div></li>
           </ol>
@@ -70,6 +76,62 @@ app.innerHTML = `
         <a href="${import.meta.env.BASE_URL}${qrFileName}" download="${qrFileName}">Descargar QR</a>
       </footer>
     </section>
+
+    <dialog
+      class="camera-dialog"
+      id="camera-dialog"
+      aria-labelledby="camera-dialog-title"
+      aria-describedby="camera-dialog-description"
+    >
+      <div class="camera-dialog-content">
+        <div class="camera-dialog-heading">
+          <span class="camera-dialog-icon" aria-hidden="true"></span>
+          <div>
+            <p class="camera-dialog-kicker">Permiso y compatibilidad</p>
+            <h2 id="camera-dialog-title">Antes de usar la cámara</h2>
+          </div>
+        </div>
+
+        <p class="camera-dialog-description" id="camera-dialog-description">
+          La cámara permite detectar una mesa o el suelo y colocar el modelo 3D en tu espacio.
+          No grabamos, guardamos ni enviamos imágenes.
+        </p>
+
+        <ul class="camera-dialog-facts">
+          <li><span aria-hidden="true">01</span><div><strong>Si aceptas</strong>El navegador abrirá la vista AR y podrás buscar una superficie.</div></li>
+          <li><span aria-hidden="true">02</span><div><strong>Si rechazas</strong>La vista AR no se iniciará. Podrás seguir usando la web y cambiar el permiso más tarde.</div></li>
+          <li><span aria-hidden="true">03</span><div><strong>Tú decides</strong>La cámara solo estará activa mientras permanezcas en la experiencia AR.</div></li>
+        </ul>
+
+        <div class="camera-check" id="camera-check" data-state="checking" role="status" aria-live="polite">
+          <span class="camera-check-indicator" aria-hidden="true"></span>
+          <div>
+            <strong id="camera-check-title">Comprobando este navegador y dispositivo…</strong>
+            <span id="camera-check-detail">Todavía no se ha solicitado acceso a la cámara.</span>
+          </div>
+        </div>
+
+        <div class="camera-help" id="camera-help" hidden>
+          <strong>¿Cómo puedes desbloquearlo?</strong>
+          <p>Abre la información o los ajustes de este sitio en el navegador, permite la cámara y vuelve a comprobar. Si sigue bloqueada, revisa también los permisos del navegador en los ajustes del dispositivo.</p>
+        </div>
+
+        <div class="camera-dialog-actions">
+          <button class="camera-secondary-button" id="camera-alternative" type="button">
+            Usar vista 360°
+          </button>
+          <button class="camera-secondary-button" id="camera-cancel" type="button">
+            Ahora no
+          </button>
+          <button class="camera-retry-button" id="camera-retry" type="button" hidden>
+            Comprobar de nuevo
+          </button>
+          <button class="camera-confirm-button" id="camera-confirm" type="button" hidden>
+            Continuar y permitir cámara
+          </button>
+        </div>
+      </div>
+    </dialog>
 
     <div id="xr-overlay" class="xr-overlay">
       <div class="xr-topbar">
@@ -155,6 +217,15 @@ const overlay = getRequiredElement<HTMLElement>('#xr-overlay');
 const startButton = getRequiredElement<HTMLButtonElement>('#start-ar');
 const startLabel = getRequiredElement<HTMLElement>('#start-label');
 const compatibility = getRequiredElement<HTMLElement>('#compatibility');
+const cameraDialog = getRequiredElement<HTMLDialogElement>('#camera-dialog');
+const cameraCheck = getRequiredElement<HTMLElement>('#camera-check');
+const cameraCheckTitle = getRequiredElement<HTMLElement>('#camera-check-title');
+const cameraCheckDetail = getRequiredElement<HTMLElement>('#camera-check-detail');
+const cameraHelp = getRequiredElement<HTMLElement>('#camera-help');
+const cameraAlternativeButton = getRequiredElement<HTMLButtonElement>('#camera-alternative');
+const cameraCancelButton = getRequiredElement<HTMLButtonElement>('#camera-cancel');
+const cameraRetryButton = getRequiredElement<HTMLButtonElement>('#camera-retry');
+const cameraConfirmButton = getRequiredElement<HTMLButtonElement>('#camera-confirm');
 const closeButton = getRequiredElement<HTMLButtonElement>('#close-ar');
 const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
@@ -197,6 +268,45 @@ const panorama = new PanoramaViewer({
 });
 
 const mushroomPreview = new ModelPreview(mushroomPreviewCanvas);
+let arAvailability: ArAvailability | null = null;
+let experienceModelLoaded = false;
+let previewModelLoaded = false;
+
+const AVAILABILITY_COPY: Record<
+  ArAvailabilityCode,
+  { title: string; detail: string; summary: string }
+> = {
+  ready: {
+    title: 'Realidad aumentada compatible',
+    detail: 'El navegador y el dispositivo pueden iniciar una sesión AR.',
+    summary: 'Compatible · Te informaremos antes de solicitar la cámara',
+  },
+  insecure: {
+    title: 'La conexión no permite usar la cámara',
+    detail: 'Por seguridad, abre esta página mediante HTTPS. La cámara no se solicitará.',
+    summary: 'AR no disponible · Se necesita una conexión HTTPS segura',
+  },
+  'policy-blocked': {
+    title: 'El acceso AR está bloqueado por esta página',
+    detail: 'Abre la aplicación directamente, fuera de una página o visor incrustado, e inténtalo de nuevo.',
+    summary: 'AR bloqueada · Abre la aplicación directamente en el navegador',
+  },
+  'webxr-missing': {
+    title: 'Este navegador no ofrece realidad aumentada WebXR',
+    detail: 'Puedes usar la vista 360° o abrir la aplicación en otro navegador y dispositivo compatibles con WebXR.',
+    summary: 'AR no disponible en este navegador · La vista 360° sí está disponible',
+  },
+  'immersive-ar-unsupported': {
+    title: 'Este dispositivo no admite esta experiencia AR',
+    detail: 'Puedes continuar con la vista 360° o probar en un dispositivo con servicios de realidad aumentada compatibles.',
+    summary: 'AR no compatible con este dispositivo · Puedes usar la vista 360°',
+  },
+  'check-failed': {
+    title: 'No hemos podido completar la comprobación',
+    detail: 'Revisa la conexión, actualiza el navegador y vuelve a comprobar. No se solicitará la cámara.',
+    summary: 'No se pudo comprobar AR · Puedes volver a intentarlo',
+  },
+};
 
 function closeModelMenus(): void {
   formsToggle.setAttribute('aria-expanded', 'false');
@@ -220,7 +330,7 @@ function updateState(state: ExperienceState, message: string): void {
     compatibility.textContent = message;
     compatibility.dataset.error = 'true';
     startButton.disabled = false;
-    startLabel.textContent = 'Intentar de nuevo';
+    startLabel.textContent = 'Revisar acceso a cámara';
   } else if (state === 'ready') {
     startButton.disabled = false;
     startLabel.textContent = 'Ver seta en AR';
@@ -249,35 +359,156 @@ const experience = new XRExperience({
 });
 
 async function checkCompatibility(): Promise<void> {
+  startButton.disabled = true;
+  startLabel.textContent = 'Comprobando compatibilidad…';
   compatibility.dataset.error = 'false';
-  try {
-    if (!window.isSecureContext && location.hostname !== 'localhost') {
-      throw new Error('Esta experiencia necesita abrirse mediante una conexión HTTPS segura.');
-    }
-    if (!navigator.xr) {
-      throw new Error('WebXR no está disponible. Abre esta página en Chrome para Android.');
-    }
-    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    if (!supported) {
-      throw new Error('Este dispositivo no es compatible con ARCore o necesita actualizar sus servicios de realidad aumentada.');
-    }
 
-    await experience.loadModel();
-    await mushroomPreview.load(`${import.meta.env.BASE_URL}models/mushroom.glb`);
-    compatibility.textContent = 'Compatible · Requiere Chrome y un dispositivo con ARCore';
-    startButton.disabled = false;
-    startLabel.textContent = 'Ver seta en AR';
-  } catch (error) {
-    compatibility.textContent = error instanceof Error ? error.message : 'No se pudo comprobar la compatibilidad.';
-    compatibility.dataset.error = 'true';
-    startButton.disabled = true;
-    startLabel.textContent = 'AR no disponible';
+  const documentWithPolicy = document as Document & {
+    permissionsPolicy?: { allowsFeature?(feature: string): boolean; features?(): string[] };
+    featurePolicy?: { allowsFeature?(feature: string): boolean; features?(): string[] };
+  };
+  arAvailability = await assessArAvailability({
+    isSecureContext: window.isSecureContext,
+    hostname: location.hostname,
+    xr: navigator.xr,
+    permissionsPolicy: documentWithPolicy.permissionsPolicy ?? documentWithPolicy.featurePolicy,
+  });
+
+  if (arAvailability.canStart) {
+    try {
+      if (!experienceModelLoaded) {
+        await experience.loadModel();
+        experienceModelLoaded = true;
+      }
+      if (!previewModelLoaded) {
+        await mushroomPreview.load(`${import.meta.env.BASE_URL}models/mushroom.glb`);
+        previewModelLoaded = true;
+      }
+    } catch {
+      arAvailability = { code: 'check-failed', canStart: false };
+    }
+  }
+
+  const copy = AVAILABILITY_COPY[arAvailability.code];
+  compatibility.textContent = copy.summary;
+  compatibility.dataset.error = String(!arAvailability.canStart);
+  startButton.disabled = false;
+  startLabel.textContent = arAvailability.canStart ? 'Ver seta en AR' : 'Ver opciones de AR';
+}
+
+function setCameraCheck(state: string, title: string, detail: string): void {
+  cameraCheck.dataset.state = state;
+  cameraCheckTitle.textContent = title;
+  cameraCheckDetail.textContent = detail;
+}
+
+function openCameraDialog(): void {
+  if (cameraDialog.open) return;
+  if (typeof cameraDialog.showModal === 'function') {
+    cameraDialog.showModal();
+  } else {
+    cameraDialog.setAttribute('open', '');
   }
 }
 
+function closeCameraDialog(): void {
+  if (!cameraDialog.open) return;
+  if (typeof cameraDialog.close === 'function') {
+    cameraDialog.close();
+  } else {
+    cameraDialog.removeAttribute('open');
+    startButton.focus();
+  }
+}
+
+async function refreshCameraPreflight(): Promise<void> {
+  setCameraCheck(
+    'checking',
+    'Comprobando este navegador y dispositivo…',
+    'Todavía no se ha solicitado acceso a la cámara.',
+  );
+  cameraHelp.hidden = true;
+  cameraConfirmButton.hidden = true;
+  cameraRetryButton.hidden = true;
+  cameraCancelButton.textContent = 'Ahora no';
+
+  if (!arAvailability || arAvailability.code === 'check-failed') {
+    await checkCompatibility();
+  }
+
+  if (!arAvailability?.canStart) {
+    const copy = AVAILABILITY_COPY[arAvailability?.code ?? 'check-failed'];
+    setCameraCheck('unavailable', copy.title, copy.detail);
+    cameraRetryButton.hidden = arAvailability?.code !== 'check-failed';
+    cameraCancelButton.textContent = 'Cerrar';
+    return;
+  }
+
+  const permissions = await inspectArPermissions(navigator.permissions);
+  if (permissions.effective === 'denied') {
+    setCameraCheck(
+      'blocked',
+      'El acceso figura como bloqueado',
+      'El navegador no mostrará una nueva solicitud mientras el permiso continúe bloqueado.',
+    );
+    cameraHelp.hidden = false;
+    cameraRetryButton.hidden = false;
+    cameraCancelButton.textContent = 'Cerrar';
+    return;
+  }
+
+  if (permissions.effective === 'granted') {
+    setCameraCheck(
+      'available',
+      'Acceso previamente permitido',
+      'Puedes iniciar la experiencia. El navegador podría mostrar una confirmación adicional de realidad aumentada.',
+    );
+    cameraConfirmButton.textContent = 'Iniciar experiencia AR';
+  } else if (permissions.effective === 'prompt') {
+    setCameraCheck(
+      'available',
+      'El navegador pedirá tu permiso',
+      'Al continuar aparecerá la solicitud del navegador. Elige “Permitir” para iniciar la vista AR.',
+    );
+    cameraConfirmButton.textContent = 'Continuar y permitir cámara';
+  } else {
+    setCameraCheck(
+      'unknown',
+      'El navegador decidirá al continuar',
+      'Este navegador no permite consultar el permiso por adelantado. Puede pedirte acceso en el siguiente paso.',
+    );
+    cameraConfirmButton.textContent = 'Continuar a la solicitud';
+  }
+
+  cameraConfirmButton.hidden = false;
+}
+
 startButton.addEventListener('click', () => {
+  openCameraDialog();
+  void refreshCameraPreflight();
+});
+
+cameraCancelButton.addEventListener('click', closeCameraDialog);
+cameraDialog.addEventListener('click', (event) => {
+  if (event.target === cameraDialog) closeCameraDialog();
+});
+cameraRetryButton.addEventListener('click', () => {
+  void refreshCameraPreflight();
+});
+cameraAlternativeButton.addEventListener('click', () => {
+  closeCameraDialog();
+  openPanoramaButton.click();
+});
+cameraConfirmButton.addEventListener('click', () => {
+  cameraConfirmButton.disabled = true;
+  closeCameraDialog();
   compatibility.textContent = '';
-  void experience.start().catch(() => undefined);
+  compatibility.dataset.error = 'false';
+  void experience.start()
+    .catch(() => undefined)
+    .finally(() => {
+      cameraConfirmButton.disabled = false;
+    });
 });
 
 closeButton.addEventListener('beforexrselect', (event) => event.preventDefault());

@@ -63,6 +63,94 @@ h1 span { color: transparent; -webkit-text-stroke: 1.5px rgba(244, 247, 245, .78
 .compatibility { min-height: 20px; margin: 13px 0 0; color: #73877e; font-size: .75rem; }
 .compatibility[data-error="true"] { color: #ff987f; }
 
+.camera-dialog {
+  width: min(680px, calc(100% - 30px));
+  max-height: min(760px, calc(100dvh - 30px));
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid rgba(180, 212, 199, .2);
+  border-radius: 25px;
+  color: #f4f7f5;
+  background:
+    radial-gradient(circle at 90% 0, rgba(68, 196, 145, .14), transparent 18rem),
+    #0b1914;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .58);
+}
+.camera-dialog::backdrop {
+  background: rgba(2, 8, 6, .78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.camera-dialog-content { padding: clamp(24px, 5vw, 38px); }
+.camera-dialog-heading { display: flex; align-items: center; gap: 17px; }
+.camera-dialog-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 42px;
+  border: 1.5px solid #6feeba;
+  border-radius: 13px;
+  box-shadow: inset 0 0 20px rgba(111, 238, 186, .09), 0 0 24px rgba(111, 238, 186, .08);
+}
+.camera-dialog-icon::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  border: 2px solid #6feeba;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.camera-dialog-icon::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -6px;
+  width: 17px;
+  height: 7px;
+  border: 1.5px solid #6feeba;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+}
+.camera-dialog-kicker { margin: 0 0 5px; color: #6feeba; font-size: .65rem; font-weight: 820; letter-spacing: .14em; text-transform: uppercase; }
+.camera-dialog h2 { margin: 0; font-size: clamp(1.55rem, 5vw, 2.25rem); line-height: 1; letter-spacing: -.045em; }
+.camera-dialog-description { margin: 22px 0; color: #b5c4be; font-size: .92rem; line-height: 1.62; }
+.camera-dialog-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 0; padding: 0; list-style: none; }
+.camera-dialog-facts li { min-height: 128px; padding: 14px; border: 1px solid rgba(180, 212, 199, .12); border-radius: 15px; background: rgba(255, 255, 255, .025); color: #8fa098; font-size: .72rem; line-height: 1.45; }
+.camera-dialog-facts li > span { display: block; margin-bottom: 15px; color: #6feeba; font-size: .6rem; font-weight: 850; letter-spacing: .12em; }
+.camera-dialog-facts strong { display: block; margin-bottom: 4px; color: #edf8f3; font-size: .78rem; }
+.camera-check { display: flex; align-items: flex-start; gap: 13px; margin-top: 14px; padding: 15px; border: 1px solid rgba(180, 212, 199, .15); border-radius: 16px; background: rgba(255, 255, 255, .035); }
+.camera-check-indicator { flex: 0 0 auto; width: 13px; height: 13px; margin-top: 2px; border: 2px solid #6feeba; border-radius: 50%; }
+.camera-check strong, .camera-check span { display: block; }
+.camera-check strong { margin-bottom: 4px; color: #eef9f4; font-size: .8rem; }
+.camera-check div > span { color: #93a49d; font-size: .71rem; line-height: 1.45; }
+.camera-check[data-state="checking"] .camera-check-indicator {
+  border-color: rgba(111, 238, 186, .28);
+  border-top-color: #6feeba;
+  animation: panorama-spin .85s linear infinite;
+}
+.camera-check[data-state="available"] { border-color: rgba(111, 238, 186, .24); background: rgba(111, 238, 186, .055); }
+.camera-check[data-state="available"] .camera-check-indicator { background: #6feeba; box-shadow: 0 0 12px rgba(111, 238, 186, .45); }
+.camera-check[data-state="unknown"] { border-color: rgba(255, 200, 87, .28); background: rgba(255, 200, 87, .05); }
+.camera-check[data-state="unknown"] .camera-check-indicator { border-color: #ffc857; }
+.camera-check[data-state="blocked"], .camera-check[data-state="unavailable"] { border-color: rgba(255, 125, 100, .3); background: rgba(255, 125, 100, .055); }
+.camera-check[data-state="blocked"] .camera-check-indicator, .camera-check[data-state="unavailable"] .camera-check-indicator { border-color: #ff8d76; }
+.camera-help { margin-top: 10px; padding: 13px 15px; border-left: 2px solid #ffc857; border-radius: 0 12px 12px 0; background: rgba(255, 200, 87, .055); }
+.camera-help strong { color: #ffe1a5; font-size: .73rem; }
+.camera-help p { margin: 5px 0 0; color: #a99f88; font-size: .69rem; line-height: 1.5; }
+.camera-dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 20px; }
+.camera-dialog-actions button { min-height: 46px; padding: 0 16px; border-radius: 13px; font-size: .75rem; font-weight: 800; cursor: pointer; }
+.camera-secondary-button, .camera-retry-button { border: 1px solid rgba(180, 212, 199, .2); color: #c7d6d0; background: rgba(255, 255, 255, .035); }
+.camera-secondary-button:hover, .camera-retry-button:hover { border-color: rgba(111, 238, 186, .5); background: rgba(111, 238, 186, .08); }
+.camera-confirm-button { margin-left: auto; border: 0; color: #062318; background: #6feeba; }
+.camera-confirm-button:hover { background: #8bf5c9; }
+.camera-confirm-button:disabled { cursor: wait; opacity: .6; }
+.camera-dialog-actions button:focus-visible { outline: 2px solid #8bf5c9; outline-offset: 3px; }
+.camera-dialog-actions button[hidden], .camera-help[hidden] { display: none; }
+
 .visual { position: relative; min-height: 520px; display: grid; place-items: center; perspective: 900px; }
 .css-mushroom { position: relative; width: 190px; height: 190px; filter: drop-shadow(0 24px 24px rgba(0,0,0,.3)); animation: float-mushroom 7s ease-in-out infinite; }
 .mushroom-cap { position: absolute; z-index: 3; left: 0; top: 2%; width: 100%; height: 51%; overflow: hidden; border: 1px solid rgba(255,255,255,.25); border-radius: 50% 50% 43% 43% / 82% 82% 30% 30%; background: radial-gradient(circle at 35% 18%, #ff7967 0, #dd493d 35%, #a91f28 100%); box-shadow: inset -18px -16px 28px rgba(90,7,16,.24), inset 12px 10px 20px rgba(255,255,255,.08); transform: rotate(-2deg); }
@@ -204,6 +292,14 @@ body.panorama-active .panorama-view { display: block; }
   .xr-cut-control { bottom: max(108px, calc(env(safe-area-inset-bottom) + 98px)); }
   .xr-scale-control { right: 12px; width: 78px; }
   .xr-scale-slider input { height: min(210px, 31dvh); }
+  .camera-dialog { width: min(100% - 20px, 620px); max-height: calc(100dvh - 20px); border-radius: 20px; }
+  .camera-dialog-content { padding: 22px 18px 18px; }
+  .camera-dialog-facts { grid-template-columns: 1fr; }
+  .camera-dialog-facts li { min-height: auto; display: flex; align-items: flex-start; gap: 12px; padding: 12px; }
+  .camera-dialog-facts li > span { margin: 2px 0 0; }
+  .camera-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .camera-dialog-actions button { width: 100%; padding-inline: 10px; }
+  .camera-confirm-button { grid-column: 1 / -1; margin-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
