@@ -10,6 +10,7 @@ import { ModelPreview } from './ar/model-preview';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
 import { PanoramaViewer } from './panorama-viewer';
+import { VirtualExperience } from './virtual-experience';
 import {
   loadAppProgress,
   saveAppProgress,
@@ -114,7 +115,7 @@ app.innerHTML = `
 
         <ul class="camera-dialog-facts">
           <li><span aria-hidden="true">01</span><div><strong>Si aceptas</strong>El navegador abrirá la vista AR y podrás buscar una superficie.</div></li>
-          <li><span aria-hidden="true">02</span><div><strong>Si rechazas</strong>La vista AR no se iniciará. Podrás seguir usando la web y cambiar el permiso más tarde.</div></li>
+          <li><span aria-hidden="true">02</span><div><strong>Si no permites la cámara</strong>Podrás abrir el mismo modelo en el espacio virtual, sin activar la cámara.</div></li>
           <li><span aria-hidden="true">03</span><div><strong>Tú decides</strong>La cámara solo estará activa mientras permanezcas en la experiencia AR.</div></li>
         </ul>
 
@@ -150,6 +151,10 @@ app.innerHTML = `
           <button class="camera-confirm-button" id="camera-confirm" type="button" hidden>
             Continuar y permitir cámara
           </button>
+          <button class="camera-virtual-button" id="camera-virtual" type="button">
+            <span>No permitir cámara</span>
+            <small>Entrar en el espacio virtual</small>
+          </button>
         </div>
       </div>
     </dialog>
@@ -157,7 +162,7 @@ app.innerHTML = `
     <div id="xr-overlay" class="xr-overlay">
       <div class="xr-topbar">
         <div class="xr-status-stack">
-          <div class="xr-badge"><span class="live-dot"></span> Seta AR</div>
+          <div class="xr-badge"><span class="live-dot"></span><span id="experience-badge-label">Seta AR</span></div>
           <div class="xr-occlusion" id="xr-occlusion" data-state="checking">Oclusión · comprobando</div>
         </div>
         <button class="close-button" id="close-ar" type="button" data-xr-control aria-label="Cerrar realidad aumentada">Salir</button>
@@ -247,7 +252,9 @@ const cameraAlternativeButton = getRequiredElement<HTMLButtonElement>('#camera-a
 const cameraCancelButton = getRequiredElement<HTMLButtonElement>('#camera-cancel');
 const cameraRetryButton = getRequiredElement<HTMLButtonElement>('#camera-retry');
 const cameraConfirmButton = getRequiredElement<HTMLButtonElement>('#camera-confirm');
+const cameraVirtualButton = getRequiredElement<HTMLButtonElement>('#camera-virtual');
 const closeButton = getRequiredElement<HTMLButtonElement>('#close-ar');
+const experienceBadgeLabel = getRequiredElement<HTMLElement>('#experience-badge-label');
 const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
@@ -277,6 +284,8 @@ let appProgress = loadAppProgress(progressStorage);
 let resumableView: ResumableView = appProgress.view;
 let panoramaCheckpointTimer: number | undefined;
 let arSessionActive = false;
+let virtualExperienceActive = false;
+let activeExperienceMode: 'ar' | 'virtual' | null = null;
 let arFlowPending = false;
 let arAttemptId = 0;
 let interruptedArAttemptId = -1;
@@ -370,7 +379,49 @@ function closeModelMenus(): void {
   mushroomPreview.stop();
 }
 
-function updateState(state: ExperienceState, message: string): void {
+function resetModelControls(): void {
+  modelCutInput.value = '0';
+  modelCutValue.value = '0%';
+  modelSizeInput.value = '20';
+  modelSizeValue.value = '20 cm';
+}
+
+function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
+  if (active) activeExperienceMode = mode;
+  else if (activeExperienceMode === mode) activeExperienceMode = null;
+
+  document.body.classList.toggle('xr-active', mode === 'ar' && active);
+  document.body.classList.toggle('virtual-active', mode === 'virtual' && active);
+
+  if (active) {
+    const virtualMode = mode === 'virtual';
+    experienceBadgeLabel.textContent = virtualMode ? 'Espacio virtual' : 'Seta AR';
+    xrOcclusion.hidden = virtualMode;
+    handsToggle.hidden = virtualMode;
+    xrLibrary.setAttribute(
+      'aria-label',
+      virtualMode ? 'Modelos disponibles en el espacio virtual' : 'Herramientas de realidad aumentada',
+    );
+    closeButton.setAttribute(
+      'aria-label',
+      virtualMode ? 'Cerrar espacio virtual' : 'Cerrar realidad aumentada',
+    );
+  } else {
+    resetModelControls();
+    closeModelMenus();
+  }
+
+  closeButton.disabled = false;
+  closeButton.textContent = 'Salir';
+}
+
+function updateExperienceState(
+  mode: 'ar' | 'virtual',
+  state: ExperienceState,
+  message: string,
+): void {
+  if (mode === 'virtual' && activeExperienceMode !== 'virtual') return;
+
   xrMessage.textContent = message;
   xrGuide.dataset.state = state;
   gestureHint.hidden = state !== 'placed';
@@ -379,44 +430,51 @@ function updateState(state: ExperienceState, message: string): void {
   xrLibrary.hidden = state !== 'surfacePlaced';
   if (state !== 'surfacePlaced') closeModelMenus();
 
-  if (state === 'starting') {
+  if (mode === 'ar' && state === 'starting') {
     startButton.disabled = true;
     startLabel.textContent = 'Iniciando cámara…';
-  } else if (state === 'error') {
+  } else if (mode === 'ar' && state === 'error') {
     compatibility.textContent = message;
     compatibility.dataset.error = 'true';
     startButton.disabled = false;
     startLabel.textContent = 'Revisar acceso a cámara';
-  } else if (state === 'ready') {
+  } else if (mode === 'ar' && state === 'ready') {
     startButton.disabled = false;
     startLabel.textContent = 'Ver seta en AR';
   }
 
-  checkpoint(`ar:state:${state}`, 'landing');
+  checkpoint(`${mode}:state:${state}`, 'landing');
 }
 
 const experience = new XRExperience({
   stage,
   overlay,
-  onStateChange: updateState,
+  onStateChange: (state, message) => updateExperienceState('ar', state, message),
   onSessionActivity: (active) => {
     arSessionActive = active;
     arFlowPending = false;
     resumableView = 'landing';
-    document.body.classList.toggle('xr-active', active);
-    if (!active) {
-      modelCutInput.value = '0';
-      modelCutValue.value = '0%';
-      modelSizeInput.value = '20';
-      modelSizeValue.value = '20 cm';
-    }
-    closeButton.disabled = false;
-    closeButton.textContent = 'Salir';
+    setExperienceActivity('ar', active);
     checkpoint(active ? 'ar:session-started' : 'ar:session-ended', 'landing');
   },
   onOcclusionChange: (state) => {
     xrOcclusion.dataset.state = state;
     xrOcclusion.textContent = state === 'active' ? 'Oclusión real · activa' : 'Oclusión real · no disponible';
+  },
+});
+
+const virtualExperience = new VirtualExperience({
+  stage,
+  overlay,
+  onStateChange: (state, message) => updateExperienceState('virtual', state, message),
+  onActivityChange: (active) => {
+    virtualExperienceActive = active;
+    resumableView = 'landing';
+    setExperienceActivity('virtual', active);
+    checkpoint(
+      active ? 'virtual:experience-started' : 'virtual:experience-ended',
+      'landing',
+    );
   },
 });
 
@@ -436,15 +494,21 @@ async function checkCompatibility(): Promise<void> {
     permissionsPolicy: documentWithPolicy.permissionsPolicy ?? documentWithPolicy.featurePolicy,
   });
 
+  if (!previewModelLoaded) {
+    try {
+      await mushroomPreview.load(`${import.meta.env.BASE_URL}models/mushroom.glb`);
+      previewModelLoaded = true;
+    } catch {
+      // El modelo principal muestra el error si el recurso tampoco puede cargarse.
+    }
+  }
+  void virtualExperience.loadModel().catch(() => undefined);
+
   if (arAvailability.canStart) {
     try {
       if (!experienceModelLoaded) {
         await experience.loadModel();
         experienceModelLoaded = true;
-      }
-      if (!previewModelLoaded) {
-        await mushroomPreview.load(`${import.meta.env.BASE_URL}models/mushroom.glb`);
-        previewModelLoaded = true;
       }
     } catch {
       arAvailability = { code: 'check-failed', canStart: false };
@@ -583,6 +647,28 @@ cameraAlternativeButton.addEventListener('click', () => {
   checkpoint('camera-dialog:panorama-alternative', 'landing');
   openPanoramaButton.click();
 });
+cameraVirtualButton.addEventListener('click', () => {
+  checkpoint('virtual:start-requested', 'landing');
+  cameraVirtualButton.disabled = true;
+  closeCameraDialog();
+  compatibility.textContent = '';
+  compatibility.dataset.error = 'false';
+
+  void virtualExperience.start()
+    .catch(() => {
+      compatibility.textContent = 'No se pudo cargar el modelo 3D. Comprueba la conexión e inténtalo de nuevo.';
+      compatibility.dataset.error = 'true';
+      openCameraDialog();
+      setCameraCheck(
+        'unavailable',
+        'No se pudo abrir el espacio virtual',
+        'El modelo 3D no está disponible en este momento. Comprueba la conexión y vuelve a intentarlo.',
+      );
+    })
+    .finally(() => {
+      cameraVirtualButton.disabled = false;
+    });
+});
 cameraConfirmButton.addEventListener('click', () => {
   const attemptId = ++arAttemptId;
   arFlowPending = true;
@@ -626,6 +712,13 @@ closeButton.addEventListener('click', (event) => {
   event.stopPropagation();
   if (closeButton.disabled) return;
 
+  if (activeExperienceMode === 'virtual') {
+    checkpoint('virtual:exit-requested', 'landing');
+    virtualExperience.end();
+    startButton.focus();
+    return;
+  }
+
   checkpoint('ar:exit-requested', 'landing');
   closeButton.disabled = true;
   closeButton.textContent = 'Saliendo…';
@@ -639,17 +732,24 @@ closeButton.addEventListener('click', (event) => {
 xrLibrary.addEventListener('beforexrselect', (event) => event.preventDefault());
 cutControl.addEventListener('beforexrselect', (event) => event.preventDefault());
 scaleControl.addEventListener('beforexrselect', (event) => event.preventDefault());
+function getActiveModelExperience(): Pick<
+  XRExperience,
+  'placeModel' | 'setSliceProgress' | 'setModelSizeMeters'
+> {
+  return activeExperienceMode === 'virtual' ? virtualExperience : experience;
+}
+
 modelCutInput.addEventListener('input', () => {
   const percentage = Number(modelCutInput.value);
   modelCutValue.value = `${percentage}%`;
-  experience.setSliceProgress(percentage / 100);
-  checkpoint('ar:model-cut', 'landing');
+  getActiveModelExperience().setSliceProgress(percentage / 100);
+  checkpoint(`${activeExperienceMode ?? 'ar'}:model-cut`, 'landing');
 });
 modelSizeInput.addEventListener('input', () => {
   const sizeCentimeters = Number(modelSizeInput.value);
   modelSizeValue.value = sizeCentimeters === 100 ? '1 m' : `${sizeCentimeters} cm`;
-  experience.setModelSizeMeters(sizeCentimeters / 100);
-  checkpoint('ar:model-size', 'landing');
+  getActiveModelExperience().setModelSizeMeters(sizeCentimeters / 100);
+  checkpoint(`${activeExperienceMode ?? 'ar'}:model-size`, 'landing');
 });
 formsToggle.addEventListener('click', () => {
   const willOpen = formsPanel.hidden;
@@ -659,7 +759,10 @@ formsToggle.addEventListener('click', () => {
     formsToggle.setAttribute('aria-expanded', 'true');
     mushroomPreview.start();
   }
-  checkpoint(willOpen ? 'ar:forms-open' : 'ar:forms-close', 'landing');
+  checkpoint(
+    `${activeExperienceMode ?? 'ar'}:${willOpen ? 'forms-open' : 'forms-close'}`,
+    'landing',
+  );
 });
 
 handsToggle.addEventListener('click', () => {
@@ -668,9 +771,9 @@ handsToggle.addEventListener('click', () => {
 });
 
 placeMushroomButton.addEventListener('click', () => {
-  if (!experience.placeModel('mushroom')) return;
+  if (!getActiveModelExperience().placeModel('mushroom')) return;
   closeModelMenus();
-  checkpoint('ar:model-placed', 'landing');
+  checkpoint(`${activeExperienceMode ?? 'ar'}:model-placed`, 'landing');
 });
 
 function openPanorama(recordAction = true): void {
@@ -700,10 +803,21 @@ closePanoramaButton.addEventListener('click', closePanorama);
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && document.body.classList.contains('panorama-active')) {
     closePanorama();
+  } else if (event.key === 'Escape' && virtualExperienceActive) {
+    checkpoint('virtual:escape', 'landing');
+    virtualExperience.end();
   }
 });
 
 function interruptTransientExperience(action: string): void {
+  if (virtualExperienceActive) {
+    resumableView = 'landing';
+    closeModelMenus();
+    checkpoint(action, 'landing');
+    virtualExperience.end();
+    return;
+  }
+
   if (arSessionActive || arFlowPending) {
     interruptedArAttemptId = arAttemptId;
     resumableView = 'landing';

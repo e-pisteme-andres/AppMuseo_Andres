@@ -154,6 +154,18 @@ h1 span { color: transparent; -webkit-text-stroke: 1.5px rgba(244, 247, 245, .78
 .camera-confirm-button { margin-left: auto; border: 0; color: #062318; background: #6feeba; }
 .camera-confirm-button:hover { background: #8bf5c9; }
 .camera-confirm-button:disabled { cursor: wait; opacity: .6; }
+.camera-virtual-button {
+  flex: 0 0 100%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  border: 1px solid rgba(111, 238, 186, .42);
+  color: #dff8ee;
+  background: rgba(111, 238, 186, .075);
+}
+.camera-virtual-button:hover { border-color: #6feeba; background: rgba(111, 238, 186, .14); }
+.camera-virtual-button:disabled { cursor: wait; opacity: .6; }
+.camera-virtual-button small { color: #8bf5c9; font-size: .64rem; font-weight: 700; }
 .camera-dialog-actions button:focus-visible { outline: 2px solid #8bf5c9; outline-offset: 3px; }
 .camera-dialog-actions button[hidden], .camera-help[hidden] { display: none; }
 
@@ -182,7 +194,7 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 footer a { color: #8be6c1; text-decoration: none; }
 
 .xr-stage { position: fixed; inset: 0; z-index: 5; visibility: hidden; }
-.xr-canvas { display: block; width: 100%; height: 100%; }
+.xr-canvas, .virtual-canvas { position: absolute; inset: 0; display: none; width: 100%; height: 100%; }
 .xr-overlay { display: none; position: fixed; inset: 0; z-index: 10; padding: max(18px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom)); touch-action: none; user-select: none; }
 .xr-topbar { display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
 .xr-badge, .xr-occlusion, .close-button, .xr-guide, .gesture-hint, .xr-cut-control, .xr-scale-control, .xr-library, .xr-model-panel { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
@@ -198,6 +210,7 @@ footer a { color: #8be6c1; text-decoration: none; }
 .guide-icon { flex: 0 0 auto; width: 27px; height: 27px; border: 2px solid #ffc857; border-radius: 50%; box-shadow: 0 0 0 5px rgba(255,200,87,.1); }
 .xr-guide[data-state="placeable"] .guide-icon, .xr-guide[data-state="surfacePlaced"] .guide-icon, .xr-guide[data-state="placed"] .guide-icon { border-color: #6feeff; box-shadow: 0 0 0 5px rgba(111,238,255,.1); }
 .gesture-hint { position: absolute; left: 50%; top: 18%; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid rgba(255,255,255,.13); border-radius: 999px; background: rgba(4,14,11,.58); color: rgba(255,255,255,.78); font-size: .72rem; transform: translateX(-50%); pointer-events: none; }
+.gesture-hint[hidden] { display: none; }
 .gesture-finger { width: 13px; height: 19px; border: 1.5px solid #6feeba; border-radius: 8px; }
 .xr-cut-control { position: absolute; z-index: 3; left: 50%; bottom: max(112px, calc(env(safe-area-inset-bottom) + 102px)); width: min(340px, calc(100% - 36px)); padding: 13px 16px 11px; border: 1px solid rgba(255,255,255,.17); border-radius: 17px; background: rgba(4,14,11,.74); box-shadow: 0 16px 38px rgba(0,0,0,.24); transform: translateX(-50%); pointer-events: auto; }
 .xr-cut-control[hidden] { display: none; }
@@ -221,6 +234,7 @@ footer a { color: #8be6c1; text-decoration: none; }
 .xr-tool-button:hover, .xr-tool-button[aria-expanded="true"] { border-color: rgba(111,238,186,.3); background: rgba(111,238,186,.11); }
 .xr-tool-button:focus-visible, .xr-model-option:focus-visible { outline: 2px solid #6feeba; outline-offset: 2px; }
 .xr-tool-button[aria-disabled="true"] { color: rgba(239,250,246,.58); cursor: default; }
+.xr-tool-button[hidden] { display: none; }
 .xr-tool-icon { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(111,238,186,.28); border-radius: 9px; color: #8bf5c9; background: rgba(111,238,186,.07); font-size: .82rem; }
 .xr-shape-icon::before { content: ""; width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 3px; transform: rotate(45deg); }
 .xr-hand-icon { font-size: .78rem; filter: grayscale(1); }
@@ -237,7 +251,19 @@ footer a { color: #8be6c1; text-decoration: none; }
 body.xr-active .landing { visibility: hidden; }
 body.xr-active .app-shell { background: transparent; }
 body.xr-active .xr-stage { visibility: visible; }
+body.xr-active .xr-canvas { display: block; }
 body.xr-active .xr-overlay { display: block; }
+body.virtual-active { overflow: hidden; }
+body.virtual-active .landing { visibility: hidden; }
+body.virtual-active .app-shell {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(59, 176, 132, .2), transparent 34rem),
+    radial-gradient(circle at 20% 10%, rgba(111, 238, 186, .08), transparent 22rem),
+    linear-gradient(155deg, #0b1d17 0%, #06110d 68%, #030806 100%);
+}
+body.virtual-active .xr-stage { visibility: visible; }
+body.virtual-active .virtual-canvas { display: block; }
+body.virtual-active .xr-overlay { display: block; }
 .xr-overlay:where(:xr-overlay) { display: block; background: transparent; }
 
 .panorama-view { position: fixed; inset: 0; z-index: 20; display: none; overflow: hidden; color: #fff; background: #050b09; }
@@ -306,6 +332,7 @@ body.panorama-active .panorama-view { display: block; }
   .camera-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .camera-dialog-actions button { width: 100%; padding-inline: 10px; }
   .camera-confirm-button { grid-column: 1 / -1; margin-left: 0; }
+  .camera-virtual-button { grid-column: 1 / -1; }
   .camera-help ol { grid-template-columns: 1fr; }
 }
 
