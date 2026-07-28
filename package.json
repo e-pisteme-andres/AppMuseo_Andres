@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:assets": "node scripts/generate-assets.mjs"
+    "generate:assets": "node scripts/generate-assets.mjs && node scripts/generate-ios-assets.mjs",
+    "generate:ios-assets": "node scripts/generate-ios-assets.mjs",
+    "validate:ios": "node scripts/validate-ios-project.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

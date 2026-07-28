@@ -1,0 +1,56 @@
+name: iOS
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - implementacion-ios
+    paths:
+      - "ios/**"
+      - "public/models/mushroom.usdz"
+      - "public/panoramas/paranal-360.jpg"
+      - "scripts/generate-ios-assets.mjs"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "public/models/mushroom.usdz"
+      - "public/panoramas/paranal-360.jpg"
+      - "scripts/generate-ios-assets.mjs"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Compilar y probar
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Mostrar versión de Xcode
+        run: xcodebuild -version
+
+      - name: Seleccionar simulador
+        id: simulator
+        shell: bash
+        run: |
+          device_id="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {gsub(/^ +| +$/, "", $2); print $2; exit}')"
+          if [[ -z "$device_id" ]]; then
+            echo "No hay ningún simulador de iPhone disponible."
+            exit 1
+          fi
+          echo "device_id=$device_id" >> "$GITHUB_OUTPUT"
+
+      - name: Ejecutar pruebas iOS
+        run: >
+          xcodebuild
+          -project ios/AppMuseoIOS.xcodeproj
+          -scheme AppMuseoIOS
+          -configuration Debug
+          -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}"
+          CODE_SIGNING_ALLOWED=NO
+          test

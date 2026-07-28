@@ -1,17 +1,25 @@
 # Seta AR · App Museo
 
-Aplicación web experimental para colocar una seta 3D de 20 cm sobre una mesa o el suelo mediante WebXR y ARCore. Está diseñada para Chrome en Android.
+Aplicación de realidad aumentada para colocar una seta 3D de 20 cm sobre una
+mesa o el suelo. El repositorio incluye:
+
+- la experiencia web con WebXR y ARCore para Chrome en Android;
+- un fallback web con AR Quick Look para Safari en iPhone y iPad;
+- la aplicación nativa de iOS con ARKit y RealityKit en [`ios/`](ios/README.md),
+  que conserva la malla, el corte, la escala, las esporas, la rotación y la
+  oclusión avanzada.
 
 ## Uso
 
-1. Abre la aplicación mediante HTTPS en un Android compatible con ARCore.
+1. Abre la aplicación mediante HTTPS en un Android compatible con ARCore o en
+   Safari desde un iPhone/iPad compatible con ARKit.
 2. Pulsa **Ver seta en AR** y concede permiso para usar la cámara.
 3. Mueve lentamente el teléfono hasta que la retícula confirme una superficie horizontal.
 4. Toca la pantalla para fijar una malla cian de 1 × 1 metro sobre la superficie.
 5. Toca de nuevo para colocar la seta; la malla permanecerá visible.
 6. Arrastra con un dedo para girar en dos ejes o gira dos dedos para el tercer eje.
 
-La seta no admite desplazamiento ni cambio de tamaño. Un anchor de WebXR mantiene la ubicación física cuando el dispositivo lo soporta; en caso contrario se conserva la pose local detectada.
+La seta no admite desplazamiento libre: permanece fijada a la superficie. Su tamaño solo cambia mediante el control de escala. Un anchor de WebXR mantiene la ubicación física cuando el dispositivo lo soporta; en caso contrario se conserva la pose local detectada.
 
 La experiencia solicita el mapa de profundidad GPU de WebXR para que los objetos reales cercanos oculten tanto la seta como la malla. Esta oclusión depende de que Chrome, ARCore y el hardware del dispositivo ofrezcan `depth-sensing`; durante la sesión se muestra si está activa o no disponible.
 
@@ -34,6 +42,14 @@ pnpm dev
 ```
 
 Las pruebas se ejecutan con `pnpm test` y la compilación de producción con `pnpm build`.
+
+`pnpm generate:assets` genera los códigos QR, el USDZ de iOS normalizado a
+20 cm y los iconos compartidos. Para compilar la aplicación nativa consulta
+[`ios/README.md`](ios/README.md); Xcode y las pruebas AR requieren macOS y un
+dispositivo físico.
+
+El workflow `ios.yml` compila la aplicación y ejecuta sus pruebas en un
+simulador de iPhone cuando cambian el proyecto nativo o sus recursos.
 
 ## Publicación
 

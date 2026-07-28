@@ -1,0 +1,447 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* AppMuseoIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* AppMuseoIOSApp.swift */; };
+		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ContentView.swift */; };
+		A10000000000000000000003 /* ARExperienceScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* ARExperienceScreen.swift */; };
+		A10000000000000000000004 /* PanoramaScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* PanoramaScreen.swift */; };
+		A10000000000000000000005 /* ARExperienceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ARExperienceModel.swift */; };
+		A10000000000000000000006 /* ARMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* ARMath.swift */; };
+		A10000000000000000000007 /* SurfaceStabilizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SurfaceStabilizer.swift */; };
+		A10000000000000000000008 /* SporeField.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* SporeField.swift */; };
+		A10000000000000000000009 /* ARExperienceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* ARExperienceView.swift */; };
+		A1000000000000000000000A /* ARExperienceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* ARExperienceController.swift */; };
+		A1000000000000000000000B /* AppMuseoShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* AppMuseoShaders.metal */; };
+		A1000000000000000000000C /* PanoramaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* PanoramaView.swift */; };
+		A1000000000000000000000D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* Assets.xcassets */; };
+		A1000000000000000000000E /* mushroom.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* mushroom.usdz */; };
+		A1000000000000000000000F /* paranal-360.jpg in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* paranal-360.jpg */; };
+		A10000000000000000000010 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* PrivacyInfo.xcprivacy */; };
+		A10000000000000000000011 /* ARMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* ARMathTests.swift */; };
+		A10000000000000000000012 /* SurfaceStabilizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* SurfaceStabilizerTests.swift */; };
+		A10000000000000000000013 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* XCTest.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A30000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A40000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A50000000000000000000001;
+			remoteInfo = AppMuseoIOS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* AppMuseoIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/AppMuseoIOSApp.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/App/ContentView.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000003 /* ARExperienceScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/App/ARExperienceScreen.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000004 /* PanoramaScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/App/PanoramaScreen.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000005 /* ARExperienceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/AR/ARExperienceModel.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000006 /* ARMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/AR/ARMath.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000007 /* SurfaceStabilizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/AR/SurfaceStabilizer.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000008 /* SporeField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/AR/SporeField.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000009 /* ARExperienceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/AR/ARExperienceView.swift; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000000A /* ARExperienceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/AR/ARExperienceController.swift; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000000B /* AppMuseoShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AppMuseoIOS/AR/AppMuseoShaders.metal; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000000C /* PanoramaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOS/Panorama/PanoramaView.swift; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000000D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = AppMuseoIOS/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000000E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = AppMuseoIOS/Resources/PrivacyInfo.xcprivacy; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000000F /* mushroom.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = ../public/models/mushroom.usdz; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000010 /* paranal-360.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = ../public/panoramas/paranal-360.jpg; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000011 /* ARMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOSTests/ARMathTests.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000012 /* SurfaceStabilizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMuseoIOSTests/SurfaceStabilizerTests.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000013 /* AppMuseoIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AppMuseoIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000014 /* AppMuseoIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppMuseoIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000015 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		A20000000000000000000016 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = AppMuseoIOS/Resources/Info.plist; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A60000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A60000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000013 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A70000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A70000000000000000000002 /* AppMuseoIOS */,
+				A70000000000000000000003 /* AppMuseoIOSTests */,
+				A70000000000000000000004 /* Shared Resources */,
+				A70000000000000000000006 /* Frameworks */,
+				A70000000000000000000005 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A70000000000000000000002 /* AppMuseoIOS */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* AppMuseoIOSApp.swift */,
+				A20000000000000000000002 /* ContentView.swift */,
+				A20000000000000000000003 /* ARExperienceScreen.swift */,
+				A20000000000000000000004 /* PanoramaScreen.swift */,
+				A20000000000000000000005 /* ARExperienceModel.swift */,
+				A20000000000000000000006 /* ARMath.swift */,
+				A20000000000000000000007 /* SurfaceStabilizer.swift */,
+				A20000000000000000000008 /* SporeField.swift */,
+				A20000000000000000000009 /* ARExperienceView.swift */,
+				A2000000000000000000000A /* ARExperienceController.swift */,
+				A2000000000000000000000B /* AppMuseoShaders.metal */,
+				A2000000000000000000000C /* PanoramaView.swift */,
+				A2000000000000000000000D /* Assets.xcassets */,
+				A2000000000000000000000E /* PrivacyInfo.xcprivacy */,
+				A20000000000000000000016 /* Info.plist */,
+			);
+			name = AppMuseoIOS;
+			sourceTree = "<group>";
+		};
+		A70000000000000000000003 /* AppMuseoIOSTests */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000011 /* ARMathTests.swift */,
+				A20000000000000000000012 /* SurfaceStabilizerTests.swift */,
+			);
+			name = AppMuseoIOSTests;
+			sourceTree = "<group>";
+		};
+		A70000000000000000000004 /* Shared Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A2000000000000000000000F /* mushroom.usdz */,
+				A20000000000000000000010 /* paranal-360.jpg */,
+			);
+			name = "Shared Resources";
+			sourceTree = "<group>";
+		};
+		A70000000000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000013 /* AppMuseoIOS.app */,
+				A20000000000000000000014 /* AppMuseoIOSTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A70000000000000000000006 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000015 /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* AppMuseoIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000000000000000000002 /* Build configuration list for PBXNativeTarget "AppMuseoIOS" */;
+			buildPhases = (
+				A90000000000000000000001 /* Sources */,
+				A60000000000000000000001 /* Frameworks */,
+				AA0000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AppMuseoIOS;
+			productName = AppMuseoIOS;
+			productReference = A20000000000000000000013 /* AppMuseoIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A50000000000000000000002 /* AppMuseoIOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000000000000000000003 /* Build configuration list for PBXNativeTarget "AppMuseoIOSTests" */;
+			buildPhases = (
+				A90000000000000000000002 /* Sources */,
+				A60000000000000000000002 /* Frameworks */,
+				AA0000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AB0000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = AppMuseoIOSTests;
+			productName = AppMuseoIOSTests;
+			productReference = A20000000000000000000014 /* AppMuseoIOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A40000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A50000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					A50000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A50000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = A80000000000000000000001 /* Build configuration list for PBXProject "AppMuseoIOS" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = es;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				es,
+			);
+			mainGroup = A70000000000000000000001;
+			productRefGroup = A70000000000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A50000000000000000000001 /* AppMuseoIOS */,
+				A50000000000000000000002 /* AppMuseoIOSTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000000D /* Assets.xcassets in Resources */,
+				A1000000000000000000000E /* mushroom.usdz in Resources */,
+				A1000000000000000000000F /* paranal-360.jpg in Resources */,
+				A10000000000000000000010 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A90000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* AppMuseoIOSApp.swift in Sources */,
+				A10000000000000000000002 /* ContentView.swift in Sources */,
+				A10000000000000000000003 /* ARExperienceScreen.swift in Sources */,
+				A10000000000000000000004 /* PanoramaScreen.swift in Sources */,
+				A10000000000000000000005 /* ARExperienceModel.swift in Sources */,
+				A10000000000000000000006 /* ARMath.swift in Sources */,
+				A10000000000000000000007 /* SurfaceStabilizer.swift in Sources */,
+				A10000000000000000000008 /* SporeField.swift in Sources */,
+				A10000000000000000000009 /* ARExperienceView.swift in Sources */,
+				A1000000000000000000000A /* ARExperienceController.swift in Sources */,
+				A1000000000000000000000B /* AppMuseoShaders.metal in Sources */,
+				A1000000000000000000000C /* PanoramaView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A90000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000011 /* ARMathTests.swift in Sources */,
+				A10000000000000000000012 /* SurfaceStabilizerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AB0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A50000000000000000000001 /* AppMuseoIOS */;
+			targetProxy = A30000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AC0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AC0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AC0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AppMuseoIOS/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = es.appmuseo.AppMuseoIOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AC0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AppMuseoIOS/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = es.appmuseo.AppMuseoIOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AC0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = es.appmuseo.AppMuseoIOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AppMuseoIOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AppMuseoIOS";
+			};
+			name = Debug;
+		};
+		AC0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = es.appmuseo.AppMuseoIOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AppMuseoIOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AppMuseoIOS";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A80000000000000000000001 /* Build configuration list for PBXProject "AppMuseoIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC0000000000000000000001 /* Debug */,
+				AC0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000000000000000000002 /* Build configuration list for PBXNativeTarget "AppMuseoIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC0000000000000000000003 /* Debug */,
+				AC0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000000000000000000003 /* Build configuration list for PBXNativeTarget "AppMuseoIOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC0000000000000000000005 /* Debug */,
+				AC0000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A40000000000000000000001 /* Project object */;
+}
