@@ -2,7 +2,7 @@ name: Probar y publicar en GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:

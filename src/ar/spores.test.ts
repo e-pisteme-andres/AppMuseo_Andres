@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { SporeField } from './spores';
 
@@ -25,5 +26,16 @@ describe('campo de esporas', () => {
 
     expect(Array.from(positions)).toEqual(initialPositions);
     expect(spores.points.material.uniforms.time.value).toBe(0);
+  });
+
+  it('se integra en el modelo y comparte la posición de corte', () => {
+    const spores = new SporeField(6);
+    const model = new THREE.Group();
+
+    spores.attachTo(model);
+    spores.setSlicePosition(0.025);
+
+    expect(spores.points.parent).toBe(model);
+    expect(spores.points.material.uniforms.sliceX.value).toBe(0.025);
   });
 });

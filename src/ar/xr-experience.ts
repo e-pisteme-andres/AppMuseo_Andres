@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { isCameraAccessBlockedError } from './access-preflight';
 import { DEPTH_SENSING_OPTIONS, getOcclusionState, type OcclusionState } from './occlusion';
 import { applyDragRotation, applyRollRotation, angleBetweenPointers, normalizeAngleDelta } from './rotation';
 import { SporeField } from './spores';
@@ -24,10 +25,33 @@ interface XRExperienceOptions {
 
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
 const PLACEABLE_MESSAGE = 'Superficie detectada. Toca la pantalla para colocar la malla.';
-const SURFACE_PLACED_MESSAGE = 'Malla colocada. Toca la pantalla de nuevo para colocar la seta.';
+const SURFACE_PLACED_MESSAGE = 'Malla colocada. Elige una forma en el menú de la izquierda.';
 const PLACED_MESSAGE = 'Seta colocada. Arrastra para girarla; la malla permanecerá visible.';
 const SURFACE_SIZE_METERS = 1;
 const SURFACE_DIVISIONS = 10;
+const SLICE_PADDING_RATIO = 0.02;
+export const MIN_MODEL_SIZE_METERS = 0.01;
+export const MAX_MODEL_SIZE_METERS = 1;
+export const DEFAULT_MODEL_SIZE_METERS = 0.2;
+
+export function getVerticalSlicePosition(minX: number, maxX: number, progress: number): number {
+  const clampedProgress = Math.min(1, Math.max(0, progress));
+  const width = Math.max(0, maxX - minX);
+  const padding = width * SLICE_PADDING_RATIO;
+  return THREE.MathUtils.lerp(minX - padding, maxX + padding, clampedProgress);
+}
+
+export function getUniformModelScale(largestDimension: number, sizeMeters: number): number {
+  const clampedSize = Math.min(
+    MAX_MODEL_SIZE_METERS,
+    Math.max(MIN_MODEL_SIZE_METERS, sizeMeters),
+  );
+  return largestDimension > 0 ? clampedSize / largestDimension : 1;
+}
+
+export function shouldInterruptArSession(visibilityState: XRVisibilityState): boolean {
+  return visibilityState === 'hidden';
+}
 
 export class XRExperience {
   private readonly renderer: THREE.WebGLRenderer;
@@ -43,6 +67,9 @@ export class XRExperience {
   private readonly stabilizer = new SurfaceStabilizer();
   private readonly pointers = new Map<number, PointerSnapshot>();
   private readonly options: XRExperienceOptions;
+  private readonly localSlicePlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+  private readonly slicePlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+  private readonly modelBounds = new THREE.Box3();
 
   private state: ExperienceState = 'ready';
   private session: XRSession | null = null;
@@ -55,12 +82,15 @@ export class XRExperience {
   private trackingLost = false;
   private ending: Promise<void> | null = null;
   private lastFrameTime: number | null = null;
+  private sliceProgress = 0;
+  private modelSizeMeters = DEFAULT_MODEL_SIZE_METERS;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType('local-floor');
+    this.renderer.localClippingEnabled = true;
     this.renderer.xr.addEventListener('sessionend', this.onSessionEnded);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -73,7 +103,8 @@ export class XRExperience {
     this.scene.add(keyLight);
 
     this.anchorRoot.matrixAutoUpdate = false;
-    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot, this.sporeField.points);
+    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot);
+    this.sporeField.attachTo(this.mushroomPivot);
     this.scene.add(this.anchorRoot);
     this.mushroomPivot.position.y = 0.1;
     this.mushroomPivot.visible = false;
@@ -118,13 +149,42 @@ export class XRExperience {
   async loadModel(): Promise<void> {
     const loader = new GLTFLoader();
     const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/mushroom.glb`);
+    this.modelBounds.setFromObject(gltf.scene);
     gltf.scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material) => {
+          material.clippingPlanes = [this.slicePlane];
+          material.clipShadows = true;
+          material.needsUpdate = true;
+        });
       }
     });
     this.mushroomPivot.add(gltf.scene);
+    this.updateModelScale();
+    this.updateSlicePlane();
+  }
+
+  placeModel(modelId: 'mushroom'): boolean {
+    if (modelId !== 'mushroom' || this.state !== 'surfacePlaced') return false;
+    this.commitMushroomPlacement();
+    return true;
+  }
+
+  setSliceProgress(progress: number): void {
+    this.sliceProgress = Math.min(1, Math.max(0, progress));
+    this.updateSlicePlane();
+  }
+
+  setModelSizeMeters(sizeMeters: number): void {
+    this.modelSizeMeters = Math.min(
+      MAX_MODEL_SIZE_METERS,
+      Math.max(MIN_MODEL_SIZE_METERS, sizeMeters),
+    );
+    this.updateModelScale();
+    this.updateSlicePlane();
   }
 
   async start(): Promise<void> {
@@ -143,6 +203,7 @@ export class XRExperience {
       });
 
       this.session = session;
+      session.addEventListener('visibilitychange', this.onSessionVisibilityChange);
       this.options.onOcclusionChange(getOcclusionState(session));
       await this.renderer.xr.setSession(session);
 
@@ -162,11 +223,10 @@ export class XRExperience {
       this.renderer.setAnimationLoop(this.renderFrame);
     } catch (error) {
       await this.endSilently();
-      const domError = error instanceof DOMException ? error : null;
       const message =
-        domError?.name === 'NotAllowedError'
-          ? 'No se concedió acceso a la cámara. Activa el permiso de cámara de Chrome e inténtalo de nuevo.'
-          : 'No se pudo iniciar la realidad aumentada. Comprueba que Chrome y Google Play Services for AR estén actualizados.';
+        isCameraAccessBlockedError(error)
+          ? 'La cámara está desactivada o bloqueada. Sigue los pasos indicados para activarla.'
+          : 'No se pudo iniciar la realidad aumentada. Actualiza el navegador y los servicios AR del dispositivo.';
       this.setState('error', message);
       throw error;
     }
@@ -177,7 +237,6 @@ export class XRExperience {
     if (!activeSession) return;
     if (this.ending) return this.ending;
 
-    this.renderer.setAnimationLoop(null);
     const ending = this.endOnNextTask(activeSession);
     this.ending = ending;
 
@@ -188,11 +247,49 @@ export class XRExperience {
     }
   }
 
+  async interrupt(): Promise<void> {
+    const activeSession = this.session;
+    if (!activeSession) return;
+    if (this.ending) return this.ending;
+
+    const ending = this.endImmediately(activeSession);
+    this.ending = ending;
+
+    try {
+      await ending;
+    } finally {
+      if (this.ending === ending) this.ending = null;
+    }
+  }
+
   private async endOnNextTask(activeSession: XRSession): Promise<void> {
-    // Do not destroy an immersive session from inside Chrome's DOM-overlay
-    // input dispatch. Moving it to the next task avoids an ARCore/renderer race.
+    // Do not mutate or destroy WebXR resources from inside Chrome's DOM-overlay
+    // input dispatch. Moving the whole shutdown to the next task avoids an
+    // ARCore/renderer race.
     await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
-    if (this.session === activeSession) await activeSession.end();
+    if (this.session !== activeSession) return;
+
+    this.renderer.setAnimationLoop(null);
+    this.releaseSessionResources();
+    await activeSession.end();
+  }
+
+  private async endImmediately(activeSession: XRSession): Promise<void> {
+    if (this.session !== activeSession) return;
+    this.renderer.setAnimationLoop(null);
+    this.releaseSessionResources();
+    await activeSession.end();
+  }
+
+  private releaseSessionResources(): void {
+    // XRHitTestSource and XRAnchor belong to the active XRSession. Releasing
+    // them after the session's `end` event can reach an already torn-down
+    // ARCore object and crash Chrome's renderer process.
+    this.hitTestSource?.cancel();
+    this.anchor?.delete();
+    this.session?.removeEventListener?.('visibilitychange', this.onSessionVisibilityChange);
+    this.hitTestSource = null;
+    this.anchor = null;
   }
 
   private setState(next: ExperienceState, message: string): void {
@@ -230,6 +327,7 @@ export class XRExperience {
       const deltaSeconds = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) * 0.001;
       this.sporeField.update(elapsedSeconds, deltaSeconds);
       this.lastFrameTime = time;
+      this.updateSlicePlane();
     }
 
     this.renderer.render(this.scene, this.camera);
@@ -290,17 +388,23 @@ export class XRExperience {
 
     const anchorPromise = result.createAnchor?.();
     anchorPromise
-      ?.then((anchor) => {
-        if (this.session) this.anchor = anchor;
-        else anchor.delete();
-      })
+      ?.then((anchor) => this.retainAnchor(anchor))
       .catch(() => {
         // La pose local congelada continúa siendo un fallback válido.
       });
   }
 
+  private retainAnchor(anchor: XRAnchor): void {
+    // A pending createAnchor() may resolve while the session is ending, or
+    // after it has ended. In either case ARCore owns the final teardown; calling
+    // delete() on that late anchor can target an invalid native session.
+    if (this.session && !this.ending) this.anchor = anchor;
+  }
+
   private commitMushroomPlacement(): void {
     if (this.state !== 'surfacePlaced') return;
+    this.setSliceProgress(0);
+    this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
     this.mushroomPivot.visible = true;
     this.sporeField.reset();
     this.sporeField.points.visible = true;
@@ -360,8 +464,6 @@ export class XRExperience {
 
     if (isTap && this.state === 'placeable') {
       this.surfacePlacementRequested = true;
-    } else if (isTap && this.state === 'surfacePlaced') {
-      this.commitMushroomPlacement();
     }
 
     this.pointers.delete(event.pointerId);
@@ -374,10 +476,13 @@ export class XRExperience {
     if (this.state !== 'error') this.setState('ready', 'Todo listo para iniciar otra sesión.');
   };
 
+  private readonly onSessionVisibilityChange = (event: XRSessionEvent): void => {
+    if (!shouldInterruptArSession(event.session.visibilityState)) return;
+    void this.interrupt().catch(() => undefined);
+  };
+
   private cleanupSession(): void {
     this.renderer.setAnimationLoop(null);
-    this.hitTestSource?.cancel();
-    this.anchor?.delete();
     this.session = null;
     this.ending = null;
     this.referenceSpace = null;
@@ -395,12 +500,40 @@ export class XRExperience {
     this.sporeField.reset();
     this.lastFrameTime = null;
     this.anchorRoot.matrix.identity();
+    this.setSliceProgress(0);
+    this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
+  }
+
+  private updateModelScale(): void {
+    if (this.modelBounds.isEmpty()) return;
+
+    const modelSize = this.modelBounds.getSize(new THREE.Vector3());
+    const largestDimension = Math.max(modelSize.x, modelSize.y, modelSize.z);
+    const scale = getUniformModelScale(largestDimension, this.modelSizeMeters);
+    this.mushroomPivot.scale.setScalar(scale);
+    this.mushroomPivot.position.y = -this.modelBounds.min.y * scale;
+  }
+
+  private updateSlicePlane(): void {
+    if (this.modelBounds.isEmpty()) return;
+
+    const sliceX = getVerticalSlicePosition(
+      this.modelBounds.min.x,
+      this.modelBounds.max.x,
+      this.sliceProgress,
+    );
+    this.localSlicePlane.setComponents(1, 0, 0, -sliceX);
+    this.sporeField.setSlicePosition(sliceX);
+    this.anchorRoot.updateMatrixWorld(true);
+    this.slicePlane.copy(this.localSlicePlane).applyMatrix4(this.mushroomPivot.matrixWorld);
   }
 
   private async endSilently(): Promise<void> {
     const activeSession = this.session;
     if (activeSession) {
       try {
+        this.renderer.setAnimationLoop(null);
+        this.releaseSessionResources();
         await activeSession.end();
       } catch {
         this.cleanupSession();

@@ -62,24 +62,32 @@ export class SporeField {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
+        sliceX: { value: -1 },
       },
       vertexShader: `
         attribute float sporeSize;
         attribute float sporePhase;
         uniform float time;
         varying float pulse;
+        varying float particleLocalX;
 
         void main() {
-          vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_Position = projectionMatrix * viewPosition;
-          gl_PointSize = sporeSize * (360.0 / max(0.12, -viewPosition.z));
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          float objectScale = length(vec3(modelMatrix[0]));
+          gl_Position = projectionMatrix * mvPosition;
+          gl_PointSize = max(2.5, sporeSize * objectScale * (520.0 / max(0.12, -mvPosition.z)));
           pulse = 0.72 + 0.28 * sin(time * 2.1 + sporePhase);
+          particleLocalX = position.x;
         }
       `,
       fragmentShader: `
+        uniform float sliceX;
         varying float pulse;
+        varying float particleLocalX;
 
         void main() {
+          if (particleLocalX < sliceX) discard;
+
           float distanceToCenter = length(gl_PointCoord - vec2(0.5));
           if (distanceToCenter > 0.5) discard;
 
@@ -99,6 +107,14 @@ export class SporeField {
     this.points.name = 'Esporas_verdes';
     this.points.frustumCulled = false;
     this.points.visible = false;
+  }
+
+  attachTo(parent: THREE.Object3D): void {
+    parent.add(this.points);
+  }
+
+  setSlicePosition(positionX: number): void {
+    this.points.material.uniforms.sliceX.value = positionX;
   }
 
   update(elapsedSeconds: number, deltaSeconds: number): void {
