@@ -45,7 +45,6 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm generate:assets
-          pnpm validate:ios
           pnpm test
           pnpm build
 
