@@ -29,7 +29,17 @@ Las esporas forman parte del modelo y responden a su rotación, escala y corte.
 
 ## Panorama 360°
 
-La vista panorámica utiliza la fotografía equirectangular **Panoramic view of Paranal**, de ESO, publicada bajo licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). La fuente original y los datos de atribución están disponibles en [ESO](https://www.eso.org/public/spain/images/res-mount-sunrise-pan/).
+El recorrido panorámico para móvil incluye tres paradas enlazadas, puntos de
+interés con información, navegación directa, zoom táctil, recentrado y pantalla
+completa cuando el navegador la permite:
+
+- **Entorno de Paranal**: fotografía equirectangular *Panoramic view of
+  Paranal*, de ESO, publicada bajo licencia
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). [Fuente y atribución](https://www.eso.org/public/spain/images/res-mount-sunrise-pan/).
+- **Plataforma del VLT**: fotografía de M. Cabral/ESO.
+  [Fuente y atribución](https://www.eso.org/public/images/ESO_Paranal_360_Marcio_Cabral_Chile_07-CC/).
+- **La Residencia**: fotografía de ESO.
+  [Fuente y atribución](https://www.eso.org/public/images/reception-area-pano/).
 
 ## Desarrollo
 
@@ -37,11 +47,16 @@ Requiere Node.js 22 y pnpm.
 
 ```bash
 pnpm install
+pnpm download:panoramas
 pnpm generate:assets
 pnpm dev
 ```
 
 Las pruebas se ejecutan con `pnpm test` y la compilación de producción con `pnpm build`.
+
+`pnpm download:panoramas` prepara las dos escenas adicionales del recorrido
+desde los archivos de publicación de ESO. El flujo de GitHub Pages ejecuta este
+paso automáticamente para la vista de prueba de la ampliación 360.
 
 `pnpm generate:assets` genera los códigos QR, el USDZ de iOS normalizado a
 20 cm y los iconos compartidos. Para compilar la aplicación nativa consulta

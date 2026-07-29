@@ -7,3 +7,5 @@ dist/
 ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/DerivedData/
+public/panoramas/paranal-residencia-360.jpg
+public/panoramas/paranal-vlt-platform-360.jpg

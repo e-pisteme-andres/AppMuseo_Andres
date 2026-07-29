@@ -23,6 +23,7 @@ describe('caché del progreso de la aplicación', () => {
     const storage = createStorage();
     const saved = saveAppProgress(storage, {
       view: 'panorama',
+      panoramaSceneId: 'vlt-platform',
       panorama: { longitude: 24, latitude: 12, fov: 58 },
       lastAction: 'panorama:navigate',
     }, 1234);
@@ -62,6 +63,7 @@ describe('caché del progreso de la aplicación', () => {
     expect(loadAppProgress(storage)).toEqual(DEFAULT_APP_PROGRESS);
     expect(() => saveAppProgress(storage, {
       view: 'landing',
+      panoramaSceneId: 'paranal-overlook',
       panorama: DEFAULT_APP_PROGRESS.panorama,
       lastAction: 'app:hidden',
     })).not.toThrow();

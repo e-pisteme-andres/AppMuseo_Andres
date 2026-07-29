@@ -11,6 +11,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import type { PanoramaHotspot } from './panorama-tour';
 
 export type PanoramaControlMode = 'motion-pending' | 'motion' | 'drag';
 
@@ -29,6 +30,11 @@ interface PanoramaViewerOptions {
   initialView?: PanoramaViewState;
 }
 
+interface PointerSnapshot {
+  x: number;
+  y: number;
+}
+
 type PermissionState = 'granted' | 'denied';
 type DeviceOrientationConstructor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<PermissionState>;
@@ -38,6 +44,23 @@ const deviceEuler = new Euler();
 const deviceAdjustment = new Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 const screenAxis = new Vector3(0, 0, 1);
 const screenAdjustment = new Quaternion();
+const cameraDirection = new Vector3();
+const projectedHotspotPosition = new Vector3();
+const hotspotDirection = new Vector3();
+
+export function getSphericalPosition(
+  longitude: number,
+  latitude: number,
+  radius = 490,
+): Vector3 {
+  const phi = (90 - latitude) * Math.PI / 180;
+  const theta = longitude * Math.PI / 180;
+  return new Vector3(
+    radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta),
+  );
+}
 
 export function setDeviceQuaternion(
   target: Quaternion,
@@ -55,7 +78,7 @@ export function setDeviceQuaternion(
 
 export class PanoramaViewer {
   private readonly container: HTMLElement;
-  private readonly imageUrl: string;
+  private imageUrl: string;
   private readonly onLoadingChange?: (loading: boolean) => void;
   private readonly onControlModeChange?: (mode: PanoramaControlMode) => void;
   private readonly onViewChange?: (view: PanoramaViewState) => void;
@@ -64,6 +87,12 @@ export class PanoramaViewer {
   private camera?: PerspectiveCamera;
   private frameId?: number;
   private resizeObserver?: ResizeObserver;
+  private panoramaMaterial?: MeshBasicMaterial;
+  private hotspotLayer?: HTMLElement;
+  private hotspots: PanoramaHotspot[] = [];
+  private readonly hotspotElements = new Map<string, HTMLButtonElement>();
+  private onHotspotActivate?: (hotspot: PanoramaHotspot) => void;
+  private textureRequestId = 0;
   private longitude = -104;
   private latitude = -4;
   private fieldOfView = 72;
@@ -72,6 +101,9 @@ export class PanoramaViewer {
   private pointerLongitude = 0;
   private pointerLatitude = 0;
   private activePointer?: number;
+  private readonly pointers = new Map<number, PointerSnapshot>();
+  private pinchStartDistance?: number;
+  private pinchStartFov?: number;
   private controlMode: PanoramaControlMode = 'drag';
   private deviceOrientation?: { alpha: number; beta: number; gamma: number };
   private readonly deviceQuaternion = new Quaternion();
@@ -107,6 +139,57 @@ export class PanoramaViewer {
     };
   }
 
+  setHotspots(
+    hotspots: PanoramaHotspot[],
+    onActivate: (hotspot: PanoramaHotspot) => void,
+  ): void {
+    this.hotspots = hotspots;
+    this.onHotspotActivate = onActivate;
+    this.renderHotspotElements();
+  }
+
+  async changePanorama(
+    imageUrl: string,
+    initialView: PanoramaViewState,
+  ): Promise<void> {
+    if (!this.renderer || !this.panoramaMaterial) {
+      this.imageUrl = imageUrl;
+      this.applyView(initialView);
+      await this.open();
+      return;
+    }
+
+    const requestId = ++this.textureRequestId;
+    this.onLoadingChange?.(true);
+    try {
+      const texture = await new TextureLoader().loadAsync(imageUrl);
+      if (requestId !== this.textureRequestId) {
+        texture.dispose();
+        return;
+      }
+      texture.colorSpace = SRGBColorSpace;
+      this.panoramaMaterial.map?.dispose();
+      this.panoramaMaterial.map = texture;
+      this.panoramaMaterial.needsUpdate = true;
+      this.imageUrl = imageUrl;
+      this.applyView(initialView);
+      this.orientationOffset = undefined;
+      this.onViewChange?.(this.getViewState());
+    } finally {
+      if (requestId === this.textureRequestId) this.onLoadingChange?.(false);
+    }
+  }
+
+  zoomBy(delta: number): void {
+    this.setFieldOfView(this.fieldOfView + delta);
+  }
+
+  resetView(view: PanoramaViewState): void {
+    this.applyView(view);
+    this.orientationOffset = undefined;
+    this.onViewChange?.(this.getViewState());
+  }
+
   async open(): Promise<void> {
     if (this.renderer) {
       this.startRendering();
@@ -132,8 +215,11 @@ export class PanoramaViewer {
       texture.colorSpace = SRGBColorSpace;
       const geometry = new SphereGeometry(500, 72, 48);
       geometry.scale(-1, 1, 1);
-      scene.add(new Mesh(geometry, new MeshBasicMaterial({ map: texture })));
+      const material = new MeshBasicMaterial({ map: texture });
+      scene.add(new Mesh(geometry, material));
+      this.panoramaMaterial = material;
 
+      this.createHotspotLayer();
       this.addEventListeners();
       this.resize();
       this.startRendering();
@@ -157,6 +243,7 @@ export class PanoramaViewer {
     this.renderer?.domElement.removeEventListener('pointerdown', this.handlePointerDown);
     window.removeEventListener('pointermove', this.handlePointerMove);
     window.removeEventListener('pointerup', this.handlePointerUp);
+    window.removeEventListener('pointercancel', this.handlePointerUp);
     this.renderer?.domElement.removeEventListener('wheel', this.handleWheel);
     window.removeEventListener('deviceorientation', this.handleDeviceOrientation, true);
     if (this.orientationTimeoutId !== undefined) window.clearTimeout(this.orientationTimeoutId);
@@ -171,33 +258,45 @@ export class PanoramaViewer {
     });
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
+    this.hotspotLayer?.remove();
     this.renderer = undefined;
     this.scene = undefined;
     this.camera = undefined;
+    this.panoramaMaterial = undefined;
+    this.hotspotLayer = undefined;
+    this.hotspotElements.clear();
     this.deviceOrientation = undefined;
     this.orientationOffset = undefined;
     this.orientationTimeoutId = undefined;
     this.dragControlsEnabled = false;
+    this.pointers.clear();
+    this.activePointer = undefined;
+    this.pinchStartDistance = undefined;
+    this.pinchStartFov = undefined;
   }
 
   private addEventListeners(): void {
     const canvas = this.renderer?.domElement;
     if (!canvas) return;
-    if (this.controlMode === 'drag') this.enableDragControls();
+    this.enableDragControls();
     canvas.addEventListener('wheel', this.handleWheel, { passive: false });
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
   }
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
-    if (this.activePointer !== undefined) return;
-    this.activePointer = event.pointerId;
-    this.pointerX = event.clientX;
-    this.pointerY = event.clientY;
-    this.pointerLongitude = this.longitude;
-    this.pointerLatitude = this.latitude;
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     this.renderer?.domElement.setPointerCapture(event.pointerId);
-    this.renderer?.domElement.classList.add('is-dragging');
+    if (this.pointers.size === 1) {
+      this.beginDrag(event.pointerId, event.clientX, event.clientY);
+      if (this.controlMode === 'drag') {
+        this.renderer?.domElement.classList.add('is-dragging');
+      }
+    } else if (this.pointers.size === 2) {
+      this.pinchStartDistance = this.getPointerDistance();
+      this.pinchStartFov = this.fieldOfView;
+      this.renderer?.domElement.classList.remove('is-dragging');
+    }
   };
 
   private async prepareControls(): Promise<void> {
@@ -241,7 +340,7 @@ export class PanoramaViewer {
 
   private setControlMode(mode: PanoramaControlMode): void {
     this.controlMode = mode;
-    if (mode === 'drag') this.enableDragControls();
+    this.enableDragControls();
     this.onControlModeChange?.(mode);
   }
 
@@ -252,29 +351,57 @@ export class PanoramaViewer {
     canvas.addEventListener('pointerdown', this.handlePointerDown);
     window.addEventListener('pointermove', this.handlePointerMove);
     window.addEventListener('pointerup', this.handlePointerUp);
+    window.addEventListener('pointercancel', this.handlePointerUp);
   }
 
   private readonly handlePointerMove = (event: PointerEvent): void => {
-    if (event.pointerId !== this.activePointer) return;
+    const pointer = this.pointers.get(event.pointerId);
+    if (!pointer) return;
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+
+    if (
+      this.pointers.size === 2
+      && this.pinchStartDistance
+      && this.pinchStartFov
+    ) {
+      const distance = this.getPointerDistance();
+      if (distance > 0) {
+        this.setFieldOfView(this.pinchStartFov * this.pinchStartDistance / distance);
+      }
+      return;
+    }
+
+    if (this.controlMode !== 'drag' || event.pointerId !== this.activePointer) return;
     this.longitude = (this.pointerX - event.clientX) * 0.12 + this.pointerLongitude;
     this.latitude = (event.clientY - this.pointerY) * 0.12 + this.pointerLatitude;
     this.onViewChange?.(this.getViewState());
   };
 
   private readonly handlePointerUp = (event: PointerEvent): void => {
-    if (event.pointerId !== this.activePointer) return;
-    this.activePointer = undefined;
-    this.renderer?.domElement.classList.remove('is-dragging');
+    if (!this.pointers.has(event.pointerId)) return;
+    this.pointers.delete(event.pointerId);
+    this.pinchStartDistance = undefined;
+    this.pinchStartFov = undefined;
+    const remainingPointer = this.pointers.entries().next().value as
+      | [number, PointerSnapshot]
+      | undefined;
+    if (remainingPointer) {
+      const [pointerId, pointer] = remainingPointer;
+      this.beginDrag(pointerId, pointer.x, pointer.y);
+      if (this.controlMode === 'drag') {
+        this.renderer?.domElement.classList.add('is-dragging');
+      }
+    } else {
+      this.activePointer = undefined;
+      this.renderer?.domElement.classList.remove('is-dragging');
+    }
     this.onViewChange?.(this.getViewState());
   };
 
   private readonly handleWheel = (event: WheelEvent): void => {
-    if (!this.camera) return;
     event.preventDefault();
-    this.camera.fov = Math.max(38, Math.min(92, this.camera.fov + event.deltaY * 0.035));
-    this.fieldOfView = this.camera.fov;
-    this.camera.updateProjectionMatrix();
-    this.onViewChange?.(this.getViewState());
+    this.setFieldOfView(this.fieldOfView + event.deltaY * 0.035);
   };
 
   private resize(): void {
@@ -310,6 +437,7 @@ export class PanoramaViewer {
       } else {
         this.lookAtDragPosition();
       }
+      this.updateHotspotPositions();
       this.renderer.render(this.scene, this.camera);
       this.frameId = requestAnimationFrame(render);
     };
@@ -319,12 +447,95 @@ export class PanoramaViewer {
   private lookAtDragPosition(): void {
     if (!this.camera) return;
     this.latitude = Math.max(-82, Math.min(82, this.latitude));
-    const phi = (90 - this.latitude) * Math.PI / 180;
-    const theta = this.longitude * Math.PI / 180;
-    this.camera.lookAt(
-      500 * Math.sin(phi) * Math.cos(theta),
-      500 * Math.cos(phi),
-      500 * Math.sin(phi) * Math.sin(theta),
-    );
+    this.camera.lookAt(getSphericalPosition(this.longitude, this.latitude, 500));
+  }
+
+  private applyView(view: PanoramaViewState): void {
+    this.longitude = view.longitude;
+    this.latitude = view.latitude;
+    this.setFieldOfView(view.fov, false);
+  }
+
+  private setFieldOfView(fieldOfView: number, notify = true): void {
+    this.fieldOfView = Math.max(38, Math.min(92, fieldOfView));
+    if (this.camera) {
+      this.camera.fov = this.fieldOfView;
+      this.camera.updateProjectionMatrix();
+    }
+    if (notify) this.onViewChange?.(this.getViewState());
+  }
+
+  private beginDrag(pointerId: number, x: number, y: number): void {
+    this.activePointer = pointerId;
+    this.pointerX = x;
+    this.pointerY = y;
+    this.pointerLongitude = this.longitude;
+    this.pointerLatitude = this.latitude;
+  }
+
+  private getPointerDistance(): number {
+    const [first, second] = [...this.pointers.values()];
+    if (!first || !second) return 0;
+    return Math.hypot(second.x - first.x, second.y - first.y);
+  }
+
+  private createHotspotLayer(): void {
+    if (this.hotspotLayer) return;
+    const layer = document.createElement('div');
+    layer.className = 'panorama-hotspots';
+    layer.setAttribute('aria-label', 'Puntos de interés de la panorámica');
+    this.container.append(layer);
+    this.hotspotLayer = layer;
+    this.renderHotspotElements();
+  }
+
+  private renderHotspotElements(): void {
+    if (!this.hotspotLayer) return;
+    this.hotspotLayer.replaceChildren();
+    this.hotspotElements.clear();
+    this.hotspots.forEach((hotspot) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `panorama-hotspot panorama-hotspot--${hotspot.kind}`;
+      button.setAttribute('aria-label', hotspot.label);
+      const icon = document.createElement('span');
+      icon.className = 'panorama-hotspot__icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = hotspot.kind === 'navigation' ? '→' : 'i';
+      const label = document.createElement('span');
+      label.className = 'panorama-hotspot__label';
+      label.textContent = hotspot.label;
+      button.append(icon, label);
+      button.addEventListener('click', () => this.onHotspotActivate?.(hotspot));
+      this.hotspotLayer?.append(button);
+      this.hotspotElements.set(hotspot.id, button);
+    });
+  }
+
+  private updateHotspotPositions(): void {
+    if (!this.camera || !this.hotspotLayer) return;
+    const camera = this.camera;
+    camera.updateMatrixWorld();
+    camera.getWorldDirection(cameraDirection);
+    this.hotspots.forEach((hotspot) => {
+      const element = this.hotspotElements.get(hotspot.id);
+      if (!element) return;
+      projectedHotspotPosition.copy(
+        getSphericalPosition(hotspot.longitude, hotspot.latitude),
+      );
+      const isInFront = hotspotDirection
+        .copy(projectedHotspotPosition)
+        .normalize()
+        .dot(cameraDirection) > 0.08;
+      projectedHotspotPosition.project(camera);
+      const isVisible = isInFront
+        && projectedHotspotPosition.z > -1
+        && projectedHotspotPosition.z < 1;
+      element.hidden = !isVisible;
+      element.setAttribute('aria-hidden', String(!isVisible));
+      if (!isVisible) return;
+      element.style.left = `${(projectedHotspotPosition.x * 0.5 + 0.5) * 100}%`;
+      element.style.top = `${(-projectedHotspotPosition.y * 0.5 + 0.5) * 100}%`;
+    });
   }
 }
