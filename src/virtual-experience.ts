@@ -7,6 +7,8 @@ import {
   MAX_MODEL_SIZE_METERS,
   MIN_MODEL_SIZE_METERS,
 } from './ar/xr-experience';
+import { ModelInteraction } from './ar/model-interaction';
+import { findModelDefinition, MODEL_CATALOG, type ModelId } from './ar/models';
 import {
   angleBetweenPointers,
   applyDragRotation,
@@ -29,14 +31,20 @@ interface VirtualExperienceOptions {
 }
 
 const MODEL_SELECTION_MESSAGE = 'Elige una forma en el menú de la izquierda.';
-const MODEL_PLACED_MESSAGE = 'Seta colocada. Arrastra para girarla en cualquier dirección.';
+
+interface LoadedModel {
+  scene: THREE.Object3D;
+  bounds: THREE.Box3;
+  effect: SporeField;
+}
 
 export class VirtualExperience {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(38, 1, 0.01, 20);
-  private readonly mushroomPivot = new THREE.Group();
-  private readonly sporeField = new SporeField();
+  private readonly modelPivot = new THREE.Group();
+  private readonly loadedModels = new Map<ModelId, LoadedModel>();
+  private readonly modelInteraction = new ModelInteraction();
   private readonly pointers = new Map<number, PointerSnapshot>();
   private readonly options: VirtualExperienceOptions;
   private readonly localSlicePlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
@@ -52,6 +60,7 @@ export class VirtualExperience {
   private lastTwoFingerAngle: number | null = null;
   private sliceProgress = 0;
   private modelSizeMeters = DEFAULT_MODEL_SIZE_METERS;
+  private activeModelId: ModelId | null = null;
 
   constructor(options: VirtualExperienceOptions) {
     this.options = options;
@@ -94,9 +103,9 @@ export class VirtualExperience {
     platform.position.y = -0.004;
     this.scene.add(platform);
 
-    this.sporeField.attachTo(this.mushroomPivot);
-    this.mushroomPivot.visible = false;
-    this.scene.add(this.mushroomPivot);
+    this.modelPivot.visible = false;
+    this.modelPivot.add(this.modelInteraction.hotspot);
+    this.scene.add(this.modelPivot);
 
     window.addEventListener('resize', this.onResize);
     options.overlay.addEventListener('pointerdown', this.onPointerDown);
@@ -107,13 +116,17 @@ export class VirtualExperience {
   }
 
   loadModel(): Promise<void> {
-    if (this.modelLoaded) return Promise.resolve();
+    if (this.modelLoaded && this.loadedModels.size === MODEL_CATALOG.length) return Promise.resolve();
     if (this.modelLoadPromise) return this.modelLoadPromise;
 
-    this.modelLoadPromise = new GLTFLoader()
-      .loadAsync(`${import.meta.env.BASE_URL}models/mushroom.glb`)
-      .then((gltf) => {
-        this.modelBounds.setFromObject(gltf.scene);
+    const loader = new GLTFLoader();
+    this.modelLoadPromise = Promise.all(
+      MODEL_CATALOG.map(async (definition) => {
+        const gltf = await loader.loadAsync(
+          `${import.meta.env.BASE_URL}models/${definition.file}`,
+        );
+        const bounds = new THREE.Box3().setFromObject(gltf.scene);
+        gltf.scene.visible = false;
         gltf.scene.traverse((child) => {
           if (!(child instanceof THREE.Mesh)) return;
           child.castShadow = true;
@@ -125,10 +138,14 @@ export class VirtualExperience {
             material.needsUpdate = true;
           });
         });
-        this.mushroomPivot.add(gltf.scene);
+        const effect = new SporeField(definition.effect);
+        effect.attachTo(this.modelPivot);
+        this.modelPivot.add(gltf.scene);
+        this.loadedModels.set(definition.id, { scene: gltf.scene, bounds, effect });
+      }),
+    )
+      .then(() => {
         this.modelLoaded = true;
-        this.updateModelScale();
-        this.updateSlicePlane();
       })
       .finally(() => {
         this.modelLoadPromise = null;
@@ -143,8 +160,11 @@ export class VirtualExperience {
 
     this.active = true;
     this.state = 'surfacePlaced';
-    this.mushroomPivot.visible = false;
-    this.sporeField.points.visible = false;
+    this.modelPivot.visible = false;
+    this.loadedModels.forEach((model) => {
+      model.scene.visible = false;
+      model.effect.points.visible = false;
+    });
     this.options.onActivityChange(true);
     this.options.onStateChange(this.state, MODEL_SELECTION_MESSAGE);
     this.render();
@@ -157,10 +177,15 @@ export class VirtualExperience {
     this.animationFrame = null;
     this.pointers.clear();
     this.lastTwoFingerAngle = null;
-    this.mushroomPivot.visible = false;
-    this.mushroomPivot.quaternion.identity();
-    this.sporeField.points.visible = false;
-    this.sporeField.reset();
+    this.modelPivot.visible = false;
+    this.modelPivot.quaternion.identity();
+    this.loadedModels.forEach((model) => {
+      model.scene.visible = false;
+      model.effect.points.visible = false;
+      model.effect.reset();
+    });
+    this.activeModelId = null;
+    this.modelInteraction.hide();
     this.lastFrameTime = null;
     this.state = 'ready';
     this.setSliceProgress(0);
@@ -168,17 +193,34 @@ export class VirtualExperience {
     this.options.onActivityChange(false);
   }
 
-  placeModel(modelId: 'mushroom'): boolean {
-    if (modelId !== 'mushroom' || this.state !== 'surfacePlaced') return false;
+  placeModel(modelId: ModelId): boolean {
+    if (!this.loadedModels.has(modelId) || this.state !== 'surfacePlaced') return false;
+    this.loadedModels.forEach((model, id) => {
+      model.scene.visible = id === modelId;
+      model.effect.points.visible = false;
+    });
+    this.activeModelId = modelId;
+    const activeModel = this.getActiveModel();
+    if (!activeModel) return false;
+    this.modelBounds.copy(activeModel.bounds);
     this.setSliceProgress(0);
     this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
-    this.mushroomPivot.quaternion.identity();
-    this.mushroomPivot.visible = true;
-    this.sporeField.reset();
-    this.sporeField.points.visible = true;
+    this.modelPivot.quaternion.identity();
+    this.modelPivot.visible = true;
+    activeModel.effect.reset();
+    activeModel.effect.points.visible = true;
+    this.modelInteraction.showModel(
+      modelId,
+      activeModel.scene,
+      activeModel.bounds,
+      activeModel.effect,
+    );
     this.lastFrameTime = null;
     this.state = 'placed';
-    this.options.onStateChange(this.state, MODEL_PLACED_MESSAGE);
+    this.options.onStateChange(
+      this.state,
+      `${findModelDefinition(modelId).placedLabel}. Arrastra para girarlo en cualquier dirección.`,
+    );
     return true;
   }
 
@@ -196,13 +238,19 @@ export class VirtualExperience {
     this.updateSlicePlane();
   }
 
+  playModelAction(): Promise<boolean> {
+    if (this.state !== 'placed') return Promise.resolve(false);
+    return this.modelInteraction.trigger();
+  }
+
   private readonly render = (time = performance.now()): void => {
     if (!this.active) return;
 
     if (this.state === 'placed') {
       const elapsedSeconds = time * 0.001;
       const deltaSeconds = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) * 0.001;
-      this.sporeField.update(elapsedSeconds, deltaSeconds);
+      this.getActiveModel()?.effect.update(elapsedSeconds, deltaSeconds);
+      this.modelInteraction.update(time);
       this.lastFrameTime = time;
       this.updateSlicePlane();
     }
@@ -216,8 +264,8 @@ export class VirtualExperience {
     const size = this.modelBounds.getSize(new THREE.Vector3());
     const largestDimension = Math.max(size.x, size.y, size.z);
     const scale = getUniformModelScale(largestDimension, this.modelSizeMeters);
-    this.mushroomPivot.scale.setScalar(scale);
-    this.mushroomPivot.position.y = -this.modelBounds.min.y * scale;
+    this.modelPivot.scale.setScalar(scale);
+    this.modelPivot.position.y = -this.modelBounds.min.y * scale;
   }
 
   private updateSlicePlane(): void {
@@ -228,9 +276,9 @@ export class VirtualExperience {
       this.sliceProgress,
     );
     this.localSlicePlane.setComponents(1, 0, 0, -sliceX);
-    this.sporeField.setSlicePosition(sliceX);
-    this.mushroomPivot.updateMatrixWorld(true);
-    this.slicePlane.copy(this.localSlicePlane).applyMatrix4(this.mushroomPivot.matrixWorld);
+    this.getActiveModel()?.effect.setSlicePosition(sliceX);
+    this.modelPivot.updateMatrixWorld(true);
+    this.slicePlane.copy(this.localSlicePlane).applyMatrix4(this.modelPivot.matrixWorld);
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
@@ -256,13 +304,13 @@ export class VirtualExperience {
     event.preventDefault();
 
     if (this.pointers.size === 1) {
-      applyDragRotation(this.mushroomPivot.quaternion, deltaX, deltaY);
+      applyDragRotation(this.modelPivot.quaternion, deltaX, deltaY);
     } else if (this.pointers.size === 2) {
       const [first, second] = [...this.pointers.values()];
       const nextAngle = angleBetweenPointers(first, second);
       if (this.lastTwoFingerAngle !== null) {
         applyRollRotation(
-          this.mushroomPivot.quaternion,
+          this.modelPivot.quaternion,
           normalizeAngleDelta(nextAngle - this.lastTwoFingerAngle),
         );
       }
@@ -283,4 +331,8 @@ export class VirtualExperience {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
   };
+
+  private getActiveModel(): LoadedModel | undefined {
+    return this.activeModelId ? this.loadedModels.get(this.activeModelId) : undefined;
+  }
 }

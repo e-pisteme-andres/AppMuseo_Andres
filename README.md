@@ -1,7 +1,8 @@
-# Seta AR · App Museo
+# Museo AR · Cinco modelos 3D
 
-Aplicación de realidad aumentada para colocar una seta 3D de 20 cm sobre una
-mesa o el suelo. El repositorio incluye:
+Aplicación de realidad aumentada para colocar cinco modelos 3D con efectos
+sobre una mesa o el suelo: seta roja, cristal aurora, medusa celeste, tótem
+solar y flor cósmica. El repositorio incluye:
 
 - la experiencia web con WebXR y ARCore para Chrome en Android;
 - un fallback web con AR Quick Look para Safari en iPhone y iPad;
@@ -13,19 +14,29 @@ mesa o el suelo. El repositorio incluye:
 
 1. Abre la aplicación mediante HTTPS en un Android compatible con ARCore o en
    Safari desde un iPhone/iPad compatible con ARKit.
-2. Pulsa **Ver seta en AR** y concede permiso para usar la cámara.
+2. Pulsa **Ver modelos en AR** y concede permiso para usar la cámara.
 3. Mueve lentamente el teléfono hasta que la retícula confirme una superficie horizontal.
 4. Toca la pantalla para fijar una malla cian de 1 × 1 metro sobre la superficie.
-5. Toca de nuevo para colocar la seta; la malla permanecerá visible.
+5. Elige uno de los cinco modelos para colocarlo; la malla permanecerá visible.
 6. Arrastra con un dedo para girar en dos ejes o gira dos dedos para el tercer eje.
 
-La seta no admite desplazamiento libre: permanece fijada a la superficie. Su tamaño solo cambia mediante el control de escala. Un anchor de WebXR mantiene la ubicación física cuando el dispositivo lo soporta; en caso contrario se conserva la pose local detectada.
+El modelo no admite desplazamiento libre: permanece fijado a la superficie. Su tamaño solo cambia mediante el control de escala. Un anchor de WebXR mantiene la ubicación física cuando el dispositivo lo soporta; en caso contrario se conserva la pose local detectada.
 
-La experiencia solicita el mapa de profundidad GPU de WebXR para que los objetos reales cercanos oculten tanto la seta como la malla. Esta oclusión depende de que Chrome, ARCore y el hardware del dispositivo ofrezcan `depth-sensing`; durante la sesión se muestra si está activa o no disponible.
+La experiencia solicita el mapa de profundidad GPU de WebXR para que los objetos reales cercanos oculten tanto el modelo como la malla. Esta oclusión depende de que Chrome, ARCore y el hardware del dispositivo ofrezcan `depth-sensing`; durante la sesión se muestra si está activa o no disponible.
 
-Una vez colocada, el deslizador **Corte vertical** permite seccionar la seta de izquierda a derecha.
+Una vez colocado, el deslizador **Corte vertical** permite seccionar el modelo de izquierda a derecha.
 El control vertical **Tamaño** escala el modelo uniformemente entre 1 cm y 1 m.
-Las esporas forman parte del modelo y responden a su rotación, escala y corte.
+Cada pieza incorpora partículas con color y movimiento propios que responden a su rotación, escala y corte.
+
+## Interacciones de los modelos
+
+Cada modelo dispone de una acción exclusiva —liberar esporas, cargar energía,
+dar impulso, despertar el tótem o florecer— y de una ficha **Descubrir**. Las
+acciones pueden repetirse, refuerzan temporalmente las partículas y muestran
+un punto luminoso sobre la pieza. El sonido sintetizado es opcional y comienza
+desactivado; los móviles compatibles reciben una vibración breve. Los botones
+se bloquean mientras se reproduce cada animación para evitar activaciones
+superpuestas.
 
 ## Panorama 360°
 
@@ -58,8 +69,8 @@ Las pruebas se ejecutan con `pnpm test` y la compilación de producción con `pn
 desde los archivos de publicación de ESO. El flujo de GitHub Pages ejecuta este
 paso automáticamente para la vista de prueba de la ampliación 360.
 
-`pnpm generate:assets` genera los códigos QR, el USDZ de iOS normalizado a
-20 cm y los iconos compartidos. Para compilar la aplicación nativa consulta
+`pnpm generate:assets` genera los cinco GLB web, los códigos QR, el USDZ de la
+seta para iOS normalizado a 20 cm y los iconos compartidos. Para compilar la aplicación nativa consulta
 [`ios/README.md`](ios/README.md); Xcode y las pruebas AR requieren macOS y un
 dispositivo físico.
 

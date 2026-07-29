@@ -147,21 +147,37 @@ describe('escala uniforme del modelo', () => {
 });
 
 describe('selección explícita de modelos', () => {
-  it('solo coloca la seta después de haber fijado la malla', () => {
+  it('coloca cualquiera de los modelos cargados después de fijar la malla', () => {
+    const effect = { reset: vi.fn(), points: { visible: false } };
+    const scene = { visible: false };
     const experience = Object.create(XRExperience.prototype) as {
       state: string;
-      mushroomPivot: { visible: boolean };
-      sporeField: { reset: ReturnType<typeof vi.fn>; points: { visible: boolean } };
+      loadedModels: Map<string, { scene: typeof scene; bounds: object; effect: typeof effect }>;
+      activeModelId: string | null;
+      modelBounds: { copy: ReturnType<typeof vi.fn> };
+      modelPivot: {
+        visible: boolean;
+        quaternion: { identity: ReturnType<typeof vi.fn> };
+      };
+      modelInteraction: { showModel: ReturnType<typeof vi.fn> };
       lastFrameTime: number | null;
       setState: (state: string) => void;
       setSliceProgress: ReturnType<typeof vi.fn>;
       setModelSizeMeters: ReturnType<typeof vi.fn>;
-      placeModel: (modelId: 'mushroom') => boolean;
+      placeModel: (modelId: 'mushroom' | 'crystal') => boolean;
     };
 
     experience.state = 'surfacePlaced';
-    experience.mushroomPivot = { visible: false };
-    experience.sporeField = { reset: vi.fn(), points: { visible: false } };
+    experience.loadedModels = new Map([
+      ['crystal', { scene, bounds: {}, effect }],
+    ]);
+    experience.activeModelId = null;
+    experience.modelBounds = { copy: vi.fn() };
+    experience.modelPivot = {
+      visible: false,
+      quaternion: { identity: vi.fn() },
+    };
+    experience.modelInteraction = { showModel: vi.fn() };
     experience.lastFrameTime = 123;
     experience.setSliceProgress = vi.fn();
     experience.setModelSizeMeters = vi.fn();
@@ -169,10 +185,13 @@ describe('selección explícita de modelos', () => {
       experience.state = state;
     };
 
-    expect(experience.placeModel('mushroom')).toBe(true);
-    expect(experience.mushroomPivot.visible).toBe(true);
-    expect(experience.sporeField.points.visible).toBe(true);
-    expect(experience.sporeField.reset).toHaveBeenCalledOnce();
+    expect(experience.placeModel('crystal')).toBe(true);
+    expect(scene.visible).toBe(true);
+    expect(experience.modelPivot.visible).toBe(true);
+    expect(experience.modelPivot.quaternion.identity).toHaveBeenCalledOnce();
+    expect(effect.points.visible).toBe(true);
+    expect(effect.reset).toHaveBeenCalledOnce();
+    expect(experience.modelInteraction.showModel).toHaveBeenCalledOnce();
     expect(experience.setSliceProgress).toHaveBeenCalledWith(0);
     expect(experience.setModelSizeMeters).toHaveBeenCalledWith(DEFAULT_MODEL_SIZE_METERS);
     expect(experience.state).toBe('placed');
@@ -181,9 +200,11 @@ describe('selección explícita de modelos', () => {
   it('ignora la selección si todavía no hay una malla colocada', () => {
     const experience = Object.create(XRExperience.prototype) as {
       state: string;
+      loadedModels: Map<string, never>;
       placeModel: (modelId: 'mushroom') => boolean;
     };
     experience.state = 'scanning';
+    experience.loadedModels = new Map<string, never>();
 
     expect(experience.placeModel('mushroom')).toBe(false);
   });

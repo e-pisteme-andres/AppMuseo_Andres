@@ -38,4 +38,17 @@ describe('campo de esporas', () => {
     expect(spores.points.parent).toBe(model);
     expect(spores.points.material.uniforms.sliceX.value).toBe(0.025);
   });
+
+  it('refuerza temporalmente las partículas al activar una interacción', () => {
+    const spores = new SporeField(6);
+
+    spores.triggerBurst();
+    expect(spores.points.material.uniforms.burst.value).toBe(1);
+
+    spores.update(1, 0.05);
+    expect(spores.points.material.uniforms.burst.value).toBeLessThan(1);
+
+    spores.reset();
+    expect(spores.points.material.uniforms.burst.value).toBe(0);
+  });
 });

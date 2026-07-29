@@ -1,8 +1,20 @@
 import * as THREE from 'three';
+import type { ParticleDirection } from './models';
 
 const DEFAULT_SPORE_COUNT = 80;
 const TOP_HEIGHT = 0.195;
 const BOTTOM_HEIGHT = 0.012;
+
+export interface ParticleFieldOptions {
+  count?: number;
+  seed?: number;
+  primaryColor?: number;
+  secondaryColor?: number;
+  direction?: ParticleDirection;
+  radius?: number;
+  bottom?: number;
+  top?: number;
+}
 
 function createSeededRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -25,9 +37,19 @@ export class SporeField {
   private readonly fallSpeeds: Float32Array;
   private readonly driftAmounts: Float32Array;
   private readonly phases: Float32Array;
+  private readonly direction: ParticleDirection;
+  private readonly bottomHeight: number;
+  private readonly topHeight: number;
+  private burstStrength = 0;
 
-  constructor(count = DEFAULT_SPORE_COUNT) {
-    const random = createSeededRandom(0x51a7e);
+  constructor(options: number | ParticleFieldOptions = DEFAULT_SPORE_COUNT) {
+    const config = typeof options === 'number' ? { count: options } : options;
+    const count = config.count ?? DEFAULT_SPORE_COUNT;
+    const random = createSeededRandom(config.seed ?? 0x51a7e);
+    const radiusLimit = config.radius ?? 0.085;
+    this.bottomHeight = config.bottom ?? BOTTOM_HEIGHT;
+    this.topHeight = config.top ?? TOP_HEIGHT;
+    this.direction = config.direction ?? 'fall';
     this.positions = new Float32Array(count * 3);
     this.initialHeights = new Float32Array(count);
     this.baseX = new Float32Array(count);
@@ -39,11 +61,12 @@ export class SporeField {
 
     for (let index = 0; index < count; index += 1) {
       const angle = random() * Math.PI * 2;
-      const radius = Math.sqrt(random()) * 0.085;
+      const radius = Math.sqrt(random()) * radiusLimit;
       const offset = index * 3;
       this.baseX[index] = Math.cos(angle) * radius;
       this.baseZ[index] = Math.sin(angle) * radius;
-      this.initialHeights[index] = BOTTOM_HEIGHT + random() * (TOP_HEIGHT - BOTTOM_HEIGHT);
+      this.initialHeights[index] =
+        this.bottomHeight + random() * (this.topHeight - this.bottomHeight);
       this.fallSpeeds[index] = 0.012 + random() * 0.018;
       this.driftAmounts[index] = 0.004 + random() * 0.009;
       this.phases[index] = random() * Math.PI * 2;
@@ -63,11 +86,15 @@ export class SporeField {
       uniforms: {
         time: { value: 0 },
         sliceX: { value: -1 },
+        primaryColor: { value: new THREE.Color(config.primaryColor ?? 0x14e638) },
+        secondaryColor: { value: new THREE.Color(config.secondaryColor ?? 0xccff94) },
+        burst: { value: 0 },
       },
       vertexShader: `
         attribute float sporeSize;
         attribute float sporePhase;
         uniform float time;
+        uniform float burst;
         varying float pulse;
         varying float particleLocalX;
 
@@ -75,13 +102,16 @@ export class SporeField {
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           float objectScale = length(vec3(modelMatrix[0]));
           gl_Position = projectionMatrix * mvPosition;
-          gl_PointSize = max(2.5, sporeSize * objectScale * (520.0 / max(0.12, -mvPosition.z)));
+          gl_PointSize = max(2.5, sporeSize * (1.0 + burst * 1.8) * objectScale * (520.0 / max(0.12, -mvPosition.z)));
           pulse = 0.72 + 0.28 * sin(time * 2.1 + sporePhase);
           particleLocalX = position.x;
         }
       `,
       fragmentShader: `
         uniform float sliceX;
+        uniform vec3 primaryColor;
+        uniform vec3 secondaryColor;
+        uniform float burst;
         varying float pulse;
         varying float particleLocalX;
 
@@ -93,8 +123,8 @@ export class SporeField {
 
           float glow = smoothstep(0.5, 0.05, distanceToCenter);
           float core = smoothstep(0.2, 0.0, distanceToCenter);
-          vec3 green = mix(vec3(0.08, 0.9, 0.22), vec3(0.8, 1.0, 0.58), core);
-          gl_FragColor = vec4(green, glow * pulse);
+          vec3 particleColor = mix(primaryColor, secondaryColor, core);
+          gl_FragColor = vec4(particleColor, glow * pulse * (1.0 + burst * 0.45));
         }
       `,
       transparent: true,
@@ -104,7 +134,7 @@ export class SporeField {
     });
 
     this.points = new THREE.Points(geometry, material);
-    this.points.name = 'Esporas_verdes';
+    this.points.name = 'Particulas_del_modelo';
     this.points.frustumCulled = false;
     this.points.visible = false;
   }
@@ -117,19 +147,41 @@ export class SporeField {
     this.points.material.uniforms.sliceX.value = positionX;
   }
 
+  triggerBurst(): void {
+    this.burstStrength = 1;
+    this.points.material.uniforms.burst.value = 1;
+  }
+
   update(elapsedSeconds: number, deltaSeconds: number): void {
     const safeDelta = Math.min(Math.max(deltaSeconds, 0), 0.05);
+    this.burstStrength = Math.max(0, this.burstStrength - safeDelta * 0.42);
+    this.points.material.uniforms.burst.value = this.burstStrength;
 
     for (let index = 0; index < this.fallSpeeds.length; index += 1) {
       const offset = index * 3;
-      let height = this.positions[offset + 1] - this.fallSpeeds[index] * safeDelta;
-      if (height < BOTTOM_HEIGHT) height = TOP_HEIGHT;
+      const verticalDirection = this.direction === 'fall' ? -1 : 1;
+      let height =
+        this.positions[offset + 1] + this.fallSpeeds[index] * safeDelta * verticalDirection;
+      if (height < this.bottomHeight) height = this.topHeight;
+      if (height > this.topHeight) height = this.bottomHeight;
 
       const phase = this.phases[index];
       const drift = this.driftAmounts[index];
-      this.positions[offset] = this.baseX[index] + Math.sin(elapsedSeconds * 0.75 + phase) * drift;
+      const orbitMultiplier = this.direction === 'orbit' ? 3.2 : 1;
+      const burstMultiplier = 1 + this.burstStrength * 4.5;
+      this.positions[offset] =
+        this.baseX[index] +
+        Math.sin(elapsedSeconds * 0.75 * orbitMultiplier + phase) *
+          drift *
+          orbitMultiplier *
+          burstMultiplier;
       this.positions[offset + 1] = height;
-      this.positions[offset + 2] = this.baseZ[index] + Math.cos(elapsedSeconds * 0.62 + phase * 1.37) * drift;
+      this.positions[offset + 2] =
+        this.baseZ[index] +
+        Math.cos(elapsedSeconds * 0.62 * orbitMultiplier + phase * 1.37) *
+          drift *
+          orbitMultiplier *
+          burstMultiplier;
     }
 
     this.points.geometry.attributes.position.needsUpdate = true;
@@ -145,5 +197,7 @@ export class SporeField {
     }
     this.points.geometry.attributes.position.needsUpdate = true;
     this.points.material.uniforms.time.value = 0;
+    this.burstStrength = 0;
+    this.points.material.uniforms.burst.value = 0;
   }
 }
