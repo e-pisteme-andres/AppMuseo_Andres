@@ -7,6 +7,8 @@ import {
   type ArAvailabilityCode,
 } from './ar/access-preflight';
 import { ModelPreview } from './ar/model-preview';
+import { findModelDefinition, MODEL_CATALOG, type ModelId } from './ar/models';
+import { playModelSound } from './ar/model-sound';
 import { selectARMode, supportsAppleQuickLook, type ARMode } from './ar/platform';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
@@ -53,13 +55,13 @@ app.innerHTML = `
       <div class="hero-grid">
         <div class="hero-copy">
           <p class="eyebrow">Experiencia AR · Android + iOS</p>
-          <h1 id="page-title">Una seta.<br><span>En tu espacio.</span></h1>
-          <p class="intro">Coloca una seta tridimensional de 20 cm sobre una mesa o el suelo y obsérvala desde cualquier ángulo.</p>
+          <h1 id="page-title">Cinco formas.<br><span>En tu espacio.</span></h1>
+          <p class="intro">Elige entre cinco modelos tridimensionales con efectos y colócalos sobre una mesa o el suelo para observarlos desde cualquier ángulo.</p>
 
           <ol class="steps" aria-label="Cómo funciona">
             <li><span>01</span><div><strong>Activa la cámara</strong><small>Te informaremos antes de que el navegador solicite permiso.</small></div></li>
             <li><span>02</span><div><strong>Busca una superficie</strong><small>Mueve el móvil lentamente sobre una mesa o el suelo.</small></div></li>
-            <li><span>03</span><div><strong>Malla y forma</strong><small>Fija la malla y elige la seta desde el menú lateral.</small></div></li>
+            <li><span>03</span><div><strong>Malla y forma</strong><small>Fija la malla y elige uno de los cinco modelos del menú lateral.</small></div></li>
           </ol>
 
           <div class="hero-actions">
@@ -178,7 +180,7 @@ app.innerHTML = `
     <div id="xr-overlay" class="xr-overlay">
       <div class="xr-topbar">
         <div class="xr-status-stack">
-          <div class="xr-badge"><span class="live-dot"></span><span id="experience-badge-label">Seta AR</span></div>
+          <div class="xr-badge"><span class="live-dot"></span><span id="experience-badge-label">Museo AR</span></div>
           <div class="xr-occlusion" id="xr-occlusion" data-state="checking">Oclusión · comprobando</div>
         </div>
         <button class="close-button" id="close-ar" type="button" data-xr-control aria-label="Cerrar realidad aumentada">Salir</button>
@@ -191,6 +193,27 @@ app.innerHTML = `
         <span class="gesture-finger"></span>
         Arrastra con uno o dos dedos para rotar
       </div>
+      <section class="model-actions" id="model-actions" data-xr-control aria-label="Acciones del modelo" hidden>
+        <div class="model-actions-heading">
+          <span class="model-actions-dot" aria-hidden="true"></span>
+          <strong id="model-actions-name">Modelo interactivo</strong>
+        </div>
+        <button class="model-action-primary" id="model-action-primary" type="button">
+          <span aria-hidden="true">✦</span>
+          <span id="model-action-label">Activar modelo</span>
+        </button>
+        <div class="model-action-secondary">
+          <button id="model-action-repeat" type="button" aria-label="Repetir el efecto del modelo">↻ <span>Repetir</span></button>
+          <button id="model-action-discover" type="button">◎ <span>Descubrir</span></button>
+          <button id="model-sound-toggle" type="button" aria-pressed="false">♪ <span id="model-sound-label">Sonido: no</span></button>
+        </div>
+      </section>
+      <aside class="model-discovery-card" id="model-discovery-card" data-xr-control role="dialog" aria-labelledby="model-discovery-title" hidden>
+        <button class="model-discovery-close" id="model-discovery-close" type="button" aria-label="Cerrar información">×</button>
+        <span>Pieza interactiva</span>
+        <strong id="model-discovery-title">Modelo</strong>
+        <p id="model-discovery-description"></p>
+      </aside>
       <div class="xr-cut-control" id="xr-cut-control" data-xr-control hidden>
         <label for="model-cut">
           <span>Corte vertical</span>
@@ -224,12 +247,16 @@ app.innerHTML = `
         </div>
         <div class="xr-model-panel" id="forms-panel" aria-label="Formas disponibles" hidden>
           <span class="xr-panel-title">Formas disponibles</span>
-          <button class="xr-model-option" id="place-mushroom" type="button">
-            <span class="xr-model-preview">
-              <canvas id="mushroom-preview" width="136" height="136" aria-hidden="true"></canvas>
-            </span>
-            <strong>Seta roja</strong>
-          </button>
+          ${MODEL_CATALOG.map(
+            (model) => `
+              <button class="xr-model-option" id="place-${model.id}" type="button" data-model-id="${model.id}">
+                <span class="xr-model-preview">
+                  <canvas id="${model.id}-preview" width="136" height="136" aria-hidden="true"></canvas>
+                </span>
+                <strong>${model.name}</strong>
+              </button>
+            `,
+          ).join('')}
         </div>
       </aside>
     </div>
@@ -304,6 +331,18 @@ const experienceBadgeLabel = getRequiredElement<HTMLElement>('#experience-badge-
 const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
+const modelActions = getRequiredElement<HTMLElement>('#model-actions');
+const modelActionsName = getRequiredElement<HTMLElement>('#model-actions-name');
+const modelActionPrimary = getRequiredElement<HTMLButtonElement>('#model-action-primary');
+const modelActionLabel = getRequiredElement<HTMLElement>('#model-action-label');
+const modelActionRepeat = getRequiredElement<HTMLButtonElement>('#model-action-repeat');
+const modelActionDiscover = getRequiredElement<HTMLButtonElement>('#model-action-discover');
+const modelSoundToggle = getRequiredElement<HTMLButtonElement>('#model-sound-toggle');
+const modelSoundLabel = getRequiredElement<HTMLElement>('#model-sound-label');
+const modelDiscoveryCard = getRequiredElement<HTMLElement>('#model-discovery-card');
+const modelDiscoveryClose = getRequiredElement<HTMLButtonElement>('#model-discovery-close');
+const modelDiscoveryTitle = getRequiredElement<HTMLElement>('#model-discovery-title');
+const modelDiscoveryDescription = getRequiredElement<HTMLElement>('#model-discovery-description');
 const cutControl = getRequiredElement<HTMLElement>('#xr-cut-control');
 const modelCutInput = getRequiredElement<HTMLInputElement>('#model-cut');
 const modelCutValue = getRequiredElement<HTMLOutputElement>('#model-cut-value');
@@ -315,8 +354,18 @@ const xrLibrary = getRequiredElement<HTMLElement>('#xr-library');
 const formsToggle = getRequiredElement<HTMLButtonElement>('#forms-toggle');
 const formsPanel = getRequiredElement<HTMLElement>('#forms-panel');
 const handsToggle = getRequiredElement<HTMLButtonElement>('#hands-toggle');
-const placeMushroomButton = getRequiredElement<HTMLButtonElement>('#place-mushroom');
-const mushroomPreviewCanvas = getRequiredElement<HTMLCanvasElement>('#mushroom-preview');
+const modelButtons = new Map(
+  MODEL_CATALOG.map((model) => [
+    model.id,
+    getRequiredElement<HTMLButtonElement>(`#place-${model.id}`),
+  ]),
+);
+const modelPreviewCanvases = new Map(
+  MODEL_CATALOG.map((model) => [
+    model.id,
+    getRequiredElement<HTMLCanvasElement>(`#${model.id}-preview`),
+  ]),
+);
 const openPanoramaButton = getRequiredElement<HTMLButtonElement>('#open-panorama');
 const closePanoramaButton = getRequiredElement<HTMLButtonElement>('#close-panorama');
 const panoramaView = getRequiredElement<HTMLElement>('#panorama-view');
@@ -582,10 +631,18 @@ panoramaFullscreenButton.addEventListener('click', () => {
 });
 document.addEventListener('fullscreenchange', updatePanoramaFullscreenButton);
 
-const mushroomPreview = new ModelPreview(mushroomPreviewCanvas);
+const modelPreviews = new Map(
+  MODEL_CATALOG.map((model) => [
+    model.id,
+    new ModelPreview(modelPreviewCanvases.get(model.id)!),
+  ]),
+);
 let arAvailability: ArAvailability | null = null;
 let experienceModelLoaded = false;
-let previewModelLoaded = false;
+let previewModelsLoaded = false;
+let activeModelId: ModelId | null = null;
+let soundEnabled = false;
+let modelActionBusy = false;
 
 const AVAILABILITY_COPY: Record<
   ArAvailabilityCode,
@@ -626,7 +683,7 @@ const AVAILABILITY_COPY: Record<
 function closeModelMenus(): void {
   formsToggle.setAttribute('aria-expanded', 'false');
   formsPanel.hidden = true;
-  mushroomPreview.stop();
+  modelPreviews.forEach((preview) => preview.stop());
 }
 
 function resetModelControls(): void {
@@ -634,6 +691,38 @@ function resetModelControls(): void {
   modelCutValue.value = '0%';
   modelSizeInput.value = '20';
   modelSizeValue.value = '20 cm';
+}
+
+function setModelActionBusy(busy: boolean): void {
+  modelActionBusy = busy;
+  modelActionPrimary.disabled = busy;
+  modelActionRepeat.disabled = busy;
+  modelActionPrimary.setAttribute('aria-busy', String(busy));
+  if (activeModelId) {
+    modelActionLabel.textContent = busy
+      ? 'Activando…'
+      : findModelDefinition(activeModelId).actionLabel;
+  }
+}
+
+function configureModelActions(modelId: ModelId): void {
+  const model = findModelDefinition(modelId);
+  activeModelId = modelId;
+  modelActionsName.textContent = model.name;
+  modelActionLabel.textContent = model.actionLabel;
+  modelDiscoveryTitle.textContent = model.name;
+  modelDiscoveryDescription.textContent = model.description;
+  modelDiscoveryCard.hidden = true;
+  setModelActionBusy(false);
+}
+
+function resetInteractiveControls(): void {
+  activeModelId = null;
+  modelActionBusy = false;
+  modelActionPrimary.disabled = false;
+  modelActionRepeat.disabled = false;
+  modelActionPrimary.setAttribute('aria-busy', 'false');
+  modelDiscoveryCard.hidden = true;
 }
 
 function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
@@ -645,7 +734,7 @@ function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
 
   if (active) {
     const virtualMode = mode === 'virtual';
-    experienceBadgeLabel.textContent = virtualMode ? 'Espacio virtual' : 'Seta AR';
+    experienceBadgeLabel.textContent = virtualMode ? 'Espacio virtual' : 'Museo AR';
     xrOcclusion.hidden = virtualMode;
     handsToggle.hidden = virtualMode;
     xrLibrary.setAttribute(
@@ -658,6 +747,7 @@ function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
     );
   } else {
     resetModelControls();
+    resetInteractiveControls();
     closeModelMenus();
   }
 
@@ -675,6 +765,8 @@ function updateExperienceState(
   xrMessage.textContent = message;
   xrGuide.dataset.state = state;
   gestureHint.hidden = state !== 'placed';
+  modelActions.hidden = state !== 'placed';
+  if (state !== 'placed') modelDiscoveryCard.hidden = true;
   cutControl.hidden = state !== 'placed';
   scaleControl.hidden = state !== 'placed';
   xrLibrary.hidden = state !== 'surfacePlaced';
@@ -690,7 +782,7 @@ function updateExperienceState(
     startLabel.textContent = 'Revisar acceso a cámara';
   } else if (mode === 'ar' && state === 'ready') {
     startButton.disabled = false;
-    startLabel.textContent = 'Ver seta en AR';
+    startLabel.textContent = 'Ver modelos en AR';
   }
 
   checkpoint(`${mode}:state:${state}`, 'landing');
@@ -751,10 +843,16 @@ async function checkCompatibility(): Promise<void> {
         quickLookSupported: supportsAppleQuickLook(),
       });
 
-  if (!previewModelLoaded) {
+  if (!previewModelsLoaded) {
     try {
-      await mushroomPreview.load(`${import.meta.env.BASE_URL}models/mushroom.glb`);
-      previewModelLoaded = true;
+      await Promise.all(
+        MODEL_CATALOG.map((model) =>
+          modelPreviews
+            .get(model.id)!
+            .load(`${import.meta.env.BASE_URL}models/${model.file}`),
+        ),
+      );
+      previewModelsLoaded = true;
     } catch {
       // El modelo principal muestra el error si el recurso tampoco puede cargarse.
     }
@@ -777,7 +875,7 @@ async function checkCompatibility(): Promise<void> {
     compatibility.textContent = 'Compatible · ARKit mediante AR Quick Look en iPhone y iPad';
     compatibility.dataset.error = 'false';
     startButton.disabled = false;
-    startLabel.textContent = 'Ver seta en AR';
+    startLabel.textContent = 'Ver modelos en AR';
     return;
   }
 
@@ -785,7 +883,7 @@ async function checkCompatibility(): Promise<void> {
   compatibility.textContent = copy.summary;
   compatibility.dataset.error = String(!arAvailability.canStart);
   startButton.disabled = false;
-  startLabel.textContent = arAvailability.canStart ? 'Ver seta en AR' : 'Ver opciones de AR';
+  startLabel.textContent = arAvailability.canStart ? 'Ver modelos en AR' : 'Ver opciones de AR';
 }
 
 function setCameraCheck(state: string, title: string, detail: string): void {
@@ -1005,11 +1103,31 @@ closeButton.addEventListener('click', (event) => {
 xrLibrary.addEventListener('beforexrselect', (event) => event.preventDefault());
 cutControl.addEventListener('beforexrselect', (event) => event.preventDefault());
 scaleControl.addEventListener('beforexrselect', (event) => event.preventDefault());
+modelActions.addEventListener('beforexrselect', (event) => event.preventDefault());
+modelDiscoveryCard.addEventListener('beforexrselect', (event) => event.preventDefault());
 function getActiveModelExperience(): Pick<
   XRExperience,
-  'placeModel' | 'setSliceProgress' | 'setModelSizeMeters'
+  'placeModel' | 'setSliceProgress' | 'setModelSizeMeters' | 'playModelAction'
 > {
   return activeExperienceMode === 'virtual' ? virtualExperience : experience;
+}
+
+async function runActiveModelAction(source: 'primary' | 'repeat'): Promise<void> {
+  if (!activeModelId || modelActionBusy) return;
+  const definition = findModelDefinition(activeModelId);
+  setModelActionBusy(true);
+  modelDiscoveryCard.hidden = true;
+  if (soundEnabled) playModelSound(activeModelId);
+  navigator.vibrate?.([28, 42, 72]);
+  xrMessage.textContent = `${definition.actionLabel}…`;
+  checkpoint(`${activeExperienceMode ?? 'ar'}:model-action:${activeModelId}:${source}`, 'landing');
+
+  try {
+    const completed = await getActiveModelExperience().playModelAction();
+    if (completed) xrMessage.textContent = definition.actionStatus;
+  } finally {
+    setModelActionBusy(false);
+  }
 }
 
 modelCutInput.addEventListener('input', () => {
@@ -1024,13 +1142,35 @@ modelSizeInput.addEventListener('input', () => {
   getActiveModelExperience().setModelSizeMeters(sizeCentimeters / 100);
   checkpoint(`${activeExperienceMode ?? 'ar'}:model-size`, 'landing');
 });
+modelActionPrimary.addEventListener('click', () => {
+  void runActiveModelAction('primary');
+});
+modelActionRepeat.addEventListener('click', () => {
+  void runActiveModelAction('repeat');
+});
+modelActionDiscover.addEventListener('click', () => {
+  if (!activeModelId) return;
+  modelDiscoveryCard.hidden = false;
+  navigator.vibrate?.(18);
+  checkpoint(`${activeExperienceMode ?? 'ar'}:model-discover:${activeModelId}`, 'landing');
+});
+modelDiscoveryClose.addEventListener('click', () => {
+  modelDiscoveryCard.hidden = true;
+  modelActionDiscover.focus();
+});
+modelSoundToggle.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  modelSoundToggle.setAttribute('aria-pressed', String(soundEnabled));
+  modelSoundLabel.textContent = `Sonido: ${soundEnabled ? 'sí' : 'no'}`;
+  checkpoint(`${activeExperienceMode ?? 'ar'}:model-sound:${soundEnabled ? 'on' : 'off'}`, 'landing');
+});
 formsToggle.addEventListener('click', () => {
   const willOpen = formsPanel.hidden;
   closeModelMenus();
   if (willOpen) {
     formsPanel.hidden = false;
     formsToggle.setAttribute('aria-expanded', 'true');
-    mushroomPreview.start();
+    modelPreviews.forEach((preview) => preview.start());
   }
   checkpoint(
     `${activeExperienceMode ?? 'ar'}:${willOpen ? 'forms-open' : 'forms-close'}`,
@@ -1043,10 +1183,13 @@ handsToggle.addEventListener('click', () => {
   checkpoint('ar:hands-unavailable', 'landing');
 });
 
-placeMushroomButton.addEventListener('click', () => {
-  if (!getActiveModelExperience().placeModel('mushroom')) return;
-  closeModelMenus();
-  checkpoint(`${activeExperienceMode ?? 'ar'}:model-placed`, 'landing');
+modelButtons.forEach((button, modelId) => {
+  button.addEventListener('click', () => {
+    if (!getActiveModelExperience().placeModel(modelId as ModelId)) return;
+    configureModelActions(modelId as ModelId);
+    closeModelMenus();
+    checkpoint(`${activeExperienceMode ?? 'ar'}:model-placed:${modelId}`, 'landing');
+  });
 });
 
 function openPanorama(recordAction = true): void {

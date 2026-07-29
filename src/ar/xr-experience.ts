@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { isCameraAccessBlockedError } from './access-preflight';
+import { ModelInteraction } from './model-interaction';
+import { findModelDefinition, MODEL_CATALOG, type ModelId } from './models';
 import { DEPTH_SENSING_OPTIONS, getOcclusionState, type OcclusionState } from './occlusion';
 import { applyDragRotation, applyRollRotation, angleBetweenPointers, normalizeAngleDelta } from './rotation';
 import { SporeField } from './spores';
@@ -23,10 +25,15 @@ interface XRExperienceOptions {
   onOcclusionChange: (state: OcclusionState) => void;
 }
 
+interface LoadedModel {
+  scene: THREE.Object3D;
+  bounds: THREE.Box3;
+  effect: SporeField;
+}
+
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
 const PLACEABLE_MESSAGE = 'Superficie detectada. Toca la pantalla para colocar la malla.';
 const SURFACE_PLACED_MESSAGE = 'Malla colocada. Elige una forma en el menú de la izquierda.';
-const PLACED_MESSAGE = 'Seta colocada. Arrastra para girarla; la malla permanecerá visible.';
 const SURFACE_SIZE_METERS = 1;
 const SURFACE_DIVISIONS = 10;
 const SLICE_PADDING_RATIO = 0.02;
@@ -58,8 +65,9 @@ export class XRExperience {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera();
   private readonly anchorRoot = new THREE.Group();
-  private readonly mushroomPivot = new THREE.Group();
-  private readonly sporeField = new SporeField();
+  private readonly modelPivot = new THREE.Group();
+  private readonly loadedModels = new Map<ModelId, LoadedModel>();
+  private readonly modelInteraction = new ModelInteraction();
   private readonly surfaceMesh = new THREE.Group();
   private readonly surfaceFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly surfaceGrid: THREE.GridHelper;
@@ -84,6 +92,8 @@ export class XRExperience {
   private lastFrameTime: number | null = null;
   private sliceProgress = 0;
   private modelSizeMeters = DEFAULT_MODEL_SIZE_METERS;
+  private modelLoadPromise: Promise<void> | null = null;
+  private activeModelId: ModelId | null = null;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
@@ -103,11 +113,11 @@ export class XRExperience {
     this.scene.add(keyLight);
 
     this.anchorRoot.matrixAutoUpdate = false;
-    this.anchorRoot.add(this.surfaceMesh, this.mushroomPivot);
-    this.sporeField.attachTo(this.mushroomPivot);
+    this.anchorRoot.add(this.surfaceMesh, this.modelPivot);
+    this.modelPivot.add(this.modelInteraction.hotspot);
     this.scene.add(this.anchorRoot);
-    this.mushroomPivot.position.y = 0.1;
-    this.mushroomPivot.visible = false;
+    this.modelPivot.position.y = 0.1;
+    this.modelPivot.visible = false;
 
     this.surfaceFill = new THREE.Mesh(
       new THREE.PlaneGeometry(SURFACE_SIZE_METERS, SURFACE_SIZE_METERS).rotateX(-Math.PI / 2),
@@ -146,30 +156,46 @@ export class XRExperience {
     options.overlay.addEventListener('pointercancel', this.onPointerUp);
   }
 
-  async loadModel(): Promise<void> {
+  loadModel(): Promise<void> {
+    if (this.loadedModels.size === MODEL_CATALOG.length) return Promise.resolve();
+    if (this.modelLoadPromise) return this.modelLoadPromise;
+
     const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/mushroom.glb`);
-    this.modelBounds.setFromObject(gltf.scene);
-    gltf.scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((material) => {
-          material.clippingPlanes = [this.slicePlane];
-          material.clipShadows = true;
-          material.needsUpdate = true;
+    this.modelLoadPromise = Promise.all(
+      MODEL_CATALOG.map(async (definition) => {
+        const gltf = await loader.loadAsync(
+          `${import.meta.env.BASE_URL}models/${definition.file}`,
+        );
+        const bounds = new THREE.Box3().setFromObject(gltf.scene);
+        gltf.scene.visible = false;
+        gltf.scene.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return;
+          child.castShadow = true;
+          child.receiveShadow = true;
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((material) => {
+            material.clippingPlanes = [this.slicePlane];
+            material.clipShadows = true;
+            material.needsUpdate = true;
+          });
         });
-      }
-    });
-    this.mushroomPivot.add(gltf.scene);
-    this.updateModelScale();
-    this.updateSlicePlane();
+        const effect = new SporeField(definition.effect);
+        effect.attachTo(this.modelPivot);
+        this.modelPivot.add(gltf.scene);
+        this.loadedModels.set(definition.id, { scene: gltf.scene, bounds, effect });
+      }),
+    )
+      .then(() => undefined)
+      .finally(() => {
+        this.modelLoadPromise = null;
+      });
+
+    return this.modelLoadPromise;
   }
 
-  placeModel(modelId: 'mushroom'): boolean {
-    if (modelId !== 'mushroom' || this.state !== 'surfacePlaced') return false;
-    this.commitMushroomPlacement();
+  placeModel(modelId: ModelId): boolean {
+    if (!this.loadedModels.has(modelId) || this.state !== 'surfacePlaced') return false;
+    this.commitModelPlacement(modelId);
     return true;
   }
 
@@ -185,6 +211,11 @@ export class XRExperience {
     );
     this.updateModelScale();
     this.updateSlicePlane();
+  }
+
+  playModelAction(): Promise<boolean> {
+    if (this.state !== 'placed') return Promise.resolve(false);
+    return this.modelInteraction.trigger();
   }
 
   async start(): Promise<void> {
@@ -314,7 +345,11 @@ export class XRExperience {
         this.anchorRoot.matrix.fromArray(anchorPose.transform.matrix);
         if (this.trackingLost) {
           this.trackingLost = false;
-          this.emitMessage(this.state === 'surfacePlaced' ? SURFACE_PLACED_MESSAGE : PLACED_MESSAGE);
+          this.emitMessage(
+            this.state === 'surfacePlaced'
+              ? SURFACE_PLACED_MESSAGE
+              : this.getPlacedMessage(),
+          );
         }
       } else if (!this.trackingLost) {
         this.trackingLost = true;
@@ -325,7 +360,8 @@ export class XRExperience {
     if (this.state === 'placed') {
       const elapsedSeconds = time * 0.001;
       const deltaSeconds = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) * 0.001;
-      this.sporeField.update(elapsedSeconds, deltaSeconds);
+      this.getActiveModel()?.effect.update(elapsedSeconds, deltaSeconds);
+      this.modelInteraction.update(time);
       this.lastFrameTime = time;
       this.updateSlicePlane();
     }
@@ -401,15 +437,30 @@ export class XRExperience {
     if (this.session && !this.ending) this.anchor = anchor;
   }
 
-  private commitMushroomPlacement(): void {
+  private commitModelPlacement(modelId: ModelId): void {
     if (this.state !== 'surfacePlaced') return;
+    this.loadedModels.forEach((model, id) => {
+      model.scene.visible = id === modelId;
+      model.effect.points.visible = false;
+    });
+    this.activeModelId = modelId;
+    const activeModel = this.getActiveModel();
+    if (!activeModel) return;
+    this.modelBounds.copy(activeModel.bounds);
     this.setSliceProgress(0);
     this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
-    this.mushroomPivot.visible = true;
-    this.sporeField.reset();
-    this.sporeField.points.visible = true;
+    this.modelPivot.quaternion.identity();
+    this.modelPivot.visible = true;
+    activeModel.effect.reset();
+    activeModel.effect.points.visible = true;
+    this.modelInteraction.showModel(
+      modelId,
+      activeModel.scene,
+      activeModel.bounds,
+      activeModel.effect,
+    );
     this.lastFrameTime = null;
-    this.setState('placed', PLACED_MESSAGE);
+    this.setState('placed', this.getPlacedMessage());
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
@@ -442,12 +493,12 @@ export class XRExperience {
     event.preventDefault();
 
     if (this.pointers.size === 1) {
-      applyDragRotation(this.mushroomPivot.quaternion, deltaX, deltaY);
+      applyDragRotation(this.modelPivot.quaternion, deltaX, deltaY);
     } else if (this.pointers.size === 2) {
       const [first, second] = [...this.pointers.values()];
       const nextAngle = angleBetweenPointers(first, second);
       if (this.lastTwoFingerAngle !== null) {
-        applyRollRotation(this.mushroomPivot.quaternion, normalizeAngleDelta(nextAngle - this.lastTwoFingerAngle));
+        applyRollRotation(this.modelPivot.quaternion, normalizeAngleDelta(nextAngle - this.lastTwoFingerAngle));
       }
       this.lastTwoFingerAngle = nextAngle;
     }
@@ -494,10 +545,15 @@ export class XRExperience {
     this.pointers.clear();
     this.reticle.visible = false;
     this.surfaceMesh.visible = false;
-    this.mushroomPivot.visible = false;
-    this.mushroomPivot.quaternion.identity();
-    this.sporeField.points.visible = false;
-    this.sporeField.reset();
+    this.modelPivot.visible = false;
+    this.modelPivot.quaternion.identity();
+    this.loadedModels.forEach((model) => {
+      model.scene.visible = false;
+      model.effect.points.visible = false;
+      model.effect.reset();
+    });
+    this.activeModelId = null;
+    this.modelInteraction.hide();
     this.lastFrameTime = null;
     this.anchorRoot.matrix.identity();
     this.setSliceProgress(0);
@@ -510,8 +566,8 @@ export class XRExperience {
     const modelSize = this.modelBounds.getSize(new THREE.Vector3());
     const largestDimension = Math.max(modelSize.x, modelSize.y, modelSize.z);
     const scale = getUniformModelScale(largestDimension, this.modelSizeMeters);
-    this.mushroomPivot.scale.setScalar(scale);
-    this.mushroomPivot.position.y = -this.modelBounds.min.y * scale;
+    this.modelPivot.scale.setScalar(scale);
+    this.modelPivot.position.y = -this.modelBounds.min.y * scale;
   }
 
   private updateSlicePlane(): void {
@@ -523,9 +579,20 @@ export class XRExperience {
       this.sliceProgress,
     );
     this.localSlicePlane.setComponents(1, 0, 0, -sliceX);
-    this.sporeField.setSlicePosition(sliceX);
+    this.getActiveModel()?.effect.setSlicePosition(sliceX);
     this.anchorRoot.updateMatrixWorld(true);
-    this.slicePlane.copy(this.localSlicePlane).applyMatrix4(this.mushroomPivot.matrixWorld);
+    this.slicePlane.copy(this.localSlicePlane).applyMatrix4(this.modelPivot.matrixWorld);
+  }
+
+  private getActiveModel(): LoadedModel | undefined {
+    return this.activeModelId ? this.loadedModels.get(this.activeModelId) : undefined;
+  }
+
+  private getPlacedMessage(): string {
+    const placedLabel = this.activeModelId
+      ? findModelDefinition(this.activeModelId).placedLabel
+      : 'Modelo colocado';
+    return `${placedLabel}. Arrastra para girarlo; la malla permanecerá visible.`;
   }
 
   private async endSilently(): Promise<void> {
