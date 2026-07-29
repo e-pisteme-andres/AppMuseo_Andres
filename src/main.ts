@@ -11,6 +11,12 @@ import { selectARMode, supportsAppleQuickLook, type ARMode } from './ar/platform
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
 import { PanoramaViewer } from './panorama-viewer';
+import {
+  createPanoramaTour,
+  findPanoramaScene,
+  type PanoramaHotspot,
+  type PanoramaInfoHotspot,
+} from './panorama-tour';
 import { VirtualExperience } from './virtual-experience';
 import {
   loadAppProgress,
@@ -228,22 +234,52 @@ app.innerHTML = `
       </aside>
     </div>
 
-    <section id="panorama-view" class="panorama-view" aria-label="Paisaje panorámico de Paranal" aria-hidden="true">
+    <section id="panorama-view" class="panorama-view" aria-label="Recorrido panorámico de Paranal" aria-hidden="true">
       <div id="panorama-stage" class="panorama-stage"></div>
       <div class="panorama-shade"></div>
       <div class="panorama-topbar">
         <div class="panorama-title">
-          <span class="panorama-kicker">Vista inmersiva · 360°</span>
-          <strong>Observatorio Paranal, Chile</strong>
+          <span class="panorama-kicker" id="panorama-location">Vista inmersiva · 360°</span>
+          <strong id="panorama-scene-title">Observatorio Paranal, Chile</strong>
         </div>
         <button class="close-button panorama-close" id="close-panorama" type="button" aria-label="Cerrar paisaje 360 grados">Volver</button>
       </div>
+      <aside class="panorama-tour-panel" id="panorama-tour-panel" aria-labelledby="panorama-tour-title" hidden>
+        <div class="panorama-panel-heading">
+          <div>
+            <span>Explora a tu ritmo</span>
+            <strong id="panorama-tour-title">Recorrido 360°</strong>
+          </div>
+          <button class="panorama-panel-close" id="close-panorama-tour" type="button" aria-label="Cerrar recorrido">×</button>
+        </div>
+        <div class="panorama-scene-list" id="panorama-scene-list"></div>
+        <p>También puedes utilizar las flechas dentro del paisaje para avanzar.</p>
+      </aside>
+      <aside class="panorama-info-card" id="panorama-info-card" role="dialog" aria-labelledby="panorama-info-title" hidden>
+        <button class="panorama-panel-close panorama-info-close" id="close-panorama-info" type="button" aria-label="Cerrar información">×</button>
+        <span id="panorama-info-eyebrow">Punto de interés</span>
+        <h2 id="panorama-info-title"></h2>
+        <p id="panorama-info-description"></p>
+      </aside>
       <div class="panorama-loader" id="panorama-loader" role="status" aria-live="polite">
         <span class="panorama-spinner"></span>
-        Cargando paisaje…
+        <span id="panorama-loader-label">Cargando paisaje…</span>
+      </div>
+      <div class="panorama-mobile-tools" aria-label="Controles del panorama">
+        <button class="panorama-tool panorama-tour-toggle" id="toggle-panorama-tour" type="button" aria-expanded="false" aria-controls="panorama-tour-panel">
+          <span aria-hidden="true">⌘</span>
+          <strong id="panorama-tour-progress">Recorrido · 1/3</strong>
+        </button>
+        <div class="panorama-zoom-tools">
+          <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-out" type="button" aria-label="Alejar">−</button>
+          <button class="panorama-tool panorama-icon-tool" id="panorama-reset-view" type="button" aria-label="Centrar vista">◎</button>
+          <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-in" type="button" aria-label="Acercar">+</button>
+          <button class="panorama-tool panorama-icon-tool" id="panorama-fullscreen" type="button" aria-label="Mostrar en pantalla completa">⛶</button>
+        </div>
       </div>
       <div class="panorama-hint" id="panorama-hint"><span aria-hidden="true">◎</span><span id="panorama-hint-text">Preparando sensores…</span></div>
-      <a class="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
+      <a class="panorama-credit" id="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
+      <div class="sr-only" id="panorama-live-status" role="status" aria-live="polite"></div>
     </section>
   </main>
 `;
@@ -286,15 +322,37 @@ const closePanoramaButton = getRequiredElement<HTMLButtonElement>('#close-panora
 const panoramaView = getRequiredElement<HTMLElement>('#panorama-view');
 const panoramaStage = getRequiredElement<HTMLElement>('#panorama-stage');
 const panoramaLoader = getRequiredElement<HTMLElement>('#panorama-loader');
+const panoramaLoaderLabel = getRequiredElement<HTMLElement>('#panorama-loader-label');
 const panoramaHint = getRequiredElement<HTMLElement>('#panorama-hint');
 const panoramaHintText = getRequiredElement<HTMLElement>('#panorama-hint-text');
+const panoramaLocation = getRequiredElement<HTMLElement>('#panorama-location');
+const panoramaSceneTitle = getRequiredElement<HTMLElement>('#panorama-scene-title');
+const panoramaCredit = getRequiredElement<HTMLAnchorElement>('#panorama-credit');
+const panoramaTourPanel = getRequiredElement<HTMLElement>('#panorama-tour-panel');
+const panoramaSceneList = getRequiredElement<HTMLElement>('#panorama-scene-list');
+const panoramaTourToggle = getRequiredElement<HTMLButtonElement>('#toggle-panorama-tour');
+const panoramaTourProgress = getRequiredElement<HTMLElement>('#panorama-tour-progress');
+const closePanoramaTourButton = getRequiredElement<HTMLButtonElement>('#close-panorama-tour');
+const panoramaInfoCard = getRequiredElement<HTMLElement>('#panorama-info-card');
+const panoramaInfoEyebrow = getRequiredElement<HTMLElement>('#panorama-info-eyebrow');
+const panoramaInfoTitle = getRequiredElement<HTMLElement>('#panorama-info-title');
+const panoramaInfoDescription = getRequiredElement<HTMLElement>('#panorama-info-description');
+const closePanoramaInfoButton = getRequiredElement<HTMLButtonElement>('#close-panorama-info');
+const panoramaZoomOutButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-out');
+const panoramaZoomInButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-in');
+const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-reset-view');
+const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
+const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
 let arMode: ARMode = 'unavailable';
 
+const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
 const progressStorage = getProgressStorage();
 let appProgress = loadAppProgress(progressStorage);
+let activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panoramaSceneId);
 let resumableView: ResumableView = appProgress.view;
 let panoramaCheckpointTimer: number | undefined;
+let panoramaWakeLock: WakeLockSentinel | null = null;
 let arSessionActive = false;
 let virtualExperienceActive = false;
 let activeExperienceMode: 'ar' | 'virtual' | null = null;
@@ -305,6 +363,7 @@ let interruptedArAttemptId = -1;
 function checkpoint(action: string, view: ResumableView = resumableView): void {
   appProgress = saveAppProgress(progressStorage, {
     view,
+    panoramaSceneId: activePanoramaScene.id,
     panorama: panorama.getViewState(),
     lastAction: action,
   });
@@ -328,8 +387,10 @@ function flushPanoramaCheckpoint(action: string, view: ResumableView = resumable
 
 const panorama = new PanoramaViewer({
   container: panoramaStage,
-  imageUrl: `${import.meta.env.BASE_URL}panoramas/paranal-360.jpg`,
-  initialView: appProgress.panorama,
+  imageUrl: activePanoramaScene.imageUrl,
+  initialView: activePanoramaScene.id === appProgress.panoramaSceneId
+    ? appProgress.panorama
+    : activePanoramaScene.initialView,
   onLoadingChange: (loading) => {
     panoramaLoader.hidden = !loading;
   },
@@ -343,6 +404,183 @@ const panorama = new PanoramaViewer({
   },
   onViewChange: schedulePanoramaCheckpoint,
 });
+
+let panoramaSceneRequestId = 0;
+
+function setPanoramaTourOpen(open: boolean): void {
+  panoramaTourPanel.hidden = !open;
+  panoramaTourToggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    panoramaInfoCard.hidden = true;
+    panoramaSceneList.querySelector<HTMLButtonElement>('[aria-current="step"]')?.focus();
+  }
+}
+
+function closePanoramaInfo(): void {
+  panoramaInfoCard.hidden = true;
+}
+
+function showPanoramaInfo(hotspot: PanoramaInfoHotspot): void {
+  setPanoramaTourOpen(false);
+  panoramaInfoEyebrow.textContent = hotspot.eyebrow;
+  panoramaInfoTitle.textContent = hotspot.title;
+  panoramaInfoDescription.textContent = hotspot.description;
+  panoramaInfoCard.hidden = false;
+  closePanoramaInfoButton.focus();
+  panoramaLiveStatus.textContent = `Información abierta: ${hotspot.title}`;
+  checkpoint(`panorama:info:${hotspot.id}`, 'panorama');
+}
+
+function renderPanoramaSceneList(): void {
+  panoramaSceneList.replaceChildren();
+  panoramaScenes.forEach((scene, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'panorama-scene-option';
+    button.dataset.sceneId = scene.id;
+    button.setAttribute('aria-current', scene.id === activePanoramaScene.id ? 'step' : 'false');
+
+    const number = document.createElement('span');
+    number.textContent = String(index + 1).padStart(2, '0');
+    const copy = document.createElement('span');
+    const title = document.createElement('strong');
+    title.textContent = scene.title;
+    const location = document.createElement('small');
+    location.textContent = scene.location.split(' · ').at(-1) ?? scene.location;
+    copy.append(title, location);
+    button.append(number, copy);
+    button.addEventListener('click', () => {
+      void activatePanoramaScene(scene.id, 'menu');
+    });
+    panoramaSceneList.append(button);
+  });
+}
+
+function updatePanoramaSceneUi(): void {
+  const sceneIndex = panoramaScenes.findIndex((scene) => scene.id === activePanoramaScene.id);
+  panoramaLocation.textContent = activePanoramaScene.location;
+  panoramaSceneTitle.textContent = activePanoramaScene.title;
+  panoramaTourProgress.textContent = `Recorrido · ${sceneIndex + 1}/${panoramaScenes.length}`;
+  panoramaCredit.textContent = `Fotografía: ${activePanoramaScene.creditLabel}`;
+  panoramaCredit.href = activePanoramaScene.creditUrl;
+  renderPanoramaSceneList();
+}
+
+function handlePanoramaHotspot(hotspot: PanoramaHotspot): void {
+  if (hotspot.kind === 'info') {
+    showPanoramaInfo(hotspot);
+    return;
+  }
+  void activatePanoramaScene(hotspot.targetSceneId, 'hotspot');
+}
+
+async function activatePanoramaScene(
+  sceneId: string,
+  source: 'menu' | 'hotspot',
+): Promise<void> {
+  const scene = findPanoramaScene(panoramaScenes, sceneId);
+  setPanoramaTourOpen(false);
+  closePanoramaInfo();
+  if (scene.id === activePanoramaScene.id) {
+    panorama.resetView(scene.initialView);
+    panoramaLiveStatus.textContent = `Vista centrada en ${scene.title}`;
+    return;
+  }
+
+  const requestId = ++panoramaSceneRequestId;
+  panoramaLoaderLabel.textContent = `Cargando ${scene.title}…`;
+  panoramaView.classList.add('is-changing-scene');
+  try {
+    await panorama.changePanorama(scene.imageUrl, scene.initialView);
+    if (requestId !== panoramaSceneRequestId) return;
+    activePanoramaScene = scene;
+    panorama.setHotspots(scene.hotspots, handlePanoramaHotspot);
+    updatePanoramaSceneUi();
+    panoramaLiveStatus.textContent = `Parada cargada: ${scene.title}`;
+    checkpoint(`panorama:scene:${source}:${scene.id}`, 'panorama');
+  } catch {
+    if (requestId !== panoramaSceneRequestId) return;
+    panoramaLoaderLabel.textContent = 'No se pudo cargar esta parada.';
+    panoramaLoader.hidden = false;
+    window.setTimeout(() => {
+      panoramaLoader.hidden = true;
+    }, 2800);
+  } finally {
+    if (requestId === panoramaSceneRequestId) {
+      panoramaView.classList.remove('is-changing-scene');
+    }
+  }
+}
+
+async function requestPanoramaWakeLock(): Promise<void> {
+  if (!('wakeLock' in navigator) || panoramaWakeLock) return;
+  try {
+    panoramaWakeLock = await navigator.wakeLock.request('screen');
+    panoramaWakeLock.addEventListener('release', () => {
+      panoramaWakeLock = null;
+    }, { once: true });
+  } catch {
+    panoramaWakeLock = null;
+  }
+}
+
+async function releasePanoramaWakeLock(): Promise<void> {
+  const wakeLock = panoramaWakeLock;
+  panoramaWakeLock = null;
+  await wakeLock?.release().catch(() => undefined);
+}
+
+async function togglePanoramaFullscreen(): Promise<void> {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    await panoramaView.requestFullscreen();
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (orientation: 'landscape') => Promise<void>;
+    };
+    if (orientation.lock) {
+      await orientation.lock('landscape').catch(() => undefined);
+    }
+  } catch {
+    panoramaLiveStatus.textContent = 'La pantalla completa no está disponible en este navegador.';
+  }
+}
+
+function updatePanoramaFullscreenButton(): void {
+  const isFullscreen = document.fullscreenElement === panoramaView;
+  panoramaFullscreenButton.setAttribute(
+    'aria-label',
+    isFullscreen ? 'Salir de pantalla completa' : 'Mostrar en pantalla completa',
+  );
+  panoramaFullscreenButton.textContent = isFullscreen ? '×' : '⛶';
+}
+
+panorama.setHotspots(activePanoramaScene.hotspots, handlePanoramaHotspot);
+updatePanoramaSceneUi();
+panoramaFullscreenButton.hidden = typeof panoramaView.requestFullscreen !== 'function';
+
+panoramaTourToggle.addEventListener('click', () => {
+  setPanoramaTourOpen(panoramaTourPanel.hidden);
+});
+closePanoramaTourButton.addEventListener('click', () => {
+  setPanoramaTourOpen(false);
+  panoramaTourToggle.focus();
+});
+closePanoramaInfoButton.addEventListener('click', () => {
+  closePanoramaInfo();
+});
+panoramaZoomOutButton.addEventListener('click', () => panorama.zoomBy(8));
+panoramaZoomInButton.addEventListener('click', () => panorama.zoomBy(-8));
+panoramaResetButton.addEventListener('click', () => {
+  panorama.resetView(activePanoramaScene.initialView);
+  panoramaLiveStatus.textContent = 'Vista centrada.';
+});
+panoramaFullscreenButton.addEventListener('click', () => {
+  void togglePanoramaFullscreen();
+});
+document.addEventListener('fullscreenchange', updatePanoramaFullscreenButton);
 
 const mushroomPreview = new ModelPreview(mushroomPreviewCanvas);
 let arAvailability: ArAvailability | null = null;
@@ -817,10 +1055,13 @@ function openPanorama(recordAction = true): void {
   panoramaView.setAttribute('aria-hidden', 'false');
   closePanoramaButton.focus();
   if (recordAction) checkpoint('panorama:open', 'panorama');
-  void panorama.open().catch(() => {
-    panoramaLoader.hidden = false;
-    panoramaLoader.textContent = 'No se pudo cargar el paisaje.';
-  });
+  panoramaLoaderLabel.textContent = `Cargando ${activePanoramaScene.title}…`;
+  void panorama.open()
+    .then(() => requestPanoramaWakeLock())
+    .catch(() => {
+      panoramaLoader.hidden = false;
+      panoramaLoaderLabel.textContent = 'No se pudo cargar el paisaje.';
+    });
 }
 
 openPanoramaButton.addEventListener('click', () => openPanorama());
@@ -828,7 +1069,13 @@ openPanoramaButton.addEventListener('click', () => openPanorama());
 function closePanorama(): void {
   flushPanoramaCheckpoint('panorama:close', 'landing');
   resumableView = 'landing';
+  closePanoramaInfo();
+  setPanoramaTourOpen(false);
   panorama.pause();
+  void releasePanoramaWakeLock();
+  if (document.fullscreenElement === panoramaView) {
+    void document.exitFullscreen().catch(() => undefined);
+  }
   document.body.classList.remove('panorama-active');
   panoramaView.setAttribute('aria-hidden', 'true');
   openPanoramaButton.focus();
@@ -837,7 +1084,14 @@ function closePanorama(): void {
 closePanoramaButton.addEventListener('click', closePanorama);
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && document.body.classList.contains('panorama-active')) {
-    closePanorama();
+    if (!panoramaInfoCard.hidden) {
+      closePanoramaInfo();
+    } else if (!panoramaTourPanel.hidden) {
+      setPanoramaTourOpen(false);
+      panoramaTourToggle.focus();
+    } else if (!document.fullscreenElement) {
+      closePanorama();
+    }
   } else if (event.key === 'Escape' && virtualExperienceActive) {
     checkpoint('virtual:escape', 'landing');
     virtualExperience.end();
@@ -864,14 +1118,19 @@ function interruptTransientExperience(action: string): void {
   }
 
   flushPanoramaCheckpoint(action);
-  if (resumableView === 'panorama') panorama.pause();
+  if (resumableView === 'panorama') {
+    panorama.pause();
+    void releasePanoramaWakeLock();
+  }
 }
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     interruptTransientExperience('lifecycle:hidden');
   } else if (resumableView === 'panorama') {
-    void panorama.open().catch(() => undefined);
+    void panorama.open()
+      .then(() => requestPanoramaWakeLock())
+      .catch(() => undefined);
   }
 });
 
@@ -880,7 +1139,11 @@ window.addEventListener('pagehide', () => {
 });
 
 window.addEventListener('pageshow', () => {
-  if (resumableView === 'panorama') void panorama.open().catch(() => undefined);
+  if (resumableView === 'panorama') {
+    void panorama.open()
+      .then(() => requestPanoramaWakeLock())
+      .catch(() => undefined);
+  }
   if (arSessionActive) void experience.interrupt().catch(() => undefined);
 });
 

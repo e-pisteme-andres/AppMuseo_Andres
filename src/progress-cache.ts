@@ -1,4 +1,5 @@
 import type { PanoramaViewState } from './panorama-viewer';
+import { DEFAULT_PANORAMA_SCENE_ID } from './panorama-tour';
 
 export const APP_PROGRESS_KEY = 'app-museo:progress:v1';
 
@@ -7,6 +8,7 @@ export type ResumableView = 'landing' | 'panorama';
 export interface AppProgress {
   version: 1;
   view: ResumableView;
+  panoramaSceneId: string;
   panorama: PanoramaViewState;
   lastAction: string;
   updatedAt: number;
@@ -18,14 +20,15 @@ export interface ProgressStorage {
 }
 
 export const DEFAULT_PANORAMA_VIEW: PanoramaViewState = {
-  longitude: -104,
-  latitude: -4,
-  fov: 72,
+  longitude: 92,
+  latitude: -7,
+  fov: 68,
 };
 
 export const DEFAULT_APP_PROGRESS: AppProgress = {
   version: 1,
   view: 'landing',
+  panoramaSceneId: DEFAULT_PANORAMA_SCENE_ID,
   panorama: DEFAULT_PANORAMA_VIEW,
   lastAction: 'app:initial',
   updatedAt: 0,
@@ -67,6 +70,9 @@ function normalizeProgress(value: unknown): AppProgress | null {
   return {
     version: 1,
     view: candidate.view === 'panorama' ? 'panorama' : 'landing',
+    panoramaSceneId: typeof candidate.panoramaSceneId === 'string'
+      ? candidate.panoramaSceneId.slice(0, 80)
+      : DEFAULT_PANORAMA_SCENE_ID,
     panorama: normalizePanoramaView(candidate.panorama),
     lastAction: typeof candidate.lastAction === 'string'
       ? candidate.lastAction.slice(0, 120)
@@ -99,6 +105,7 @@ export function saveAppProgress(
   const normalized: AppProgress = {
     version: 1,
     view: progress.view === 'panorama' ? 'panorama' : 'landing',
+    panoramaSceneId: progress.panoramaSceneId.slice(0, 80),
     panorama: normalizePanoramaView(progress.panorama),
     lastAction: progress.lastAction.slice(0, 120),
     updatedAt: Math.max(0, finiteNumber(updatedAt, 0)),

@@ -2,7 +2,7 @@ name: Probar y publicar en GitHub Pages
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, codex/ampliacion-360-grados]
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,12 @@ jobs:
         with:
           ref: dev
           path: dev-site
+
+      - name: Descargar ampliación 360
+        uses: actions/checkout@v4
+        with:
+          ref: codex/ampliacion-360-grados
+          path: panorama-360-site
 
       - name: Preparar pnpm
         uses: pnpm/action-setup@v4
@@ -62,11 +68,26 @@ jobs:
           pnpm test
           pnpm build
 
-      - name: Combinar main y preview dev
+      - name: Probar y compilar ampliación 360
+        working-directory: panorama-360-site
+        env:
+          VITE_BASE_PATH: /AppMuseo_Andres/ampliacion-360-grados/
+          QR_TARGET_URL: https://e-pisteme-andres.github.io/AppMuseo_Andres/ampliacion-360-grados/
+          QR_FILE_NAME: qr-app-museo-360.png
+          VITE_QR_FILE_NAME: qr-app-museo-360.png
         run: |
-          mkdir -p site/dev
+          pnpm install --frozen-lockfile
+          pnpm download:panoramas
+          pnpm generate:assets
+          pnpm test
+          pnpm build
+
+      - name: Combinar main y vistas de prueba
+        run: |
+          mkdir -p site/dev site/ampliacion-360-grados
           cp -R main-site/dist/. site/
           cp -R dev-site/dist/. site/dev/
+          cp -R panorama-360-site/dist/. site/ampliacion-360-grados/
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5

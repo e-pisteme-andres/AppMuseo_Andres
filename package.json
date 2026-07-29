@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "download:panoramas": "node scripts/download-panorama-assets.mjs",
     "generate:assets": "node scripts/generate-assets.mjs && node scripts/generate-ios-assets.mjs",
     "generate:ios-assets": "node scripts/generate-ios-assets.mjs",
     "validate:ios": "node scripts/validate-ios-project.mjs"
