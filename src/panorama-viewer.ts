@@ -231,20 +231,6 @@ export class PanoramaViewer {
     this.onViewChange?.(this.getViewState());
   }
 
-  resetMotionOrientation(view: PanoramaViewState): boolean {
-    this.applyView(view);
-    this.motionCalibration = undefined;
-    if (this.controlMode === 'motion' && this.updateDeviceQuaternion()) {
-      this.applyMotionView(this.deviceQuaternion);
-      this.onViewChange?.(this.getViewState());
-      return true;
-    }
-
-    this.lookAtDragPosition();
-    this.onViewChange?.(this.getViewState());
-    return false;
-  }
-
   async open(): Promise<void> {
     if (this.renderer) {
       this.startRendering();
@@ -473,7 +459,17 @@ export class PanoramaViewer {
     if (this.frameId !== undefined) return;
     const render = (): void => {
       if (!this.renderer || !this.scene || !this.camera) return;
-      if (this.controlMode === 'motion' && this.updateDeviceQuaternion()) {
+      if (this.controlMode === 'motion' && this.deviceOrientation) {
+        const { alpha, beta, gamma } = this.deviceOrientation;
+        const screenOrientation = (screen.orientation?.angle ?? (window as Window & { orientation?: number }).orientation ?? 0) * Math.PI / 180;
+        setDeviceQuaternion(
+          this.deviceQuaternion,
+          alpha * Math.PI / 180,
+          beta * Math.PI / 180,
+          gamma * Math.PI / 180,
+          screenOrientation,
+        );
+
         this.applyMotionView(this.deviceQuaternion);
       } else {
         this.lookAtDragPosition();
@@ -489,24 +485,6 @@ export class PanoramaViewer {
     if (!this.camera) return;
     this.latitude = clampLatitude(this.latitude);
     this.camera.lookAt(getSphericalPosition(this.longitude, this.latitude, 500));
-  }
-
-  private updateDeviceQuaternion(): boolean {
-    if (!this.deviceOrientation) return false;
-    const { alpha, beta, gamma } = this.deviceOrientation;
-    const screenOrientation = (
-      screen.orientation?.angle
-      ?? (window as Window & { orientation?: number }).orientation
-      ?? 0
-    ) * Math.PI / 180;
-    setDeviceQuaternion(
-      this.deviceQuaternion,
-      alpha * Math.PI / 180,
-      beta * Math.PI / 180,
-      gamma * Math.PI / 180,
-      screenOrientation,
-    );
-    return true;
   }
 
   private applyMotionView(quaternion: Quaternion): void {
