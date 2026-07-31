@@ -630,6 +630,14 @@ body.panorama-active .panorama-view { display: block; }
   .camera-help ol { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 380px) {
+  .panorama-mobile-tools { gap: 6px; }
+  .panorama-tour-toggle { min-width: 96px; padding: 0 9px; }
+  .panorama-tour-toggle strong { font-size: .62rem; }
+  .panorama-zoom-tools { gap: 4px; }
+  .panorama-icon-tool { width: 36px; min-height: 40px; font-size: .95rem; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .css-mushroom { animation: none; }
   .panorama-hint[data-mode="motion"] span:first-child { animation: none; }

@@ -300,6 +300,7 @@ app.innerHTML = `
         <div class="panorama-zoom-tools">
           <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-out" type="button" aria-label="Alejar">−</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-reset-view" type="button" aria-label="Centrar vista">◎</button>
+          <button class="panorama-tool panorama-icon-tool" id="panorama-reset-orientation" type="button" aria-label="Restablecer orientación según el móvil" hidden>↻</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-in" type="button" aria-label="Acercar">+</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-fullscreen" type="button" aria-label="Mostrar en pantalla completa">⛶</button>
         </div>
@@ -390,6 +391,7 @@ const closePanoramaInfoButton = getRequiredElement<HTMLButtonElement>('#close-pa
 const panoramaZoomOutButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-out');
 const panoramaZoomInButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-in');
 const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-reset-view');
+const panoramaResetOrientationButton = getRequiredElement<HTMLButtonElement>('#panorama-reset-orientation');
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
@@ -445,6 +447,9 @@ const panorama = new PanoramaViewer({
   },
   onControlModeChange: (mode) => {
     panoramaHint.dataset.mode = mode;
+    const isMotionMode = mode === 'motion';
+    panoramaResetOrientationButton.hidden = !isMotionMode;
+    panoramaResetOrientationButton.disabled = !isMotionMode;
     panoramaHintText.textContent = mode === 'motion'
       ? 'Mueve el móvil para mirar alrededor'
       : mode === 'motion-pending'
@@ -625,6 +630,12 @@ panoramaZoomInButton.addEventListener('click', () => panorama.zoomBy(-8));
 panoramaResetButton.addEventListener('click', () => {
   panorama.resetView(activePanoramaScene.initialView);
   panoramaLiveStatus.textContent = 'Vista centrada.';
+});
+panoramaResetOrientationButton.addEventListener('click', () => {
+  const recalibrated = panorama.resetMotionOrientation(activePanoramaScene.initialView);
+  panoramaLiveStatus.textContent = recalibrated
+    ? 'Orientación restablecida según el móvil.'
+    : 'Vista centrada. El sensor de movimiento no está activo.';
 });
 panoramaFullscreenButton.addEventListener('click', () => {
   void togglePanoramaFullscreen();
