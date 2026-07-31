@@ -35,6 +35,13 @@ interface PointerSnapshot {
   y: number;
 }
 
+export interface MotionCalibration {
+  deviceLongitude: number;
+  deviceLatitude: number;
+  viewLongitude: number;
+  viewLatitude: number;
+}
+
 type PermissionState = 'granted' | 'denied';
 type DeviceOrientationConstructor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<PermissionState>;
@@ -44,9 +51,21 @@ const deviceEuler = new Euler();
 const deviceAdjustment = new Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 const screenAxis = new Vector3(0, 0, 1);
 const screenAdjustment = new Quaternion();
+const cameraForward = new Vector3(0, 0, -1);
+const deviceDirection = new Vector3();
 const cameraDirection = new Vector3();
 const projectedHotspotPosition = new Vector3();
 const hotspotDirection = new Vector3();
+const minimumLatitude = -82;
+const maximumLatitude = 82;
+
+function clampLatitude(latitude: number): number {
+  return Math.max(minimumLatitude, Math.min(maximumLatitude, latitude));
+}
+
+function normalizeLongitude(longitude: number): number {
+  return ((longitude + 180) % 360 + 360) % 360 - 180;
+}
 
 export function getSphericalPosition(
   longitude: number,
@@ -74,6 +93,28 @@ export function setDeviceQuaternion(
   target.multiply(deviceAdjustment);
   target.multiply(screenAdjustment.setFromAxisAngle(screenAxis, -screenOrientation));
   return target;
+}
+
+export function getViewFromCameraQuaternion(
+  quaternion: Quaternion,
+): Pick<PanoramaViewState, 'longitude' | 'latitude'> {
+  deviceDirection.copy(cameraForward).applyQuaternion(quaternion).normalize();
+  return {
+    longitude: normalizeLongitude(Math.atan2(deviceDirection.z, deviceDirection.x) * 180 / Math.PI),
+    latitude: clampLatitude(Math.asin(Math.max(-1, Math.min(1, deviceDirection.y))) * 180 / Math.PI),
+  };
+}
+
+export function getCalibratedMotionView(
+  deviceView: Pick<PanoramaViewState, 'longitude' | 'latitude'>,
+  calibration: MotionCalibration,
+): Pick<PanoramaViewState, 'longitude' | 'latitude'> {
+  const longitudeDelta = normalizeLongitude(deviceView.longitude - calibration.deviceLongitude);
+  const latitudeDelta = deviceView.latitude - calibration.deviceLatitude;
+  return {
+    longitude: normalizeLongitude(calibration.viewLongitude + longitudeDelta),
+    latitude: clampLatitude(calibration.viewLatitude + latitudeDelta),
+  };
 }
 
 export class PanoramaViewer {
@@ -107,7 +148,7 @@ export class PanoramaViewer {
   private controlMode: PanoramaControlMode = 'drag';
   private deviceOrientation?: { alpha: number; beta: number; gamma: number };
   private readonly deviceQuaternion = new Quaternion();
-  private orientationOffset?: Quaternion;
+  private motionCalibration?: MotionCalibration;
   private orientationTimeoutId?: number;
   private dragControlsEnabled = false;
 
@@ -173,7 +214,7 @@ export class PanoramaViewer {
       this.panoramaMaterial.needsUpdate = true;
       this.imageUrl = imageUrl;
       this.applyView(initialView);
-      this.orientationOffset = undefined;
+      this.motionCalibration = undefined;
       this.onViewChange?.(this.getViewState());
     } finally {
       if (requestId === this.textureRequestId) this.onLoadingChange?.(false);
@@ -186,7 +227,7 @@ export class PanoramaViewer {
 
   resetView(view: PanoramaViewState): void {
     this.applyView(view);
-    this.orientationOffset = undefined;
+    this.motionCalibration = undefined;
     this.onViewChange?.(this.getViewState());
   }
 
@@ -266,7 +307,7 @@ export class PanoramaViewer {
     this.hotspotLayer = undefined;
     this.hotspotElements.clear();
     this.deviceOrientation = undefined;
-    this.orientationOffset = undefined;
+    this.motionCalibration = undefined;
     this.orientationTimeoutId = undefined;
     this.dragControlsEnabled = false;
     this.pointers.clear();
@@ -333,7 +374,7 @@ export class PanoramaViewer {
     this.deviceOrientation = { alpha: event.alpha, beta: event.beta, gamma: event.gamma };
     if (this.controlMode !== 'motion') {
       if (this.orientationTimeoutId !== undefined) window.clearTimeout(this.orientationTimeoutId);
-      this.orientationOffset = undefined;
+      this.motionCalibration = undefined;
       this.setControlMode('motion');
     }
   };
@@ -429,11 +470,7 @@ export class PanoramaViewer {
           screenOrientation,
         );
 
-        if (!this.orientationOffset) {
-          this.lookAtDragPosition();
-          this.orientationOffset = this.camera.quaternion.clone().multiply(this.deviceQuaternion.clone().invert());
-        }
-        this.camera.quaternion.copy(this.orientationOffset).multiply(this.deviceQuaternion);
+        this.applyMotionView(this.deviceQuaternion);
       } else {
         this.lookAtDragPosition();
       }
@@ -446,8 +483,25 @@ export class PanoramaViewer {
 
   private lookAtDragPosition(): void {
     if (!this.camera) return;
-    this.latitude = Math.max(-82, Math.min(82, this.latitude));
+    this.latitude = clampLatitude(this.latitude);
     this.camera.lookAt(getSphericalPosition(this.longitude, this.latitude, 500));
+  }
+
+  private applyMotionView(quaternion: Quaternion): void {
+    const deviceView = getViewFromCameraQuaternion(quaternion);
+    if (!this.motionCalibration) {
+      this.motionCalibration = {
+        deviceLongitude: deviceView.longitude,
+        deviceLatitude: deviceView.latitude,
+        viewLongitude: this.longitude,
+        viewLatitude: this.latitude,
+      };
+    }
+
+    const view = getCalibratedMotionView(deviceView, this.motionCalibration);
+    this.longitude = view.longitude;
+    this.latitude = view.latitude;
+    this.lookAtDragPosition();
   }
 
   private applyView(view: PanoramaViewState): void {
