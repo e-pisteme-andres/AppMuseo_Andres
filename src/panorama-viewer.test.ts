@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Quaternion } from 'three';
-import { getSphericalPosition, setDeviceQuaternion } from './panorama-viewer';
+import { Quaternion, Vector3 } from 'three';
+import {
+  getCalibratedMotionView,
+  getSphericalPosition,
+  getViewFromCameraQuaternion,
+  setDeviceQuaternion,
+} from './panorama-viewer';
 
 describe('setDeviceQuaternion', () => {
   it('convierte la orientación neutra del dispositivo al eje de la cámara', () => {
@@ -33,5 +38,35 @@ describe('posición de puntos panorámicos', () => {
     expect(northPole.x).toBeCloseTo(0);
     expect(northPole.y).toBeCloseTo(10);
     expect(northPole.z).toBeCloseTo(0);
+  });
+});
+
+describe('vista de movimiento panoramica', () => {
+  it('extrae longitud y latitud desde la orientacion absoluta de la camara', () => {
+    const targetDirection = getSphericalPosition(32, 18, 1).normalize();
+    const cameraQuaternion = new Quaternion().setFromUnitVectors(
+      new Vector3(0, 0, -1),
+      targetDirection,
+    );
+
+    const view = getViewFromCameraQuaternion(cameraQuaternion);
+
+    expect(view.longitude).toBeCloseTo(32);
+    expect(view.latitude).toBeCloseTo(18);
+  });
+
+  it('mantiene fija la panoramica al cruzar el limite de 180 grados', () => {
+    const view = getCalibratedMotionView(
+      { longitude: -179, latitude: 6 },
+      {
+        deviceLongitude: 179,
+        deviceLatitude: 4,
+        viewLongitude: 20,
+        viewLatitude: 10,
+      },
+    );
+
+    expect(view.longitude).toBeCloseTo(22);
+    expect(view.latitude).toBeCloseTo(12);
   });
 });
