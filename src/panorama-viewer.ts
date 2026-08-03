@@ -6,6 +6,7 @@ import {
   Quaternion,
   Scene,
   SphereGeometry,
+  StereoCamera,
   SRGBColorSpace,
   TextureLoader,
   Vector3,
@@ -33,6 +34,18 @@ interface PanoramaViewerOptions {
 interface PointerSnapshot {
   x: number;
   y: number;
+}
+
+export interface StereoEyeViewport {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface StereoEyeViewports {
+  left: StereoEyeViewport;
+  right: StereoEyeViewport;
 }
 
 export interface MotionCalibration {
@@ -65,6 +78,16 @@ function clampLatitude(latitude: number): number {
 
 function normalizeLongitude(longitude: number): number {
   return ((longitude + 180) % 360 + 360) % 360 - 180;
+}
+
+export function getStereoEyeViewports(width: number, height: number): StereoEyeViewports {
+  const safeWidth = Math.max(0, Math.floor(width));
+  const safeHeight = Math.max(0, Math.floor(height));
+  const leftWidth = Math.floor(safeWidth / 2);
+  return {
+    left: { x: 0, y: 0, width: leftWidth, height: safeHeight },
+    right: { x: leftWidth, y: 0, width: safeWidth - leftWidth, height: safeHeight },
+  };
 }
 
 export function getSphericalPosition(
@@ -126,6 +149,7 @@ export class PanoramaViewer {
   private renderer?: WebGLRenderer;
   private scene?: Scene;
   private camera?: PerspectiveCamera;
+  private readonly stereoCamera = new StereoCamera();
   private frameId?: number;
   private resizeObserver?: ResizeObserver;
   private panoramaMaterial?: MeshBasicMaterial;
@@ -151,6 +175,7 @@ export class PanoramaViewer {
   private motionCalibration?: MotionCalibration;
   private orientationTimeoutId?: number;
   private dragControlsEnabled = false;
+  private stereoModeEnabled = false;
 
   constructor({
     container,
@@ -178,6 +203,18 @@ export class PanoramaViewer {
       latitude: this.latitude,
       fov: this.camera?.fov ?? this.fieldOfView,
     };
+  }
+
+  isStereoMode(): boolean {
+    return this.stereoModeEnabled;
+  }
+
+  setStereoMode(enabled: boolean): void {
+    if (this.stereoModeEnabled === enabled) return;
+    this.stereoModeEnabled = enabled;
+    this.container.classList.toggle('is-vr-mode', enabled);
+    this.hotspotLayer?.classList.toggle('is-suppressed', enabled);
+    this.resize();
   }
 
   setHotspots(
@@ -320,6 +357,8 @@ export class PanoramaViewer {
     this.panoramaMaterial = undefined;
     this.hotspotLayer = undefined;
     this.hotspotElements.clear();
+    this.stereoModeEnabled = false;
+    this.container.classList.remove('is-vr-mode');
     this.deviceOrientation = undefined;
     this.motionCalibration = undefined;
     this.orientationTimeoutId = undefined;
@@ -464,7 +503,7 @@ export class PanoramaViewer {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     if (!width || !height) return;
-    this.camera.aspect = width / height;
+    this.camera.aspect = (this.stereoModeEnabled ? width / 2 : width) / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
   }
@@ -479,10 +518,40 @@ export class PanoramaViewer {
         this.lookAtDragPosition();
       }
       this.updateHotspotPositions();
-      this.renderer.render(this.scene, this.camera);
+      this.renderScene();
       this.frameId = requestAnimationFrame(render);
     };
     render();
+  }
+
+  private renderScene(): void {
+    if (!this.renderer || !this.scene || !this.camera) return;
+    if (!this.stereoModeEnabled) {
+      this.renderer.setScissorTest(false);
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    if (!width || !height) return;
+
+    const viewports = getStereoEyeViewports(width, height);
+    this.camera.updateMatrixWorld();
+    this.stereoCamera.update(this.camera);
+    this.renderer.setScissorTest(true);
+    this.renderStereoEye(viewports.left, this.stereoCamera.cameraL);
+    this.renderStereoEye(viewports.right, this.stereoCamera.cameraR);
+    this.renderer.setScissorTest(false);
+    this.renderer.setViewport(0, 0, width, height);
+    this.renderer.setScissor(0, 0, width, height);
+  }
+
+  private renderStereoEye(viewport: StereoEyeViewport, camera: PerspectiveCamera): void {
+    if (!this.renderer || !this.scene) return;
+    this.renderer.setViewport(viewport.x, viewport.y, viewport.width, viewport.height);
+    this.renderer.setScissor(viewport.x, viewport.y, viewport.width, viewport.height);
+    this.renderer.render(this.scene, camera);
   }
 
   private lookAtDragPosition(): void {
@@ -590,6 +659,13 @@ export class PanoramaViewer {
 
   private updateHotspotPositions(): void {
     if (!this.camera || !this.hotspotLayer) return;
+    if (this.stereoModeEnabled) {
+      this.hotspotElements.forEach((element) => {
+        element.hidden = true;
+        element.setAttribute('aria-hidden', 'true');
+      });
+      return;
+    }
     const camera = this.camera;
     camera.updateMatrixWorld();
     camera.getWorldDirection(cameraDirection);
