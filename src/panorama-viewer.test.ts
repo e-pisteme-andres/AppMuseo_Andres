@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Quaternion, Vector3 } from 'three';
 import {
   getCalibratedMotionView,
+  getPanoramaAngularDistance,
   getSphericalPosition,
   getStereoEyeViewports,
   getViewFromCameraQuaternion,
@@ -55,6 +56,27 @@ describe('modo estereo panoramico', () => {
       left: { x: 0, y: 0, width: 0, height: 0 },
       right: { x: 0, y: 0, width: 0, height: 0 },
     });
+  });
+});
+
+describe('distancia angular panoramica', () => {
+  it('mide separaciones pequenas entre la mirada y un punto', () => {
+    const distance = getPanoramaAngularDistance(
+      { longitude: 10, latitude: -5 },
+      { longitude: 14, latitude: -2 },
+    );
+
+    expect(distance).toBeGreaterThan(4);
+    expect(distance).toBeLessThan(6);
+  });
+
+  it('usa el camino corto al cruzar el limite de 180 grados', () => {
+    const distance = getPanoramaAngularDistance(
+      { longitude: 179, latitude: 0 },
+      { longitude: -179, latitude: 0 },
+    );
+
+    expect(distance).toBeCloseTo(2);
   });
 });
 

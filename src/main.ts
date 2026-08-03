@@ -12,12 +12,13 @@ import { playModelSound } from './ar/model-sound';
 import { selectARMode, supportsAppleQuickLook, type ARMode } from './ar/platform';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
-import { PanoramaViewer } from './panorama-viewer';
+import { getPanoramaAngularDistance, PanoramaViewer } from './panorama-viewer';
 import {
   createPanoramaTour,
   findPanoramaScene,
   type PanoramaHotspot,
   type PanoramaInfoHotspot,
+  type PanoramaNavigationHotspot,
 } from './panorama-tour';
 import { VirtualExperience } from './virtual-experience';
 import {
@@ -311,6 +312,10 @@ app.innerHTML = `
         <strong>Gira el móvil</strong>
         <small>El modo gafas se mantiene bloqueado en horizontal.</small>
       </div>
+      <div class="panorama-gaze-teleport" id="panorama-gaze-teleport" aria-hidden="true">
+        <span class="panorama-gaze-reticle" aria-hidden="true"></span>
+        <strong id="panorama-gaze-label"></strong>
+      </div>
       <a class="panorama-credit" id="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
       <div class="sr-only" id="panorama-live-status" role="status" aria-live="polite"></div>
     </section>
@@ -399,11 +404,15 @@ const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-res
 const panoramaVrButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-mode');
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
 const panoramaVrOrientation = getRequiredElement<HTMLElement>('#panorama-vr-orientation');
+const panoramaGazeTeleport = getRequiredElement<HTMLElement>('#panorama-gaze-teleport');
+const panoramaGazeLabel = getRequiredElement<HTMLElement>('#panorama-gaze-label');
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
 let arMode: ARMode = 'unavailable';
 
 const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
+const PANORAMA_GAZE_TARGET_DEGREES = 7.5;
+const PANORAMA_GAZE_DWELL_MS = 1300;
 const progressStorage = getProgressStorage();
 let appProgress = loadAppProgress(progressStorage);
 let activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panoramaSceneId);
@@ -411,6 +420,10 @@ let resumableView: ResumableView = appProgress.view;
 let panoramaCheckpointTimer: number | undefined;
 let panoramaWakeLock: WakeLockSentinel | null = null;
 let panoramaVrEnteredFullscreen = false;
+let panoramaGazeFrameId: number | undefined;
+let panoramaGazeTargetId: string | null = null;
+let panoramaGazeStartedAt = 0;
+let panoramaGazeTeleporting = false;
 let arSessionActive = false;
 let virtualExperienceActive = false;
 let activeExperienceMode: 'ar' | 'virtual' | null = null;
@@ -534,8 +547,9 @@ function handlePanoramaHotspot(hotspot: PanoramaHotspot): void {
 
 async function activatePanoramaScene(
   sceneId: string,
-  source: 'menu' | 'hotspot',
+  source: 'menu' | 'hotspot' | 'gaze',
 ): Promise<void> {
+  if (source !== 'gaze') resetPanoramaGazeTarget();
   const scene = findPanoramaScene(panoramaScenes, sceneId);
   setPanoramaTourOpen(false);
   closePanoramaInfo();
@@ -568,6 +582,91 @@ async function activatePanoramaScene(
       panoramaView.classList.remove('is-changing-scene');
     }
   }
+}
+
+function setPanoramaGazeUi(
+  target: PanoramaNavigationHotspot | null,
+  progress: number,
+): void {
+  const active = panorama.isStereoMode();
+  panoramaGazeTeleport.setAttribute('aria-hidden', String(!active));
+  panoramaGazeTeleport.classList.toggle('has-target', Boolean(target));
+  panoramaGazeTeleport.style.setProperty('--gaze-progress', String(Math.max(0, Math.min(1, progress))));
+  panoramaGazeLabel.textContent = target?.label ?? '';
+}
+
+function resetPanoramaGazeTarget(): void {
+  panoramaGazeTargetId = null;
+  panoramaGazeStartedAt = 0;
+  panoramaGazeTeleporting = false;
+  setPanoramaGazeUi(null, 0);
+}
+
+function getPanoramaGazeTarget(): PanoramaNavigationHotspot | null {
+  const view = panorama.getViewState();
+  const targets = activePanoramaScene.hotspots
+    .filter((hotspot): hotspot is PanoramaNavigationHotspot => hotspot.kind === 'navigation')
+    .map((hotspot) => ({
+      hotspot,
+      distance: getPanoramaAngularDistance(view, hotspot),
+    }))
+    .sort((first, second) => first.distance - second.distance);
+  const closest = targets[0];
+  return closest && closest.distance <= PANORAMA_GAZE_TARGET_DEGREES
+    ? closest.hotspot
+    : null;
+}
+
+function stopPanoramaGazeLoop(): void {
+  if (panoramaGazeFrameId !== undefined) {
+    window.cancelAnimationFrame(panoramaGazeFrameId);
+    panoramaGazeFrameId = undefined;
+  }
+  resetPanoramaGazeTarget();
+  panoramaGazeTeleport.setAttribute('aria-hidden', 'true');
+}
+
+function startPanoramaGazeLoop(): void {
+  if (panoramaGazeFrameId !== undefined) return;
+  resetPanoramaGazeTarget();
+
+  const tick = (time: number): void => {
+    panoramaGazeFrameId = undefined;
+    if (!panorama.isStereoMode()) {
+      stopPanoramaGazeLoop();
+      return;
+    }
+
+    if (panoramaGazeTeleporting) {
+      panoramaGazeFrameId = window.requestAnimationFrame(tick);
+      return;
+    }
+
+    const portraitBlocked = panoramaView.classList.contains('is-vr-portrait-blocked');
+    const target = portraitBlocked ? null : getPanoramaGazeTarget();
+    if (!target) {
+      resetPanoramaGazeTarget();
+    } else {
+      if (panoramaGazeTargetId !== target.id) {
+        panoramaGazeTargetId = target.id;
+        panoramaGazeStartedAt = time;
+      }
+      const progress = (time - panoramaGazeStartedAt) / PANORAMA_GAZE_DWELL_MS;
+      setPanoramaGazeUi(target, progress);
+      if (progress >= 1 && !panoramaGazeTeleporting) {
+        panoramaGazeTeleporting = true;
+        panoramaLiveStatus.textContent = `Teletransporte a ${target.label}.`;
+        void activatePanoramaScene(target.targetSceneId, 'gaze')
+          .finally(() => {
+            resetPanoramaGazeTarget();
+          });
+      }
+    }
+
+    panoramaGazeFrameId = window.requestAnimationFrame(tick);
+  };
+
+  panoramaGazeFrameId = window.requestAnimationFrame(tick);
 }
 
 async function requestPanoramaWakeLock(): Promise<void> {
@@ -628,6 +727,7 @@ function updatePanoramaVrOrientationState(): void {
   const blocked = panorama.isStereoMode() && window.matchMedia('(orientation: portrait)').matches;
   panoramaView.classList.toggle('is-vr-portrait-blocked', blocked);
   panoramaVrOrientation.setAttribute('aria-hidden', String(!blocked));
+  if (blocked) resetPanoramaGazeTarget();
 }
 
 function applyPanoramaVrMode(enabled: boolean): void {
@@ -638,6 +738,9 @@ function applyPanoramaVrMode(enabled: boolean): void {
   if (enabled) {
     closePanoramaInfo();
     setPanoramaTourOpen(false);
+    startPanoramaGazeLoop();
+  } else {
+    stopPanoramaGazeLoop();
   }
 }
 

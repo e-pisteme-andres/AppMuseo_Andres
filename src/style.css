@@ -552,6 +552,66 @@ body.virtual-active .xr-overlay { display: block; }
 .panorama-vr-orientation small { display: block; }
 .panorama-vr-orientation strong { margin-top: 6px; font-size: clamp(1.55rem, 8vw, 2.6rem); letter-spacing: 0; }
 .panorama-vr-orientation small { max-width: 280px; color: #a8beb5; font-size: .86rem; line-height: 1.45; }
+.panorama-gaze-teleport {
+  --gaze-progress: 0;
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  display: none;
+  justify-items: center;
+  gap: 12px;
+  color: #f7fffb;
+  text-align: center;
+  text-shadow: 0 2px 12px rgba(0,0,0,.75);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.panorama-gaze-reticle {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background:
+    conic-gradient(#9ef6d1 calc(var(--gaze-progress) * 1turn), rgba(255,255,255,.22) 0),
+    rgba(4,14,11,.28);
+  box-shadow: 0 0 28px rgba(0,0,0,.32);
+}
+.panorama-gaze-reticle::before,
+.panorama-gaze-reticle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.panorama-gaze-reticle::before {
+  width: 42px;
+  height: 42px;
+  background: rgba(4,14,11,.78);
+  backdrop-filter: blur(10px);
+}
+.panorama-gaze-reticle::after {
+  width: 9px;
+  height: 9px;
+  background: #f7fffb;
+  box-shadow: 0 0 16px rgba(158,246,209,.72);
+}
+.panorama-gaze-teleport strong {
+  min-height: 1.15rem;
+  max-width: 220px;
+  color: #ffe29a;
+  font-size: .78rem;
+  line-height: 1.25;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+.panorama-gaze-teleport.has-target strong {
+  opacity: 1;
+  transform: translateY(0);
+}
 .panorama-hint {
   position: absolute;
   z-index: 3;
@@ -588,8 +648,14 @@ body.panorama-active .panorama-view { display: block; }
   opacity: 0;
   pointer-events: none;
 }
+.panorama-view.is-vr-mode .panorama-gaze-teleport {
+  display: grid;
+}
 .panorama-view.is-vr-portrait-blocked .panorama-vr-orientation {
   display: grid;
+}
+.panorama-view.is-vr-portrait-blocked .panorama-gaze-teleport {
+  display: none;
 }
 .panorama-view.is-vr-portrait-blocked .panorama-mobile-tools,
 .panorama-view.is-vr-portrait-blocked .panorama-topbar {
