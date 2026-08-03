@@ -306,6 +306,11 @@ app.innerHTML = `
         </div>
       </div>
       <div class="panorama-hint" id="panorama-hint"><span aria-hidden="true">◎</span><span id="panorama-hint-text">Preparando sensores…</span></div>
+      <div class="panorama-vr-orientation" id="panorama-vr-orientation" role="status" aria-live="polite" aria-hidden="true">
+        <span aria-hidden="true">VR</span>
+        <strong>Gira el móvil</strong>
+        <small>El modo gafas se mantiene bloqueado en horizontal.</small>
+      </div>
       <a class="panorama-credit" id="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
       <div class="sr-only" id="panorama-live-status" role="status" aria-live="polite"></div>
     </section>
@@ -393,6 +398,7 @@ const panoramaZoomInButton = getRequiredElement<HTMLButtonElement>('#panorama-zo
 const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-reset-view');
 const panoramaVrButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-mode');
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
+const panoramaVrOrientation = getRequiredElement<HTMLElement>('#panorama-vr-orientation');
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
 let arMode: ARMode = 'unavailable';
@@ -589,6 +595,13 @@ async function lockPanoramaLandscape(): Promise<void> {
   if (orientation.lock) await orientation.lock('landscape').catch(() => undefined);
 }
 
+function unlockPanoramaOrientation(): void {
+  const orientation = screen.orientation as ScreenOrientation & {
+    unlock?: () => void;
+  };
+  orientation.unlock?.();
+}
+
 async function togglePanoramaFullscreen(): Promise<void> {
   try {
     if (document.fullscreenElement) {
@@ -611,10 +624,17 @@ function updatePanoramaVrButton(enabled: boolean): void {
   panoramaVrButton.textContent = enabled ? '2D' : 'VR';
 }
 
+function updatePanoramaVrOrientationState(): void {
+  const blocked = panorama.isStereoMode() && window.matchMedia('(orientation: portrait)').matches;
+  panoramaView.classList.toggle('is-vr-portrait-blocked', blocked);
+  panoramaVrOrientation.setAttribute('aria-hidden', String(!blocked));
+}
+
 function applyPanoramaVrMode(enabled: boolean): void {
   panorama.setStereoMode(enabled);
   panoramaView.classList.toggle('is-vr-mode', enabled);
   updatePanoramaVrButton(enabled);
+  updatePanoramaVrOrientationState();
   if (enabled) {
     closePanoramaInfo();
     setPanoramaTourOpen(false);
@@ -623,26 +643,35 @@ function applyPanoramaVrMode(enabled: boolean): void {
 
 async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Promise<void> {
   if (panorama.isStereoMode() === enabled) return;
-  applyPanoramaVrMode(enabled);
 
   if (enabled) {
-    checkpoint('panorama:vr:on', 'panorama');
-    panoramaLiveStatus.textContent = 'Modo gafas VR activado. Coloca el móvil en horizontal dentro de las gafas.';
-    if (manageFullscreen && document.fullscreenElement !== panoramaView && typeof panoramaView.requestFullscreen === 'function') {
+    if (manageFullscreen) {
+      if (typeof panoramaView.requestFullscreen !== 'function') {
+        panoramaLiveStatus.textContent = 'Este navegador no permite abrir el modo gafas en pantalla completa.';
+        return;
+      }
       try {
-        await panoramaView.requestFullscreen();
+        if (document.fullscreenElement !== panoramaView) {
+          await panoramaView.requestFullscreen();
+        }
         panoramaVrEnteredFullscreen = true;
-        await lockPanoramaLandscape();
       } catch {
-        panoramaLiveStatus.textContent = 'Modo gafas VR activado. Puedes poner el navegador en pantalla completa manualmente.';
+        panoramaLiveStatus.textContent = 'No se pudo abrir pantalla completa. El modo gafas necesita pantalla completa para activarse.';
+        return;
       }
     }
+    await lockPanoramaLandscape();
+    applyPanoramaVrMode(true);
+    checkpoint('panorama:vr:on', 'panorama');
+    panoramaLiveStatus.textContent = 'Modo gafas VR activado en pantalla completa horizontal.';
     await requestPanoramaWakeLock();
     return;
   }
 
+  applyPanoramaVrMode(false);
   checkpoint('panorama:vr:off', 'panorama');
   panoramaLiveStatus.textContent = 'Modo gafas VR desactivado.';
+  unlockPanoramaOrientation();
   if (manageFullscreen && panoramaVrEnteredFullscreen && document.fullscreenElement === panoramaView) {
     panoramaVrEnteredFullscreen = false;
     await document.exitFullscreen().catch(() => undefined);
@@ -653,7 +682,14 @@ async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Pro
 
 function updatePanoramaFullscreenButton(): void {
   const isFullscreen = document.fullscreenElement === panoramaView;
-  if (!isFullscreen) panoramaVrEnteredFullscreen = false;
+  if (!isFullscreen) {
+    panoramaVrEnteredFullscreen = false;
+    if (panorama.isStereoMode()) {
+      applyPanoramaVrMode(false);
+      unlockPanoramaOrientation();
+      panoramaLiveStatus.textContent = 'Modo gafas VR desactivado al salir de pantalla completa.';
+    }
+  }
   panoramaFullscreenButton.setAttribute(
     'aria-label',
     isFullscreen ? 'Salir de pantalla completa' : 'Mostrar en pantalla completa',
@@ -688,6 +724,8 @@ panoramaFullscreenButton.addEventListener('click', () => {
   void togglePanoramaFullscreen();
 });
 document.addEventListener('fullscreenchange', updatePanoramaFullscreenButton);
+screen.orientation?.addEventListener?.('change', updatePanoramaVrOrientationState);
+window.addEventListener('resize', updatePanoramaVrOrientationState);
 
 const modelPreviews = new Map(
   MODEL_CATALOG.map((model) => [
@@ -1274,6 +1312,7 @@ function closePanorama(): void {
   setPanoramaTourOpen(false);
   applyPanoramaVrMode(false);
   panoramaVrEnteredFullscreen = false;
+  unlockPanoramaOrientation();
   panorama.pause();
   void releasePanoramaWakeLock();
   if (document.fullscreenElement === panoramaView) {

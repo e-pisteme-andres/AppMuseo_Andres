@@ -525,6 +525,33 @@ body.virtual-active .xr-overlay { display: block; }
   color: #062318;
   background: #9ef6d1;
 }
+.panorama-vr-orientation {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: none;
+  place-items: center;
+  gap: 10px;
+  padding: 28px;
+  color: #f4fbf8;
+  background: rgba(3, 10, 8, .96);
+  text-align: center;
+}
+.panorama-vr-orientation > span {
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 46px;
+  border: 2px solid #9ef6d1;
+  border-radius: 50%;
+  color: #9ef6d1;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.panorama-vr-orientation strong,
+.panorama-vr-orientation small { display: block; }
+.panorama-vr-orientation strong { margin-top: 6px; font-size: clamp(1.55rem, 8vw, 2.6rem); letter-spacing: 0; }
+.panorama-vr-orientation small { max-width: 280px; color: #a8beb5; font-size: .86rem; line-height: 1.45; }
 .panorama-hint {
   position: absolute;
   z-index: 3;
@@ -560,6 +587,14 @@ body.panorama-active .panorama-view { display: block; }
 .panorama-view.is-vr-mode .panorama-title {
   opacity: 0;
   pointer-events: none;
+}
+.panorama-view.is-vr-portrait-blocked .panorama-vr-orientation {
+  display: grid;
+}
+.panorama-view.is-vr-portrait-blocked .panorama-mobile-tools,
+.panorama-view.is-vr-portrait-blocked .panorama-topbar {
+  pointer-events: none;
+  opacity: 0;
 }
 
 @keyframes panorama-spin { to { transform: rotate(360deg); } }
