@@ -301,6 +301,7 @@ app.innerHTML = `
           <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-out" type="button" aria-label="Alejar">−</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-reset-view" type="button" aria-label="Centrar vista">◎</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-in" type="button" aria-label="Acercar">+</button>
+          <button class="panorama-tool panorama-icon-tool panorama-vr-tool" id="panorama-vr-mode" type="button" aria-label="Activar modo gafas VR" aria-pressed="false">VR</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-fullscreen" type="button" aria-label="Mostrar en pantalla completa">⛶</button>
         </div>
       </div>
@@ -390,6 +391,7 @@ const closePanoramaInfoButton = getRequiredElement<HTMLButtonElement>('#close-pa
 const panoramaZoomOutButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-out');
 const panoramaZoomInButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-in');
 const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-reset-view');
+const panoramaVrButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-mode');
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
@@ -402,6 +404,7 @@ let activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panorama
 let resumableView: ResumableView = appProgress.view;
 let panoramaCheckpointTimer: number | undefined;
 let panoramaWakeLock: WakeLockSentinel | null = null;
+let panoramaVrEnteredFullscreen = false;
 let arSessionActive = false;
 let virtualExperienceActive = false;
 let activeExperienceMode: 'ar' | 'virtual' | null = null;
@@ -579,6 +582,13 @@ async function releasePanoramaWakeLock(): Promise<void> {
   await wakeLock?.release().catch(() => undefined);
 }
 
+async function lockPanoramaLandscape(): Promise<void> {
+  const orientation = screen.orientation as ScreenOrientation & {
+    lock?: (orientation: 'landscape') => Promise<void>;
+  };
+  if (orientation.lock) await orientation.lock('landscape').catch(() => undefined);
+}
+
 async function togglePanoramaFullscreen(): Promise<void> {
   try {
     if (document.fullscreenElement) {
@@ -586,19 +596,64 @@ async function togglePanoramaFullscreen(): Promise<void> {
       return;
     }
     await panoramaView.requestFullscreen();
-    const orientation = screen.orientation as ScreenOrientation & {
-      lock?: (orientation: 'landscape') => Promise<void>;
-    };
-    if (orientation.lock) {
-      await orientation.lock('landscape').catch(() => undefined);
-    }
+    await lockPanoramaLandscape();
   } catch {
     panoramaLiveStatus.textContent = 'La pantalla completa no está disponible en este navegador.';
   }
 }
 
+function updatePanoramaVrButton(enabled: boolean): void {
+  panoramaVrButton.setAttribute(
+    'aria-label',
+    enabled ? 'Desactivar modo gafas VR' : 'Activar modo gafas VR',
+  );
+  panoramaVrButton.setAttribute('aria-pressed', String(enabled));
+  panoramaVrButton.textContent = enabled ? '2D' : 'VR';
+}
+
+function applyPanoramaVrMode(enabled: boolean): void {
+  panorama.setStereoMode(enabled);
+  panoramaView.classList.toggle('is-vr-mode', enabled);
+  updatePanoramaVrButton(enabled);
+  if (enabled) {
+    closePanoramaInfo();
+    setPanoramaTourOpen(false);
+  }
+}
+
+async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Promise<void> {
+  if (panorama.isStereoMode() === enabled) return;
+  applyPanoramaVrMode(enabled);
+
+  if (enabled) {
+    checkpoint('panorama:vr:on', 'panorama');
+    panoramaLiveStatus.textContent = 'Modo gafas VR activado. Coloca el móvil en horizontal dentro de las gafas.';
+    if (manageFullscreen && document.fullscreenElement !== panoramaView && typeof panoramaView.requestFullscreen === 'function') {
+      try {
+        await panoramaView.requestFullscreen();
+        panoramaVrEnteredFullscreen = true;
+        await lockPanoramaLandscape();
+      } catch {
+        panoramaLiveStatus.textContent = 'Modo gafas VR activado. Puedes poner el navegador en pantalla completa manualmente.';
+      }
+    }
+    await requestPanoramaWakeLock();
+    return;
+  }
+
+  checkpoint('panorama:vr:off', 'panorama');
+  panoramaLiveStatus.textContent = 'Modo gafas VR desactivado.';
+  if (manageFullscreen && panoramaVrEnteredFullscreen && document.fullscreenElement === panoramaView) {
+    panoramaVrEnteredFullscreen = false;
+    await document.exitFullscreen().catch(() => undefined);
+  } else {
+    panoramaVrEnteredFullscreen = false;
+  }
+}
+
 function updatePanoramaFullscreenButton(): void {
   const isFullscreen = document.fullscreenElement === panoramaView;
+  if (!isFullscreen) panoramaVrEnteredFullscreen = false;
   panoramaFullscreenButton.setAttribute(
     'aria-label',
     isFullscreen ? 'Salir de pantalla completa' : 'Mostrar en pantalla completa',
@@ -625,6 +680,9 @@ panoramaZoomInButton.addEventListener('click', () => panorama.zoomBy(-8));
 panoramaResetButton.addEventListener('click', () => {
   panorama.resetView(activePanoramaScene.initialView);
   panoramaLiveStatus.textContent = 'Vista centrada.';
+});
+panoramaVrButton.addEventListener('click', () => {
+  void setPanoramaVrMode(!panorama.isStereoMode());
 });
 panoramaFullscreenButton.addEventListener('click', () => {
   void togglePanoramaFullscreen();
@@ -1214,6 +1272,8 @@ function closePanorama(): void {
   resumableView = 'landing';
   closePanoramaInfo();
   setPanoramaTourOpen(false);
+  applyPanoramaVrMode(false);
+  panoramaVrEnteredFullscreen = false;
   panorama.pause();
   void releasePanoramaWakeLock();
   if (document.fullscreenElement === panoramaView) {

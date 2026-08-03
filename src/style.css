@@ -301,6 +301,18 @@ body.virtual-active .xr-overlay { display: block; }
   width: 100%;
   height: 100%;
 }
+.panorama-stage.is-vr-mode::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,.45), transparent);
+  transform: translateX(-.5px);
+  pointer-events: none;
+}
 .panorama-canvas {
   cursor: grab;
   touch-action: none;
@@ -322,6 +334,8 @@ body.virtual-active .xr-overlay { display: block; }
   overflow: hidden;
   pointer-events: none;
 }
+.panorama-hotspots.is-suppressed,
+.panorama-stage.is-vr-mode .panorama-hotspots { display: none; }
 .panorama-hotspot {
   position: absolute;
   display: flex;
@@ -506,6 +520,11 @@ body.virtual-active .xr-overlay { display: block; }
 .panorama-icon-tool { width: 44px; padding: 0; font-size: 1.05rem; }
 .panorama-tool:hover, .panorama-tool:focus-visible { border-color: rgba(158,246,209,.7); background: rgba(10,37,28,.86); }
 .panorama-tool[hidden] { display: none; }
+.panorama-vr-tool[aria-pressed="true"] {
+  border-color: rgba(111,238,186,.78);
+  color: #062318;
+  background: #9ef6d1;
+}
 .panorama-hint {
   position: absolute;
   z-index: 3;
@@ -531,6 +550,17 @@ body.virtual-active .xr-overlay { display: block; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 body.panorama-active { overflow: hidden; }
 body.panorama-active .panorama-view { display: block; }
+.panorama-view.is-vr-mode .panorama-shade,
+.panorama-view.is-vr-mode .panorama-hint,
+.panorama-view.is-vr-mode .panorama-credit,
+.panorama-view.is-vr-mode .panorama-tour-panel,
+.panorama-view.is-vr-mode .panorama-info-card {
+  display: none;
+}
+.panorama-view.is-vr-mode .panorama-title {
+  opacity: 0;
+  pointer-events: none;
+}
 
 @keyframes panorama-spin { to { transform: rotate(360deg); } }
 @keyframes motion-pulse { 50% { transform: scale(1.35); text-shadow: 0 0 10px #6feeba; } }
@@ -628,6 +658,24 @@ body.panorama-active .panorama-view { display: block; }
   .camera-confirm-button { grid-column: 1 / -1; margin-left: 0; }
   .camera-virtual-button { grid-column: 1 / -1; }
   .camera-help ol { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 460px) {
+  .panorama-mobile-tools { align-items: flex-end; }
+  .panorama-zoom-tools {
+    display: grid;
+    grid-template-columns: repeat(3, 36px);
+    gap: 4px;
+  }
+  .panorama-icon-tool { width: 36px; min-height: 38px; font-size: .86rem; }
+}
+
+@media (max-width: 380px) {
+  .panorama-mobile-tools { gap: 6px; }
+  .panorama-tour-toggle { min-width: 90px; padding: 0 8px; }
+  .panorama-tour-toggle strong { font-size: .62rem; }
+  .panorama-zoom-tools { gap: 4px; }
+  .panorama-icon-tool { width: 34px; min-height: 38px; font-size: .84rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

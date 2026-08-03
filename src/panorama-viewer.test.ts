@@ -3,6 +3,7 @@ import { Quaternion, Vector3 } from 'three';
 import {
   getCalibratedMotionView,
   getSphericalPosition,
+  getStereoEyeViewports,
   getViewFromCameraQuaternion,
   setDeviceQuaternion,
 } from './panorama-viewer';
@@ -38,6 +39,22 @@ describe('posición de puntos panorámicos', () => {
     expect(northPole.x).toBeCloseTo(0);
     expect(northPole.y).toBeCloseTo(10);
     expect(northPole.z).toBeCloseTo(0);
+  });
+});
+
+describe('modo estereo panoramico', () => {
+  it('divide la pantalla en dos ojos sin perder pixeles impares', () => {
+    const viewports = getStereoEyeViewports(101, 50);
+
+    expect(viewports.left).toEqual({ x: 0, y: 0, width: 50, height: 50 });
+    expect(viewports.right).toEqual({ x: 50, y: 0, width: 51, height: 50 });
+  });
+
+  it('normaliza medidas negativas para evitar viewports invalidos', () => {
+    expect(getStereoEyeViewports(-20, -5)).toEqual({
+      left: { x: 0, y: 0, width: 0, height: 0 },
+      right: { x: 0, y: 0, width: 0, height: 0 },
+    });
   });
 });
 
