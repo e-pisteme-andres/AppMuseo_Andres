@@ -556,16 +556,21 @@ body.virtual-active .xr-overlay { display: block; }
   --gaze-progress: 0;
   position: absolute;
   z-index: 5;
-  left: 50%;
-  top: 50%;
+  inset: 0;
   display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
   justify-items: center;
-  gap: 12px;
   color: #f7fffb;
   text-align: center;
   text-shadow: 0 2px 12px rgba(0,0,0,.75);
-  transform: translate(-50%, -50%);
   pointer-events: none;
+}
+.panorama-gaze-eye {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(72%, 280px);
 }
 .panorama-gaze-reticle {
   position: relative;
@@ -599,18 +604,75 @@ body.virtual-active .xr-overlay { display: block; }
   box-shadow: 0 0 16px rgba(158,246,209,.72);
 }
 .panorama-gaze-teleport strong {
-  min-height: 1.15rem;
-  max-width: 220px;
+  min-height: 2.25rem;
+  max-width: 170px;
   color: #ffe29a;
-  font-size: .78rem;
+  font-size: .72rem;
   line-height: 1.25;
-  opacity: 0;
-  transform: translateY(4px);
+  opacity: .82;
   transition: opacity .16s ease, transform .16s ease;
 }
 .panorama-gaze-teleport.has-target strong {
   opacity: 1;
   transform: translateY(0);
+}
+.panorama-gaze-targets {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+}
+.panorama-gaze-target {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  color: #fff5c9;
+  text-align: center;
+  text-shadow: 0 2px 10px rgba(0,0,0,.78);
+  transform: translate(-50%, -50%);
+}
+.panorama-gaze-target__dot {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border: 2px solid #ffc857;
+  border-radius: 50%;
+  background: rgba(4,14,11,.46);
+  box-shadow: 0 0 0 7px rgba(255,200,87,.12), 0 0 22px rgba(0,0,0,.45);
+}
+.panorama-gaze-target__dot::before,
+.panorama-gaze-target__dot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #ffc857;
+  transform: translate(-50%, -50%);
+}
+.panorama-gaze-target__dot::before { width: 16px; height: 2px; }
+.panorama-gaze-target__dot::after { width: 2px; height: 16px; }
+.panorama-gaze-target__label {
+  max-width: 120px;
+  padding: 5px 7px;
+  border-radius: 9px;
+  background: rgba(4,14,11,.68);
+  color: #fff5c9;
+  font-size: .58rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.panorama-gaze-target.is-targeted .panorama-gaze-target__dot {
+  border-color: #9ef6d1;
+  box-shadow: 0 0 0 9px rgba(158,246,209,.17), 0 0 26px rgba(158,246,209,.34);
+}
+.panorama-gaze-target.is-targeted .panorama-gaze-target__dot::before,
+.panorama-gaze-target.is-targeted .panorama-gaze-target__dot::after {
+  background: #9ef6d1;
+}
+.panorama-gaze-target.is-targeted .panorama-gaze-target__label {
+  color: #dffdf2;
 }
 .panorama-hint {
   position: absolute;
@@ -651,10 +713,14 @@ body.panorama-active .panorama-view { display: block; }
 .panorama-view.is-vr-mode .panorama-gaze-teleport {
   display: grid;
 }
+.panorama-view.is-vr-mode .panorama-gaze-targets {
+  display: block;
+}
 .panorama-view.is-vr-portrait-blocked .panorama-vr-orientation {
   display: grid;
 }
-.panorama-view.is-vr-portrait-blocked .panorama-gaze-teleport {
+.panorama-view.is-vr-portrait-blocked .panorama-gaze-teleport,
+.panorama-view.is-vr-portrait-blocked .panorama-gaze-targets {
   display: none;
 }
 .panorama-view.is-vr-portrait-blocked .panorama-mobile-tools,

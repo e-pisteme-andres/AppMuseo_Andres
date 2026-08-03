@@ -313,9 +313,16 @@ app.innerHTML = `
         <small>El modo gafas se mantiene bloqueado en horizontal.</small>
       </div>
       <div class="panorama-gaze-teleport" id="panorama-gaze-teleport" aria-hidden="true">
-        <span class="panorama-gaze-reticle" aria-hidden="true"></span>
-        <strong id="panorama-gaze-label"></strong>
+        <div class="panorama-gaze-eye">
+          <span class="panorama-gaze-reticle" aria-hidden="true"></span>
+          <strong class="panorama-gaze-label"></strong>
+        </div>
+        <div class="panorama-gaze-eye">
+          <span class="panorama-gaze-reticle" aria-hidden="true"></span>
+          <strong class="panorama-gaze-label"></strong>
+        </div>
       </div>
+      <div class="panorama-gaze-targets" id="panorama-gaze-targets" aria-hidden="true"></div>
       <a class="panorama-credit" id="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
       <div class="sr-only" id="panorama-live-status" role="status" aria-live="polite"></div>
     </section>
@@ -405,7 +412,8 @@ const panoramaVrButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-mod
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
 const panoramaVrOrientation = getRequiredElement<HTMLElement>('#panorama-vr-orientation');
 const panoramaGazeTeleport = getRequiredElement<HTMLElement>('#panorama-gaze-teleport');
-const panoramaGazeLabel = getRequiredElement<HTMLElement>('#panorama-gaze-label');
+const panoramaGazeLabels = [...panoramaGazeTeleport.querySelectorAll<HTMLElement>('.panorama-gaze-label')];
+const panoramaGazeTargets = getRequiredElement<HTMLElement>('#panorama-gaze-targets');
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
 let arMode: ARMode = 'unavailable';
@@ -413,6 +421,7 @@ let arMode: ARMode = 'unavailable';
 const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
 const PANORAMA_GAZE_TARGET_DEGREES = 7.5;
 const PANORAMA_GAZE_DWELL_MS = 1300;
+const PANORAMA_GAZE_VISIBLE_MARGIN = 0.92;
 const progressStorage = getProgressStorage();
 let appProgress = loadAppProgress(progressStorage);
 let activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panoramaSceneId);
@@ -430,6 +439,10 @@ let activeExperienceMode: 'ar' | 'virtual' | null = null;
 let arFlowPending = false;
 let arAttemptId = 0;
 let interruptedArAttemptId = -1;
+
+function normalizePanoramaDelta(delta: number): number {
+  return ((delta + 180) % 360 + 360) % 360 - 180;
+}
 
 function checkpoint(action: string, view: ResumableView = resumableView): void {
   appProgress = saveAppProgress(progressStorage, {
@@ -592,7 +605,9 @@ function setPanoramaGazeUi(
   panoramaGazeTeleport.setAttribute('aria-hidden', String(!active));
   panoramaGazeTeleport.classList.toggle('has-target', Boolean(target));
   panoramaGazeTeleport.style.setProperty('--gaze-progress', String(Math.max(0, Math.min(1, progress))));
-  panoramaGazeLabel.textContent = target?.label ?? '';
+  panoramaGazeLabels.forEach((label) => {
+    label.textContent = target ? `Teletransportando: ${target.label}` : 'Mira un punto amarillo';
+  });
 }
 
 function resetPanoramaGazeTarget(): void {
@@ -617,12 +632,67 @@ function getPanoramaGazeTarget(): PanoramaNavigationHotspot | null {
     : null;
 }
 
+function getPanoramaTargetProjection(
+  hotspot: PanoramaNavigationHotspot,
+): { x: number; y: number } | null {
+  const view = panorama.getViewState();
+  const height = Math.max(1, panoramaView.clientHeight);
+  const eyeWidth = Math.max(1, panoramaView.clientWidth / 2);
+  const verticalFov = view.fov * Math.PI / 180;
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * eyeWidth / height);
+  const yaw = normalizePanoramaDelta(hotspot.longitude - view.longitude) * Math.PI / 180;
+  const pitch = (hotspot.latitude - view.latitude) * Math.PI / 180;
+  const x = Math.tan(yaw) / Math.tan(horizontalFov / 2);
+  const y = Math.tan(pitch) / Math.tan(verticalFov / 2);
+
+  return Math.abs(x) <= PANORAMA_GAZE_VISIBLE_MARGIN && Math.abs(y) <= PANORAMA_GAZE_VISIBLE_MARGIN
+    ? { x, y }
+    : null;
+}
+
+function renderPanoramaGazeTargets(activeTarget: PanoramaNavigationHotspot | null): void {
+  const active = panorama.isStereoMode()
+    && !panoramaView.classList.contains('is-vr-portrait-blocked');
+  panoramaGazeTargets.setAttribute('aria-hidden', String(!active));
+  panoramaGazeTargets.replaceChildren();
+  if (!active) return;
+
+  const fragment = document.createDocumentFragment();
+  activePanoramaScene.hotspots
+    .filter((hotspot): hotspot is PanoramaNavigationHotspot => hotspot.kind === 'navigation')
+    .forEach((hotspot) => {
+      const projection = getPanoramaTargetProjection(hotspot);
+      if (!projection) return;
+
+      [0, 1].forEach((eyeIndex) => {
+        const marker = document.createElement('span');
+        marker.className = 'panorama-gaze-target';
+        marker.classList.toggle('is-targeted', activeTarget?.id === hotspot.id);
+        marker.style.left = `${eyeIndex * 50 + (projection.x * 0.5 + 0.5) * 50}%`;
+        marker.style.top = `${(-projection.y * 0.5 + 0.5) * 100}%`;
+
+        const dot = document.createElement('span');
+        dot.className = 'panorama-gaze-target__dot';
+        dot.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.className = 'panorama-gaze-target__label';
+        label.textContent = hotspot.label;
+        marker.append(dot, label);
+        fragment.append(marker);
+      });
+    });
+
+  panoramaGazeTargets.append(fragment);
+}
+
 function stopPanoramaGazeLoop(): void {
   if (panoramaGazeFrameId !== undefined) {
     window.cancelAnimationFrame(panoramaGazeFrameId);
     panoramaGazeFrameId = undefined;
   }
   resetPanoramaGazeTarget();
+  panoramaGazeTargets.replaceChildren();
+  panoramaGazeTargets.setAttribute('aria-hidden', 'true');
   panoramaGazeTeleport.setAttribute('aria-hidden', 'true');
 }
 
@@ -644,6 +714,7 @@ function startPanoramaGazeLoop(): void {
 
     const portraitBlocked = panoramaView.classList.contains('is-vr-portrait-blocked');
     const target = portraitBlocked ? null : getPanoramaGazeTarget();
+    renderPanoramaGazeTargets(target);
     if (!target) {
       resetPanoramaGazeTarget();
     } else {
