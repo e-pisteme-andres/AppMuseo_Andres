@@ -8,6 +8,7 @@ import {
   SphereGeometry,
   StereoCamera,
   SRGBColorSpace,
+  Texture,
   TextureLoader,
   Vector3,
   WebGLRenderer,
@@ -76,6 +77,7 @@ const projectedHotspotPosition = new Vector3();
 const hotspotDirection = new Vector3();
 const minimumLatitude = -82;
 const maximumLatitude = 82;
+const panoramaTextureLoadTimeoutMs = 12000;
 
 function clampLatitude(latitude: number): number {
   return Math.max(minimumLatitude, Math.min(maximumLatitude, latitude));
@@ -300,7 +302,7 @@ export class PanoramaViewer {
     const requestId = ++this.textureRequestId;
     this.onLoadingChange?.(true);
     try {
-      const texture = await new TextureLoader().loadAsync(imageUrl);
+      const texture = await this.loadTexture(imageUrl);
       if (requestId !== this.textureRequestId) {
         texture.dispose();
         return;
@@ -349,7 +351,7 @@ export class PanoramaViewer {
 
     try {
       await this.prepareControls();
-      const texture = await new TextureLoader().loadAsync(this.imageUrl);
+      const texture = await this.loadTexture(this.imageUrl);
       texture.colorSpace = SRGBColorSpace;
       const geometry = new SphereGeometry(500, 72, 48);
       geometry.scale(-1, 1, 1);
@@ -580,6 +582,43 @@ export class PanoramaViewer {
       this.frameId = requestAnimationFrame(render);
     };
     render();
+  }
+
+  private loadTexture(imageUrl: string): Promise<Texture> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timeoutId = window.setTimeout(() => {
+        settled = true;
+        reject(new Error('Panorama texture load timed out.'));
+      }, panoramaTextureLoadTimeoutMs);
+
+      try {
+        new TextureLoader().load(
+          imageUrl,
+          (texture) => {
+            window.clearTimeout(timeoutId);
+            if (settled) {
+              texture.dispose();
+              return;
+            }
+            settled = true;
+            resolve(texture);
+          },
+          undefined,
+          (error) => {
+            window.clearTimeout(timeoutId);
+            if (settled) return;
+            settled = true;
+            reject(error instanceof Error ? error : new Error('Panorama texture load failed.'));
+          },
+        );
+      } catch (error) {
+        window.clearTimeout(timeoutId);
+        if (settled) return;
+        settled = true;
+        reject(error instanceof Error ? error : new Error('Panorama texture load failed.'));
+      }
+    });
   }
 
   private renderScene(): void {

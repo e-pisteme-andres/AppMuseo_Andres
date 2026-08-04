@@ -311,6 +311,7 @@ app.innerHTML = `
         <span aria-hidden="true">VR</span>
         <strong>Gira el móvil</strong>
         <small>El modo gafas se mantiene bloqueado en horizontal.</small>
+        <button class="panorama-vr-exit" id="panorama-vr-exit" type="button">Salir de VR</button>
       </div>
       <div class="panorama-gaze-teleport" id="panorama-gaze-teleport" aria-hidden="true">
         <div class="panorama-gaze-eye">
@@ -322,7 +323,6 @@ app.innerHTML = `
           <strong class="panorama-gaze-label"></strong>
         </div>
       </div>
-      <div class="panorama-gaze-targets" id="panorama-gaze-targets" aria-hidden="true"></div>
       <a class="panorama-credit" id="panorama-credit" href="https://www.eso.org/public/spain/images/res-mount-sunrise-pan/" target="_blank" rel="noreferrer">Fotografía: ESO · CC BY 4.0</a>
       <div class="sr-only" id="panorama-live-status" role="status" aria-live="polite"></div>
     </section>
@@ -411,9 +411,9 @@ const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-res
 const panoramaVrButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-mode');
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
 const panoramaVrOrientation = getRequiredElement<HTMLElement>('#panorama-vr-orientation');
+const panoramaVrExitButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-exit');
 const panoramaGazeTeleport = getRequiredElement<HTMLElement>('#panorama-gaze-teleport');
 const panoramaGazeLabels = [...panoramaGazeTeleport.querySelectorAll<HTMLElement>('.panorama-gaze-label')];
-const panoramaGazeTargets = getRequiredElement<HTMLElement>('#panorama-gaze-targets');
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
 let arMode: ARMode = 'unavailable';
@@ -640,8 +640,6 @@ function getPanoramaGazeTarget(): PanoramaNavigationHotspot | null {
 function renderPanoramaGazeTargets(activeTarget: PanoramaNavigationHotspot | null): void {
   const active = panorama.isStereoMode()
     && !panoramaView.classList.contains('is-vr-portrait-blocked');
-  panoramaGazeTargets.replaceChildren();
-  panoramaGazeTargets.setAttribute('aria-hidden', 'true');
   panorama.setGazeNavigationTargets(active ? activePanoramaScene.hotspots : [], activeTarget?.id ?? null);
 }
 
@@ -651,8 +649,6 @@ function stopPanoramaGazeLoop(): void {
     panoramaGazeFrameId = undefined;
   }
   resetPanoramaGazeTarget();
-  panoramaGazeTargets.replaceChildren();
-  panoramaGazeTargets.setAttribute('aria-hidden', 'true');
   panorama.setGazeNavigationTargets([], null);
   panoramaGazeTeleport.setAttribute('aria-hidden', 'true');
 }
@@ -733,7 +729,11 @@ function unlockPanoramaOrientation(): void {
   const orientation = screen.orientation as ScreenOrientation & {
     unlock?: () => void;
   };
-  orientation.unlock?.();
+  try {
+    orientation.unlock?.();
+  } catch {
+    // Algunos navegadores rechazan unlock fuera de pantalla completa.
+  }
 }
 
 async function togglePanoramaFullscreen(): Promise<void> {
@@ -857,6 +857,9 @@ panoramaResetButton.addEventListener('click', () => {
 });
 panoramaVrButton.addEventListener('click', () => {
   void setPanoramaVrMode(!panorama.isStereoMode());
+});
+panoramaVrExitButton.addEventListener('click', () => {
+  void setPanoramaVrMode(false);
 });
 panoramaFullscreenButton.addEventListener('click', () => {
   void togglePanoramaFullscreen();
