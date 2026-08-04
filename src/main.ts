@@ -421,6 +421,7 @@ let arMode: ARMode = 'unavailable';
 const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
 const PANORAMA_GAZE_TARGET_DEGREES = 7.5;
 const PANORAMA_GAZE_DWELL_MS = 1300;
+const PANORAMA_GAZE_TELEPORT_TIMEOUT_MS = 8000;
 const PANORAMA_GAZE_VISIBLE_MARGIN = 0.92;
 const progressStorage = getProgressStorage();
 let appProgress = loadAppProgress(progressStorage);
@@ -433,6 +434,7 @@ let panoramaGazeFrameId: number | undefined;
 let panoramaGazeTargetId: string | null = null;
 let panoramaGazeStartedAt = 0;
 let panoramaGazeTeleporting = false;
+let panoramaGazeTeleportStartedAt = 0;
 let arSessionActive = false;
 let virtualExperienceActive = false;
 let activeExperienceMode: 'ar' | 'virtual' | null = null;
@@ -569,6 +571,7 @@ async function activatePanoramaScene(
   if (scene.id === activePanoramaScene.id) {
     panorama.resetView(scene.initialView);
     panoramaLiveStatus.textContent = `Vista centrada en ${scene.title}`;
+    if (source === 'gaze') finishPanoramaGazeTeleport();
     return;
   }
 
@@ -593,6 +596,7 @@ async function activatePanoramaScene(
   } finally {
     if (requestId === panoramaSceneRequestId) {
       panoramaView.classList.remove('is-changing-scene');
+      if (source === 'gaze') finishPanoramaGazeTeleport();
     }
   }
 }
@@ -614,7 +618,13 @@ function resetPanoramaGazeTarget(): void {
   panoramaGazeTargetId = null;
   panoramaGazeStartedAt = 0;
   panoramaGazeTeleporting = false;
+  panoramaGazeTeleportStartedAt = 0;
   setPanoramaGazeUi(null, 0);
+}
+
+function finishPanoramaGazeTeleport(): void {
+  resetPanoramaGazeTarget();
+  renderPanoramaGazeTargets(null);
 }
 
 function getPanoramaGazeTarget(): PanoramaNavigationHotspot | null {
@@ -708,12 +718,16 @@ function startPanoramaGazeLoop(): void {
     }
 
     if (panoramaGazeTeleporting) {
+      if (time - panoramaGazeTeleportStartedAt > PANORAMA_GAZE_TELEPORT_TIMEOUT_MS) {
+        finishPanoramaGazeTeleport();
+      }
       panoramaGazeFrameId = window.requestAnimationFrame(tick);
       return;
     }
 
-    const portraitBlocked = panoramaView.classList.contains('is-vr-portrait-blocked');
-    const target = portraitBlocked ? null : getPanoramaGazeTarget();
+    const gazePaused = panoramaView.classList.contains('is-vr-portrait-blocked')
+      || panoramaView.classList.contains('is-changing-scene');
+    const target = gazePaused ? null : getPanoramaGazeTarget();
     renderPanoramaGazeTargets(target);
     if (!target) {
       resetPanoramaGazeTarget();
@@ -726,11 +740,10 @@ function startPanoramaGazeLoop(): void {
       setPanoramaGazeUi(target, progress);
       if (progress >= 1 && !panoramaGazeTeleporting) {
         panoramaGazeTeleporting = true;
+        panoramaGazeTeleportStartedAt = time;
+        setPanoramaGazeUi(target, 1);
         panoramaLiveStatus.textContent = `Teletransporte a ${target.label}.`;
-        void activatePanoramaScene(target.targetSceneId, 'gaze')
-          .finally(() => {
-            resetPanoramaGazeTarget();
-          });
+        void activatePanoramaScene(target.targetSceneId, 'gaze');
       }
     }
 
