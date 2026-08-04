@@ -36,6 +36,11 @@ interface PointerSnapshot {
   y: number;
 }
 
+interface GazeTargetMarker {
+  mesh: Mesh<SphereGeometry, MeshBasicMaterial>;
+  material: MeshBasicMaterial;
+}
+
 export interface StereoEyeViewport {
   x: number;
   y: number;
@@ -166,6 +171,8 @@ export class PanoramaViewer {
   private frameId?: number;
   private resizeObserver?: ResizeObserver;
   private panoramaMaterial?: MeshBasicMaterial;
+  private gazeTargetGeometry?: SphereGeometry;
+  private readonly gazeTargetMarkers = new Map<string, GazeTargetMarker>();
   private hotspotLayer?: HTMLElement;
   private hotspots: PanoramaHotspot[] = [];
   private readonly hotspotElements = new Map<string, HTMLButtonElement>();
@@ -227,6 +234,7 @@ export class PanoramaViewer {
     this.stereoModeEnabled = enabled;
     this.container.classList.toggle('is-vr-mode', enabled);
     this.hotspotLayer?.classList.toggle('is-suppressed', enabled);
+    this.updateGazeTargetVisibility();
     this.resize();
   }
 
@@ -237,6 +245,45 @@ export class PanoramaViewer {
     this.hotspots = hotspots;
     this.onHotspotActivate = onActivate;
     this.renderHotspotElements();
+  }
+
+  setGazeNavigationTargets(hotspots: PanoramaHotspot[], activeHotspotId: string | null): void {
+    if (!this.scene) return;
+
+    const navigationHotspots = hotspots.filter((hotspot) => hotspot.kind === 'navigation');
+    const nextIds = new Set(navigationHotspots.map((hotspot) => hotspot.id));
+    for (const [id, marker] of this.gazeTargetMarkers) {
+      if (!nextIds.has(id)) {
+        this.scene.remove(marker.mesh);
+        marker.material.dispose();
+        this.gazeTargetMarkers.delete(id);
+      }
+    }
+
+    const geometry = this.gazeTargetGeometry ??= new SphereGeometry(8, 20, 20);
+    navigationHotspots.forEach((hotspot) => {
+      let marker = this.gazeTargetMarkers.get(hotspot.id);
+      if (!marker) {
+        const material = new MeshBasicMaterial({
+          color: 0xffc857,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96,
+        });
+        const mesh = new Mesh(geometry, material);
+        mesh.renderOrder = 2;
+        this.scene?.add(mesh);
+        marker = { mesh, material };
+        this.gazeTargetMarkers.set(hotspot.id, marker);
+      }
+
+      const isActive = activeHotspotId === hotspot.id;
+      marker.mesh.position.copy(getSphericalPosition(hotspot.longitude, hotspot.latitude, 476));
+      marker.mesh.scale.setScalar(isActive ? 1.55 : 1);
+      marker.mesh.visible = this.stereoModeEnabled;
+      marker.material.color.setHex(isActive ? 0x9ef6d1 : 0xffc857);
+    });
   }
 
   async changePanorama(
@@ -354,6 +401,8 @@ export class PanoramaViewer {
     this.scene = undefined;
     this.camera = undefined;
     this.panoramaMaterial = undefined;
+    this.gazeTargetGeometry = undefined;
+    this.gazeTargetMarkers.clear();
     this.hotspotLayer = undefined;
     this.hotspotElements.clear();
     this.stereoModeEnabled = false;
@@ -679,6 +728,12 @@ export class PanoramaViewer {
       if (!isVisible) return;
       element.style.left = `${(projectedHotspotPosition.x * 0.5 + 0.5) * 100}%`;
       element.style.top = `${(-projectedHotspotPosition.y * 0.5 + 0.5) * 100}%`;
+    });
+  }
+
+  private updateGazeTargetVisibility(): void {
+    this.gazeTargetMarkers.forEach((marker) => {
+      marker.mesh.visible = this.stereoModeEnabled;
     });
   }
 }

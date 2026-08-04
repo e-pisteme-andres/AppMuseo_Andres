@@ -422,7 +422,6 @@ const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
 const PANORAMA_GAZE_TARGET_DEGREES = 7.5;
 const PANORAMA_GAZE_DWELL_MS = 1300;
 const PANORAMA_GAZE_TELEPORT_TIMEOUT_MS = 8000;
-const PANORAMA_GAZE_VISIBLE_MARGIN = 0.92;
 const progressStorage = getProgressStorage();
 let appProgress = loadAppProgress(progressStorage);
 let activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panoramaSceneId);
@@ -441,10 +440,6 @@ let activeExperienceMode: 'ar' | 'virtual' | null = null;
 let arFlowPending = false;
 let arAttemptId = 0;
 let interruptedArAttemptId = -1;
-
-function normalizePanoramaDelta(delta: number): number {
-  return ((delta + 180) % 360 + 360) % 360 - 180;
-}
 
 function checkpoint(action: string, view: ResumableView = resumableView): void {
   appProgress = saveAppProgress(progressStorage, {
@@ -642,57 +637,12 @@ function getPanoramaGazeTarget(): PanoramaNavigationHotspot | null {
     : null;
 }
 
-function getPanoramaTargetProjection(
-  hotspot: PanoramaNavigationHotspot,
-): { x: number; y: number } | null {
-  const view = panorama.getViewState();
-  const height = Math.max(1, panoramaView.clientHeight);
-  const eyeWidth = Math.max(1, panoramaView.clientWidth / 2);
-  const verticalFov = view.fov * Math.PI / 180;
-  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * eyeWidth / height);
-  const yaw = normalizePanoramaDelta(hotspot.longitude - view.longitude) * Math.PI / 180;
-  const pitch = (hotspot.latitude - view.latitude) * Math.PI / 180;
-  const x = Math.tan(yaw) / Math.tan(horizontalFov / 2);
-  const y = Math.tan(pitch) / Math.tan(verticalFov / 2);
-
-  return Math.abs(x) <= PANORAMA_GAZE_VISIBLE_MARGIN && Math.abs(y) <= PANORAMA_GAZE_VISIBLE_MARGIN
-    ? { x, y }
-    : null;
-}
-
 function renderPanoramaGazeTargets(activeTarget: PanoramaNavigationHotspot | null): void {
   const active = panorama.isStereoMode()
     && !panoramaView.classList.contains('is-vr-portrait-blocked');
-  panoramaGazeTargets.setAttribute('aria-hidden', String(!active));
   panoramaGazeTargets.replaceChildren();
-  if (!active) return;
-
-  const fragment = document.createDocumentFragment();
-  activePanoramaScene.hotspots
-    .filter((hotspot): hotspot is PanoramaNavigationHotspot => hotspot.kind === 'navigation')
-    .forEach((hotspot) => {
-      const projection = getPanoramaTargetProjection(hotspot);
-      if (!projection) return;
-
-      [0, 1].forEach((eyeIndex) => {
-        const marker = document.createElement('span');
-        marker.className = 'panorama-gaze-target';
-        marker.classList.toggle('is-targeted', activeTarget?.id === hotspot.id);
-        marker.style.left = `${eyeIndex * 50 + (projection.x * 0.5 + 0.5) * 50}%`;
-        marker.style.top = `${(-projection.y * 0.5 + 0.5) * 100}%`;
-
-        const dot = document.createElement('span');
-        dot.className = 'panorama-gaze-target__dot';
-        dot.setAttribute('aria-hidden', 'true');
-        const label = document.createElement('span');
-        label.className = 'panorama-gaze-target__label';
-        label.textContent = hotspot.label;
-        marker.append(dot, label);
-        fragment.append(marker);
-      });
-    });
-
-  panoramaGazeTargets.append(fragment);
+  panoramaGazeTargets.setAttribute('aria-hidden', 'true');
+  panorama.setGazeNavigationTargets(active ? activePanoramaScene.hotspots : [], activeTarget?.id ?? null);
 }
 
 function stopPanoramaGazeLoop(): void {
@@ -703,6 +653,7 @@ function stopPanoramaGazeLoop(): void {
   resetPanoramaGazeTarget();
   panoramaGazeTargets.replaceChildren();
   panoramaGazeTargets.setAttribute('aria-hidden', 'true');
+  panorama.setGazeNavigationTargets([], null);
   panoramaGazeTeleport.setAttribute('aria-hidden', 'true');
 }
 
