@@ -12,11 +12,6 @@ struct ARExperienceScreen: View {
             VStack(spacing: 0) {
                 topBar
                 Spacer()
-                if model.state == .surfacePlaced {
-                    modelLibrary
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                }
                 if model.state == .placed {
                     controls
                 }
@@ -33,7 +28,7 @@ struct ARExperienceScreen: View {
     private var topBar: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Seta AR", systemImage: "circle.fill")
+                Label(model.activeModelName, systemImage: "circle.fill")
                     .font(.caption.weight(.bold))
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.white, .green)
@@ -65,33 +60,6 @@ struct ARExperienceScreen: View {
         .padding(.horizontal, 16)
     }
 
-    private var modelLibrary: some View {
-        Button {
-            model.placeMushroom()
-        } label: {
-            HStack(spacing: 12) {
-                MushroomMark()
-                    .frame(width: 56, height: 65)
-                    .scaleEffect(0.45)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("FORMAS DISPONIBLES")
-                        .font(.system(size: 9, weight: .black))
-                        .tracking(0.8)
-                        .foregroundStyle(.white.opacity(0.52))
-                    Text("Seta roja")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                }
-            }
-            .padding(12)
-            .background(.black.opacity(0.64), in: RoundedRectangle(cornerRadius: 17))
-            .overlay {
-                RoundedRectangle(cornerRadius: 17).stroke(AppPalette.mint.opacity(0.3))
-            }
-        }
-        .accessibilityHint("Coloca la seta sobre la malla confirmada")
-    }
-
     private var controls: some View {
         HStack(alignment: .bottom, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
@@ -110,7 +78,7 @@ struct ARExperienceScreen: View {
             .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 17))
 
             VStack(spacing: 6) {
-                Text("Tamaño")
+                Text("Tamano")
                     .font(.caption2.weight(.bold))
                 Text(sizeText)
                     .font(.caption2.monospacedDigit())
@@ -119,7 +87,7 @@ struct ARExperienceScreen: View {
                     .tint(AppPalette.mint)
                     .rotationEffect(.degrees(-90))
                     .frame(width: 38, height: 118)
-                    .accessibilityLabel("Tamaño uniforme")
+                    .accessibilityLabel("Tamano uniforme")
                     .accessibilityValue(sizeText)
             }
             .padding(.horizontal, 10)
@@ -154,8 +122,6 @@ struct ARExperienceScreen: View {
     private var guideIcon: String {
         switch model.state {
         case .scanning: "viewfinder"
-        case .placeable: "hand.tap"
-        case .surfacePlaced: "square.grid.3x3"
         case .placed: "hand.draw"
         case .error: "exclamationmark.triangle.fill"
         default: "camera.fill"
@@ -164,9 +130,9 @@ struct ARExperienceScreen: View {
 
     private var occlusionText: String {
         switch model.occlusion {
-        case .checking: "Oclusión · comprobando"
-        case .active: "Oclusión real · activa"
-        case .unavailable: "Oclusión real · no disponible"
+        case .checking: "Oclusion · comprobando"
+        case .active: "Oclusion real · activa"
+        case .unavailable: "Oclusion real · no disponible"
         }
     }
 }

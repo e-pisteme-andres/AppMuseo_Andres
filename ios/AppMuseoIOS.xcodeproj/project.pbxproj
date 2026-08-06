@@ -23,6 +23,18 @@
 		A1000000000000000000000E /* mushroom.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* mushroom.usdz */; };
 		A1000000000000000000000F /* paranal-360.jpg in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* paranal-360.jpg */; };
 		A10000000000000000000010 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* PrivacyInfo.xcprivacy */; };
+		A10000000000000000000014 /* qr-app-museo.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* qr-app-museo.png */; };
+		A10000000000000000000015 /* crystal.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* crystal.usdz */; };
+		A10000000000000000000016 /* jellyfish.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* jellyfish.usdz */; };
+		A10000000000000000000017 /* totem.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* totem.usdz */; };
+		A10000000000000000000018 /* cosmic-flower.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* cosmic-flower.usdz */; };
+		A1000000000000000000001E /* empty-house.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* empty-house.usdz */; };
+		A10000000000000000000019 /* qr-mushroom.png in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* qr-mushroom.png */; };
+		A1000000000000000000001A /* qr-crystal.png in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001D /* qr-crystal.png */; };
+		A1000000000000000000001B /* qr-jellyfish.png in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001E /* qr-jellyfish.png */; };
+		A1000000000000000000001C /* qr-totem.png in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* qr-totem.png */; };
+		A1000000000000000000001D /* qr-cosmic-flower.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* qr-cosmic-flower.png */; };
+		A1000000000000000000001F /* qr-empty-house.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* qr-empty-house.png */; };
 		A10000000000000000000011 /* ARMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* ARMathTests.swift */; };
 		A10000000000000000000012 /* SurfaceStabilizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* SurfaceStabilizerTests.swift */; };
 		A10000000000000000000013 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* XCTest.framework */; };
@@ -61,6 +73,18 @@
 		A20000000000000000000014 /* AppMuseoIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppMuseoIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000015 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		A20000000000000000000016 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = AppMuseoIOS/Resources/Info.plist; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000017 /* qr-app-museo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr-app-museo.png; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000018 /* crystal.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = ../public/models/crystal.usdz; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000019 /* jellyfish.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = ../public/models/jellyfish.usdz; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000001A /* totem.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = ../public/models/totem.usdz; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000001B /* cosmic-flower.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = ../public/models/cosmic-flower.usdz; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000021 /* empty-house.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = ../public/models/empty-house.usdz; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000001C /* qr-mushroom.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-mushroom.png; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000001D /* qr-crystal.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-crystal.png; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000001E /* qr-jellyfish.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-jellyfish.png; sourceTree = SOURCE_ROOT; };
+		A2000000000000000000001F /* qr-totem.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-totem.png; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000020 /* qr-cosmic-flower.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-cosmic-flower.png; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000022 /* qr-empty-house.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-empty-house.png; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +152,18 @@
 			isa = PBXGroup;
 			children = (
 				A2000000000000000000000F /* mushroom.usdz */,
+				A20000000000000000000018 /* crystal.usdz */,
+				A20000000000000000000019 /* jellyfish.usdz */,
+				A2000000000000000000001A /* totem.usdz */,
+				A2000000000000000000001B /* cosmic-flower.usdz */,
+				A20000000000000000000021 /* empty-house.usdz */,
+				A20000000000000000000017 /* qr-app-museo.png */,
+				A2000000000000000000001C /* qr-mushroom.png */,
+				A2000000000000000000001D /* qr-crystal.png */,
+				A2000000000000000000001E /* qr-jellyfish.png */,
+				A2000000000000000000001F /* qr-totem.png */,
+				A20000000000000000000020 /* qr-cosmic-flower.png */,
+				A20000000000000000000022 /* qr-empty-house.png */,
 				A20000000000000000000010 /* paranal-360.jpg */,
 			);
 			name = "Shared Resources";
@@ -233,6 +269,18 @@
 			files = (
 				A1000000000000000000000D /* Assets.xcassets in Resources */,
 				A1000000000000000000000E /* mushroom.usdz in Resources */,
+				A10000000000000000000015 /* crystal.usdz in Resources */,
+				A10000000000000000000016 /* jellyfish.usdz in Resources */,
+				A10000000000000000000017 /* totem.usdz in Resources */,
+				A10000000000000000000018 /* cosmic-flower.usdz in Resources */,
+				A1000000000000000000001E /* empty-house.usdz in Resources */,
+				A10000000000000000000014 /* qr-app-museo.png in Resources */,
+				A10000000000000000000019 /* qr-mushroom.png in Resources */,
+				A1000000000000000000001A /* qr-crystal.png in Resources */,
+				A1000000000000000000001B /* qr-jellyfish.png in Resources */,
+				A1000000000000000000001C /* qr-totem.png in Resources */,
+				A1000000000000000000001D /* qr-cosmic-flower.png in Resources */,
+				A1000000000000000000001F /* qr-empty-house.png in Resources */,
 				A1000000000000000000000F /* paranal-360.jpg in Resources */,
 				A10000000000000000000010 /* PrivacyInfo.xcprivacy in Resources */,
 			);

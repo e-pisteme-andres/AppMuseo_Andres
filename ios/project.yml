@@ -25,6 +25,39 @@ targets:
       - path: ../public/models/mushroom.usdz
         buildPhase: resources
         group: Shared Resources
+      - path: ../public/models/crystal.usdz
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/models/jellyfish.usdz
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/models/totem.usdz
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/models/cosmic-flower.usdz
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/models/empty-house.usdz
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/qr/qr-mushroom.png
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/qr/qr-crystal.png
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/qr/qr-jellyfish.png
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/qr/qr-totem.png
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/qr/qr-cosmic-flower.png
+        buildPhase: resources
+        group: Shared Resources
+      - path: ../public/qr/qr-empty-house.png
+        buildPhase: resources
+        group: Shared Resources
       - path: ../public/panoramas/paranal-360.jpg
         buildPhase: resources
         group: Shared Resources

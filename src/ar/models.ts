@@ -104,6 +104,27 @@ export const MODEL_CATALOG = [
       top: 0.205,
     },
   },
+  {
+    id: 'empty-house',
+    name: 'Casa vacia',
+    placedLabel: 'Casa vacia colocada',
+    actionLabel: 'Iluminar interior',
+    actionStatus: 'La casa vacia ha encendido su interior.',
+    description:
+      'Una maqueta arquitectonica hueca, sin muebles, con tejado abierto, paredes interiores y huecos para explorar sus estancias desde fuera.',
+    soundFrequency: 261.63,
+    file: 'empty-house.glb',
+    effect: {
+      count: 76,
+      seed: 0xe47921,
+      primaryColor: 0xffc857,
+      secondaryColor: 0x81d4ff,
+      direction: 'orbit',
+      radius: 0.13,
+      bottom: 0.01,
+      top: 0.205,
+    },
+  },
 ] as const;
 
 export type ModelDefinition = (typeof MODEL_CATALOG)[number];

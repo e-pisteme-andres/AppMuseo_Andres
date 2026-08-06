@@ -6,19 +6,72 @@ import UIKit
 
 @MainActor
 final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestureRecognizerDelegate {
+    private struct ModelResource {
+        let id: String
+        let displayName: String
+        let usdzResourceName: String
+        let qrResourceName: String
+    }
+
+    private struct LoadedModel {
+        let resource: ModelResource
+        let entity: Entity
+        let boundsMin: SIMD3<Float>
+        let boundsMax: SIMD3<Float>
+    }
+
+    private static let qrPhysicalWidthMetres: CGFloat = 0.12
+    private static let defaultModelOrientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+    private static let modelResources = [
+        ModelResource(
+            id: "mushroom",
+            displayName: "Seta roja",
+            usdzResourceName: "mushroom.usdz",
+            qrResourceName: "qr-mushroom.png"
+        ),
+        ModelResource(
+            id: "crystal",
+            displayName: "Cristal aurora",
+            usdzResourceName: "crystal.usdz",
+            qrResourceName: "qr-crystal.png"
+        ),
+        ModelResource(
+            id: "jellyfish",
+            displayName: "Medusa celeste",
+            usdzResourceName: "jellyfish.usdz",
+            qrResourceName: "qr-jellyfish.png"
+        ),
+        ModelResource(
+            id: "totem",
+            displayName: "Totem solar",
+            usdzResourceName: "totem.usdz",
+            qrResourceName: "qr-totem.png"
+        ),
+        ModelResource(
+            id: "cosmic-flower",
+            displayName: "Flor cosmica",
+            usdzResourceName: "cosmic-flower.usdz",
+            qrResourceName: "qr-cosmic-flower.png"
+        ),
+        ModelResource(
+            id: "empty-house",
+            displayName: "Casa vacia",
+            usdzResourceName: "empty-house.usdz",
+            qrResourceName: "qr-empty-house.png"
+        ),
+    ]
+
     private let experienceModel: ARExperienceModel
     private let arView = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
-    private let reticleAnchor = AnchorEntity(world: .identity)
-    private let reticle = Entity()
-    private let mushroomPivot = Entity()
+    private let modelPivot = Entity()
     private let sporeField = SporeField()
-    private var mushroom: Entity?
-    private var surfaceAnchor: AnchorEntity?
+    private var loadedModels: [String: LoadedModel] = [:]
+    private var markerAnchor: AnchorEntity?
     private var updateSubscription: EventSubscription?
-    private var stabilizer = SurfaceStabilizer()
-    private var candidateTransform: simd_float4x4?
-    private var modelBoundsMin = SIMD3<Float>(-0.1, 0, -0.1)
-    private var modelBoundsMax = SIMD3<Float>(0.1, 0.2, 0.1)
+    private var activeModelId: String?
+    private var activeBoundsMin = SIMD3<Float>(-0.1, 0, -0.1)
+    private var activeBoundsMax = SIMD3<Float>(0.1, 0.2, 0.1)
+    private var trackedMarkerIdentifier: UUID?
     private var ending = false
 
     init(model: ARExperienceModel) {
@@ -28,7 +81,7 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        fatalError("init(coder:) no está implementado")
+        fatalError("init(coder:) no esta implementado")
     }
 
     override func viewDidLoad() {
@@ -36,7 +89,7 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         configureView()
         configureGestures()
         bindControls()
-        loadModel()
+        loadModels()
         startSession()
     }
 
@@ -51,7 +104,6 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         updateSubscription?.cancel()
         updateSubscription = nil
         arView.session.pause()
-        experienceModel.placeModelHandler = nil
         experienceModel.setSliceHandler = nil
         experienceModel.setSizeHandler = nil
         experienceModel.endHandler = nil
@@ -72,38 +124,13 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
             arView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        configureReticle()
-        arView.scene.addAnchor(reticleAnchor)
+        modelPivot.addChild(sporeField.root)
         updateSubscription = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] event in
             Task { @MainActor [weak self] in self?.updateFrame(deltaTime: event.deltaTime) }
         }
     }
 
-    private func configureReticle() {
-        let cyan = SimpleMaterial(
-            color: UIColor(red: 0.44, green: 0.93, blue: 0.78, alpha: 0.95),
-            roughness: 0.45,
-            isMetallic: false
-        )
-        let horizontal = ModelEntity(
-            mesh: .generateBox(size: [0.13, 0.0025, 0.008]),
-            materials: [cyan]
-        )
-        let vertical = ModelEntity(
-            mesh: .generateBox(size: [0.008, 0.0025, 0.13]),
-            materials: [cyan]
-        )
-        reticle.addChild(horizontal)
-        reticle.addChild(vertical)
-        reticle.isEnabled = false
-        reticleAnchor.addChild(reticle)
-    }
-
     private func configureGestures() {
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-        tap.delegate = self
-        arView.addGestureRecognizer(tap)
-
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.maximumNumberOfTouches = 1
         pan.delegate = self
@@ -115,7 +142,6 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
     }
 
     private func bindControls() {
-        experienceModel.placeModelHandler = { [weak self] in self?.placeMushroom() }
         experienceModel.setSliceHandler = { [weak self] progress in self?.setSliceProgress(progress) }
         experienceModel.setSizeHandler = { [weak self] metres in self?.setModelSizeMetres(metres) }
         experienceModel.endHandler = { [weak self] in self?.stop() }
@@ -130,8 +156,17 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
             return
         }
 
+        guard let detectionImages = loadReferenceImages() else {
+            experienceModel.transition(
+                to: .error,
+                message: "No se encontraron los QR de referencia para iniciar la experiencia."
+            )
+            return
+        }
+
         let configuration = ARWorldTrackingConfiguration()
-        configuration.planeDetection = [.horizontal]
+        configuration.detectionImages = detectionImages
+        configuration.maximumNumberOfTrackedImages = 1
         configuration.environmentTexturing = .automatic
         configuration.worldAlignment = .gravity
 
@@ -153,38 +188,69 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         }
 
         experienceModel.setOcclusion(hasDepthOcclusion ? .active : .unavailable)
+        experienceModel.setActiveModelName("Modelos QR")
         arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
         experienceModel.transition(
             to: .scanning,
-            message: "Mueve el móvil lentamente para encontrar una superficie horizontal."
+            message: "Apunta al QR del modelo para que aparezca sobre el marcador."
         )
     }
 
-    private func loadModel() {
-        guard let url = Bundle.main.url(forResource: "mushroom", withExtension: "usdz") else {
-            experienceModel.transition(to: .error, message: "No se encontró el modelo 3D para iOS.")
-            return
-        }
-
+    private func loadModels() {
         do {
-            let loaded = try Entity.load(contentsOf: url)
-            alignModelWithSurface(loaded)
-            try applySliceMaterial(to: loaded)
-            loaded.isEnabled = false
-            mushroomPivot.addChild(loaded)
-            mushroomPivot.addChild(sporeField.root)
-            mushroom = loaded
+            for resource in Self.modelResources {
+                guard let url = Bundle.main.url(forResource: resource.usdzResourceName, withExtension: nil) else {
+                    throw ARExperienceError.missingResource(resource.usdzResourceName)
+                }
+
+                let loaded = try Entity.load(contentsOf: url)
+                let bounds = alignModelWithSurface(loaded)
+                try applySliceMaterial(to: loaded)
+                loaded.isEnabled = false
+                modelPivot.addChild(loaded)
+                loadedModels[resource.id] = LoadedModel(
+                    resource: resource,
+                    entity: loaded,
+                    boundsMin: bounds.min,
+                    boundsMax: bounds.max
+                )
+            }
+
+            modelPivot.orientation = Self.defaultModelOrientation
+            modelPivot.position = [0, 0, 0.002]
         } catch {
-            experienceModel.transition(to: .error, message: "No se pudo preparar el modelo 3D para iOS.")
+            experienceModel.transition(to: .error, message: "No se pudieron preparar los modelos 3D para iOS.")
         }
     }
 
-    private func alignModelWithSurface(_ entity: Entity) {
+    private func loadReferenceImages() -> Set<ARReferenceImage>? {
+        var images = Set<ARReferenceImage>()
+
+        for resource in Self.modelResources {
+            guard
+                let url = Bundle.main.url(forResource: resource.qrResourceName, withExtension: nil),
+                let image = UIImage(contentsOfFile: url.path)?.cgImage
+            else {
+                return nil
+            }
+
+            let referenceImage = ARReferenceImage(
+                image,
+                orientation: .up,
+                physicalWidth: Self.qrPhysicalWidthMetres
+            )
+            referenceImage.name = resource.id
+            images.insert(referenceImage)
+        }
+
+        return images
+    }
+
+    private func alignModelWithSurface(_ entity: Entity) -> (min: SIMD3<Float>, max: SIMD3<Float>) {
         let bounds = entity.visualBounds(relativeTo: entity)
         let centre = (bounds.min + bounds.max) * 0.5
         entity.position = SIMD3<Float>(-centre.x, -bounds.min.y, -centre.z)
-        modelBoundsMin = bounds.min + entity.position
-        modelBoundsMax = bounds.max + entity.position
+        return (bounds.min + entity.position, bounds.max + entity.position)
     }
 
     private func applySliceMaterial(to root: Entity) throws {
@@ -208,168 +274,70 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
     }
 
     private func updateFrame(deltaTime: TimeInterval) {
-        if experienceModel.state == .scanning || experienceModel.state == .placeable {
-            updateSurfaceCandidate()
-        }
         if experienceModel.state == .placed {
             sporeField.update(deltaSeconds: Float(deltaTime))
         }
     }
 
     private func resetPlacementForNewSession() {
-        if let surfaceAnchor {
-            arView.scene.removeAnchor(surfaceAnchor)
+        if let markerAnchor {
+            arView.scene.removeAnchor(markerAnchor)
         }
 
-        surfaceAnchor = nil
-        mushroomPivot.removeFromParent()
-        mushroomPivot.position = .zero
-        mushroomPivot.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
-        mushroomPivot.scale = .one
-        mushroom?.isEnabled = false
+        markerAnchor = nil
+        trackedMarkerIdentifier = nil
+        activeModelId = nil
+        activeBoundsMin = SIMD3<Float>(-0.1, 0, -0.1)
+        activeBoundsMax = SIMD3<Float>(0.1, 0.2, 0.1)
+        modelPivot.removeFromParent()
+        modelPivot.position = [0, 0, 0.002]
+        modelPivot.orientation = Self.defaultModelOrientation
+        modelPivot.scale = .one
+        loadedModels.values.forEach { $0.entity.isEnabled = false }
         sporeField.setEnabled(false)
-        candidateTransform = nil
-        stabilizer.reset()
-        reticle.isEnabled = false
+        experienceModel.setActiveModelName("Modelos QR")
         experienceModel.transition(
             to: .scanning,
-            message: "Mueve despacio el iPhone para volver a detectar una superficie."
+            message: "Apunta de nuevo a un QR para recuperar el modelo."
         )
     }
 
-    private func updateSurfaceCandidate() {
-        let centre = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
-        let result = arView.raycast(
-            from: centre,
-            allowing: .existingPlaneGeometry,
-            alignment: .horizontal
-        ).first ?? arView.raycast(
-            from: centre,
-            allowing: .estimatedPlane,
-            alignment: .horizontal
-        ).first
-
-        guard let result else {
-            candidateTransform = nil
-            reticle.isEnabled = false
-            stabilizer.reset()
-            if experienceModel.state == .placeable {
-                experienceModel.transition(
-                    to: .scanning,
-                    message: "Mueve el móvil lentamente para encontrar una superficie horizontal."
-                )
-            }
-            return
-        }
-
-        candidateTransform = result.worldTransform
-        reticleAnchor.transform.matrix = result.worldTransform
-        reticle.isEnabled = true
-        let stable = stabilizer.add(transform: result.worldTransform)
-
-        if stable, experienceModel.state == .scanning {
-            experienceModel.transition(
-                to: .placeable,
-                message: "Superficie detectada. Toca la pantalla para colocar la malla."
-            )
-        } else if !stable, experienceModel.state == .placeable {
-            experienceModel.transition(
-                to: .scanning,
-                message: "Mantén el móvil estable mientras confirmamos la superficie."
-            )
-        }
-    }
-
-    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-        guard
-            gesture.state == .ended,
-            experienceModel.state == .placeable,
-            let transform = candidateTransform
-        else { return }
-        commitSurfacePlacement(transform: transform)
-    }
-
-    private func commitSurfacePlacement(transform: simd_float4x4) {
-        let anchor = AnchorEntity(world: transform)
-        anchor.addChild(makeSurfaceGrid())
-        anchor.addChild(mushroomPivot)
-        arView.scene.addAnchor(anchor)
-        surfaceAnchor = anchor
-
-        reticle.isEnabled = false
-        candidateTransform = nil
-        stabilizer.reset()
-        experienceModel.transition(
-            to: .surfacePlaced,
-            message: "Malla colocada. Elige una forma en el menú de la izquierda."
-        )
-    }
-
-    private func makeSurfaceGrid() -> Entity {
-        let root = Entity()
-        var fillMaterial = UnlitMaterial()
-        fillMaterial.color = .init(
-            tint: UIColor(red: 0.21, green: 0.85, blue: 1, alpha: 0.055)
-        )
-        fillMaterial.blending = .transparent(opacity: 0.055)
-        let fill = ModelEntity(
-            mesh: .generatePlane(width: 1, depth: 1),
-            materials: [fillMaterial]
-        )
-        root.addChild(fill)
-
-        let lineMaterial = UnlitMaterial(
-            color: UIColor(red: 0.44, green: 0.93, blue: 1, alpha: 0.82)
-        )
-        for index in 0...10 {
-            let offset = -0.5 + Float(index) * 0.1
-            let horizontal = ModelEntity(
-                mesh: .generateBox(size: [1, 0.0015, 0.0015]),
-                materials: [lineMaterial]
-            )
-            horizontal.position = [0, 0.004, offset]
-            root.addChild(horizontal)
-
-            let vertical = ModelEntity(
-                mesh: .generateBox(size: [0.0015, 0.0015, 1]),
-                materials: [lineMaterial]
-            )
-            vertical.position = [offset, 0.004, 0]
-            root.addChild(vertical)
-        }
-        return root
-    }
-
-    private func placeMushroom() {
-        guard experienceModel.state == .surfacePlaced, let mushroom else { return }
-        mushroom.isEnabled = true
-        mushroomPivot.orientation = .init()
-        sporeField.reset()
-        sporeField.setEnabled(true)
-        setSliceProgress(0)
-        setModelSizeMetres(0.2)
-        experienceModel.transition(
-            to: .placed,
-            message: "Seta colocada. Arrastra para girarla; la malla permanecerá visible."
-        )
+    private func activateModel(id: String) -> LoadedModel? {
+        loadedModels.values.forEach { $0.entity.isEnabled = false }
+        guard let loadedModel = loadedModels[id] else { return nil }
+        loadedModel.entity.isEnabled = true
+        activeModelId = id
+        activeBoundsMin = loadedModel.boundsMin
+        activeBoundsMax = loadedModel.boundsMax
+        modelPivot.position = [0, 0, 0.002]
+        modelPivot.orientation = Self.defaultModelOrientation
+        modelPivot.scale = .one
+        experienceModel.setActiveModelName(loadedModel.resource.displayName)
+        return loadedModel
     }
 
     private func setModelSizeMetres(_ metres: Float) {
+        guard activeModelId != nil else { return }
         let target = min(max(metres, 0.01), 1)
-        let dimensions = modelBoundsMax - modelBoundsMin
+        let dimensions = activeBoundsMax - activeBoundsMin
         let largest = max(dimensions.x, dimensions.y, dimensions.z)
         let scale = ARMath.uniformScale(largestDimension: largest, sizeMetres: target)
-        mushroomPivot.scale = SIMD3<Float>(repeating: scale)
+        modelPivot.scale = SIMD3<Float>(repeating: scale)
     }
 
     private func setSliceProgress(_ progress: Float) {
+        guard
+            let activeModelId,
+            let activeModel = loadedModels[activeModelId]
+        else { return }
+
         let sliceX = ARMath.verticalSlicePosition(
-            minX: modelBoundsMin.x,
-            maxX: modelBoundsMax.x,
+            minX: activeModel.boundsMin.x,
+            maxX: activeModel.boundsMax.x,
             progress: progress
         )
 
-        mushroom?.visit { entity in
+        activeModel.entity.visit { entity in
             guard var component = entity.components[ModelComponent.self] else { return }
             component.materials = component.materials.map { material in
                 guard var custom = material as? CustomMaterial else { return material }
@@ -381,19 +349,45 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         sporeField.setSlicePosition(sliceX)
     }
 
+    private func attachModel(to imageAnchor: ARImageAnchor) {
+        guard
+            let modelId = imageAnchor.referenceImage.name,
+            let loadedModel = activateModel(id: modelId)
+        else { return }
+
+        if let markerAnchor {
+            arView.scene.removeAnchor(markerAnchor)
+        }
+
+        let anchor = AnchorEntity(anchor: imageAnchor)
+        anchor.addChild(modelPivot)
+        arView.scene.addAnchor(anchor)
+
+        markerAnchor = anchor
+        trackedMarkerIdentifier = imageAnchor.identifier
+        sporeField.reset()
+        sporeField.setEnabled(true)
+        setSliceProgress(0)
+        setModelSizeMetres(0.2)
+        experienceModel.transition(
+            to: .placed,
+            message: "\(loadedModel.resource.displayName) detectado. Arrastra para girarlo."
+        )
+    }
+
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
         guard experienceModel.state == .placed else { return }
         let translation = gesture.translation(in: arView)
         gesture.setTranslation(.zero, in: arView)
         let yaw = simd_quatf(angle: Float(translation.x) * 0.006, axis: [0, 1, 0])
         let pitch = simd_quatf(angle: Float(translation.y) * 0.006, axis: [1, 0, 0])
-        mushroomPivot.orientation = simd_normalize(yaw * mushroomPivot.orientation * pitch)
+        modelPivot.orientation = simd_normalize(yaw * modelPivot.orientation * pitch)
     }
 
     @objc private func handleRoll(_ gesture: UIRotationGestureRecognizer) {
         guard experienceModel.state == .placed else { return }
         let roll = simd_quatf(angle: Float(gesture.rotation), axis: [0, 0, 1])
-        mushroomPivot.orientation = simd_normalize(mushroomPivot.orientation * roll)
+        modelPivot.orientation = simd_normalize(modelPivot.orientation * roll)
         gesture.rotation = 0
     }
 
@@ -404,6 +398,34 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         true
     }
 
+    func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
+        guard let imageAnchor = anchors.compactMap({ $0 as? ARImageAnchor }).first else { return }
+        attachModel(to: imageAnchor)
+    }
+
+    func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
+        guard
+            let trackedMarkerIdentifier,
+            anchors.contains(where: { $0.identifier == trackedMarkerIdentifier })
+        else { return }
+
+        if let markerAnchor {
+            arView.scene.removeAnchor(markerAnchor)
+        }
+
+        markerAnchor = nil
+        trackedMarkerIdentifier = nil
+        activeModelId = nil
+        loadedModels.values.forEach { $0.entity.isEnabled = false }
+        modelPivot.removeFromParent()
+        sporeField.setEnabled(false)
+        experienceModel.setActiveModelName("Modelos QR")
+        experienceModel.transition(
+            to: .scanning,
+            message: "QR fuera de vista. Vuelve a apuntarlo para mostrar el modelo."
+        )
+    }
+
     func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
         guard experienceModel.state != .error else { return }
         switch camera.trackingState {
@@ -412,19 +434,19 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         case .notAvailable:
             experienceModel.transition(
                 to: .error,
-                message: "El seguimiento espacial no está disponible en este dispositivo."
+                message: "El seguimiento espacial no esta disponible en este dispositivo."
             )
         case .limited(let reason):
             let detail: String
             switch reason {
             case .initializing:
-                detail = "Inicializando el seguimiento espacial…"
+                detail = "Inicializando el seguimiento espacial..."
             case .excessiveMotion:
-                detail = "Mueve el móvil más despacio para recuperar el seguimiento."
+                detail = "Mueve el movil mas despacio para recuperar el seguimiento."
             case .insufficientFeatures:
-                detail = "Apunta hacia una zona con más detalle e iluminación."
+                detail = "Acerca el QR y mejora la iluminacion para detectarlo."
             case .relocalizing:
-                detail = "Recuperando la posición de la experiencia…"
+                detail = "Recuperando la posicion de la experiencia..."
             @unknown default:
                 detail = "Seguimiento temporalmente limitado."
             }
@@ -435,7 +457,7 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
     func sessionWasInterrupted(_ session: ARSession) {
         experienceModel.transition(
             to: experienceModel.state,
-            message: "Sesión interrumpida. Mantén la aplicación abierta para continuar."
+            message: "Sesion interrumpida. Manten la aplicacion abierta para continuar."
         )
     }
 
@@ -447,13 +469,14 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
     func session(_ session: ARSession, didFailWithError error: Error) {
         experienceModel.transition(
             to: .error,
-            message: "ARKit ha detenido la sesión. Cierra la experiencia y vuelve a intentarlo."
+            message: "ARKit ha detenido la sesion. Cierra la experiencia y vuelve a intentarlo."
         )
     }
 }
 
 private enum ARExperienceError: Error {
     case metalUnavailable
+    case missingResource(String)
 }
 
 private extension Entity {

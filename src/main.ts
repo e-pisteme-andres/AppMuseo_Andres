@@ -56,13 +56,13 @@ app.innerHTML = `
       <div class="hero-grid">
         <div class="hero-copy">
           <p class="eyebrow">Experiencia AR · Android + iOS</p>
-          <h1 id="page-title">Cinco formas.<br><span>En tu espacio.</span></h1>
-          <p class="intro">Elige entre cinco modelos tridimensionales con efectos y colócalos sobre una mesa o el suelo para observarlos desde cualquier ángulo.</p>
+          <h1 id="page-title">Seis formas.<br><span>En tu espacio.</span></h1>
+          <p class="intro">Elige entre seis modelos tridimensionales con efectos y colócalos sobre una mesa o el suelo para observarlos desde cualquier ángulo.</p>
 
           <ol class="steps" aria-label="Cómo funciona">
             <li><span>01</span><div><strong>Activa la cámara</strong><small>Te informaremos antes de que el navegador solicite permiso.</small></div></li>
             <li><span>02</span><div><strong>Busca una superficie</strong><small>Mueve el móvil lentamente sobre una mesa o el suelo.</small></div></li>
-            <li><span>03</span><div><strong>Malla y forma</strong><small>Fija la malla y elige uno de los cinco modelos del menú lateral.</small></div></li>
+            <li><span>03</span><div><strong>Malla y forma</strong><small>Fija la malla y elige uno de los seis modelos del menú lateral.</small></div></li>
           </ol>
 
           <div class="hero-actions">
@@ -241,6 +241,10 @@ app.innerHTML = `
             <span>Formas</span>
             <span class="xr-tool-chevron" aria-hidden="true">›</span>
           </button>
+          <button class="xr-tool-button" id="scan-qr-toggle" type="button">
+            <span class="xr-tool-icon xr-scan-icon" aria-hidden="true"></span>
+            <span>Escanear<br>QR</span>
+          </button>
           <button class="xr-tool-button" id="hands-toggle" type="button" aria-disabled="true">
             <span class="xr-tool-icon xr-hand-icon" aria-hidden="true">✋</span>
             <span>Seguimiento<br>de manos</span>
@@ -260,6 +264,32 @@ app.innerHTML = `
           ).join('')}
         </div>
       </aside>
+      <dialog class="qr-scanner-dialog" id="qr-scanner-dialog" aria-labelledby="qr-scanner-title" aria-describedby="qr-scanner-description">
+        <div class="qr-scanner-content">
+          <div class="qr-scanner-heading">
+            <span class="qr-scanner-icon" aria-hidden="true"></span>
+            <div>
+              <p class="qr-scanner-kicker">Modelos AR</p>
+              <h2 id="qr-scanner-title">Escanear QR</h2>
+            </div>
+          </div>
+          <p class="qr-scanner-description" id="qr-scanner-description">
+            Enfoca un QR de modelo para seleccionar automaticamente la forma correspondiente.
+          </p>
+          <div class="qr-scanner-stage" id="qr-scanner-stage">
+            <video id="qr-scanner-video" class="qr-scanner-video" playsinline muted></video>
+            <div class="qr-scanner-frame" aria-hidden="true"></div>
+          </div>
+          <p class="qr-scanner-status" id="qr-scanner-status" role="status" aria-live="polite">
+            Preparando el escaner...
+          </p>
+          <div class="qr-scanner-actions">
+            <button class="camera-secondary-button" id="qr-scanner-file-button" type="button">Elegir imagen</button>
+            <button class="camera-secondary-button" id="qr-scanner-close" type="button">Cerrar</button>
+          </div>
+          <input id="qr-scanner-file" type="file" accept="image/*" hidden>
+        </div>
+      </dialog>
     </div>
 
     <section id="panorama-view" class="panorama-view" aria-label="Recorrido panorámico de Paranal" aria-hidden="true">
@@ -370,6 +400,7 @@ const modelSizeValue = getRequiredElement<HTMLOutputElement>('#model-size-value'
 const xrOcclusion = getRequiredElement<HTMLElement>('#xr-occlusion');
 const xrLibrary = getRequiredElement<HTMLElement>('#xr-library');
 const formsToggle = getRequiredElement<HTMLButtonElement>('#forms-toggle');
+const scanQrToggle = getRequiredElement<HTMLButtonElement>('#scan-qr-toggle');
 const formsPanel = getRequiredElement<HTMLElement>('#forms-panel');
 const handsToggle = getRequiredElement<HTMLButtonElement>('#hands-toggle');
 const modelButtons = new Map(
@@ -416,6 +447,12 @@ const panoramaGazeTeleport = getRequiredElement<HTMLElement>('#panorama-gaze-tel
 const panoramaGazeLabels = [...panoramaGazeTeleport.querySelectorAll<HTMLElement>('.panorama-gaze-label')];
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
+const qrScannerDialog = getRequiredElement<HTMLDialogElement>('#qr-scanner-dialog');
+const qrScannerVideo = getRequiredElement<HTMLVideoElement>('#qr-scanner-video');
+const qrScannerStatus = getRequiredElement<HTMLElement>('#qr-scanner-status');
+const qrScannerCloseButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-close');
+const qrScannerFileButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-file-button');
+const qrScannerFileInput = getRequiredElement<HTMLInputElement>('#qr-scanner-file');
 let arMode: ARMode = 'unavailable';
 
 const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
@@ -440,6 +477,51 @@ let activeExperienceMode: 'ar' | 'virtual' | null = null;
 let arFlowPending = false;
 let arAttemptId = 0;
 let interruptedArAttemptId = -1;
+let pendingScannedModelId: ModelId | null = null;
+let pendingQrScannerLaunchAfterArExit = false;
+let qrScannerResumeMode: 'ar' | 'virtual' | null = null;
+let qrScannerFrameRequestId: number | null = null;
+let qrScannerStream: MediaStream | null = null;
+
+type BarcodeDetectorResultLike = { rawValue?: string };
+type BarcodeDetectorLike = {
+  detect(source: ImageBitmapSource): Promise<BarcodeDetectorResultLike[]>;
+};
+type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => BarcodeDetectorLike;
+
+function getBarcodeDetectorCtor(): BarcodeDetectorCtor | null {
+  const candidate = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
+  return typeof candidate === 'function' ? candidate : null;
+}
+
+function parseScannedModelId(rawValue: string): ModelId | null {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+
+  const directMatch = MODEL_CATALOG.find((model) => model.id === trimmed);
+  if (directMatch) return directMatch.id;
+
+  try {
+    const url = new URL(trimmed);
+    const modelId = url.searchParams.get('model');
+    return MODEL_CATALOG.some((model) => model.id === modelId) ? modelId as ModelId : null;
+  } catch {
+    return null;
+  }
+}
+
+async function detectModelIdFromImage(source: ImageBitmapSource): Promise<ModelId | null> {
+  const BarcodeDetector = getBarcodeDetectorCtor();
+  if (!BarcodeDetector) return null;
+  const detector = new BarcodeDetector({ formats: ['qr_code'] });
+  const results = await detector.detect(source);
+  for (const result of results) {
+    if (!result.rawValue) continue;
+    const modelId = parseScannedModelId(result.rawValue);
+    if (modelId) return modelId;
+  }
+  return null;
+}
 
 function checkpoint(action: string, view: ResumableView = resumableView): void {
   appProgress = saveAppProgress(progressStorage, {
@@ -962,6 +1044,23 @@ function resetInteractiveControls(): void {
   modelDiscoveryCard.hidden = true;
 }
 
+function applySelectedModel(modelId: ModelId): boolean {
+  if (!getActiveModelExperience().placeModel(modelId)) return false;
+  configureModelActions(modelId);
+  closeModelMenus();
+  checkpoint(`${activeExperienceMode ?? 'ar'}:model-placed:${modelId}`, 'landing');
+  return true;
+}
+
+function tryPlacePendingScannedModel(state: ExperienceState): void {
+  if (state !== 'surfacePlaced' || !pendingScannedModelId) return;
+  const modelId = pendingScannedModelId;
+  pendingScannedModelId = null;
+  if (!applySelectedModel(modelId)) {
+    pendingScannedModelId = modelId;
+  }
+}
+
 function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
   if (active) activeExperienceMode = mode;
   else if (activeExperienceMode === mode) activeExperienceMode = null;
@@ -1008,6 +1107,7 @@ function updateExperienceState(
   scaleControl.hidden = state !== 'placed';
   xrLibrary.hidden = state !== 'surfacePlaced';
   if (state !== 'surfacePlaced') closeModelMenus();
+  tryPlacePendingScannedModel(state);
 
   if (mode === 'ar' && state === 'starting') {
     startButton.disabled = true;
@@ -1035,6 +1135,12 @@ const experience = new XRExperience({
     resumableView = 'landing';
     setExperienceActivity('ar', active);
     checkpoint(active ? 'ar:session-started' : 'ar:session-ended', 'landing');
+    if (!active && pendingQrScannerLaunchAfterArExit) {
+      pendingQrScannerLaunchAfterArExit = false;
+      closeButton.disabled = false;
+      closeButton.textContent = 'Salir';
+      void openQrScannerDialog();
+    }
   },
   onOcclusionChange: (state) => {
     xrOcclusion.dataset.state = state;
@@ -1223,6 +1329,180 @@ async function refreshCameraPreflight(): Promise<void> {
   cameraConfirmButton.hidden = false;
 }
 
+function stopQrScannerStream(): void {
+  if (qrScannerFrameRequestId !== null) {
+    window.cancelAnimationFrame(qrScannerFrameRequestId);
+    qrScannerFrameRequestId = null;
+  }
+  qrScannerVideo.pause();
+  qrScannerVideo.srcObject = null;
+  qrScannerStream?.getTracks().forEach((track) => track.stop());
+  qrScannerStream = null;
+}
+
+function closeQrScannerDialog(): void {
+  stopQrScannerStream();
+  qrScannerFileInput.value = '';
+  if (!qrScannerDialog.open) return;
+  if (typeof qrScannerDialog.close === 'function') {
+    qrScannerDialog.close();
+  } else {
+    qrScannerDialog.removeAttribute('open');
+  }
+}
+
+function applyScannedModelFromQr(modelId: ModelId): void {
+  pendingScannedModelId = modelId;
+  const scannedModel = findModelDefinition(modelId);
+  qrScannerStatus.textContent = `QR detectado: ${scannedModel.name}.`;
+  checkpoint(`qr-scan:detected:${modelId}`, 'landing');
+  closeQrScannerDialog();
+
+  if (qrScannerResumeMode === 'virtual' && virtualExperienceActive) {
+    applySelectedModel(modelId);
+    qrScannerResumeMode = null;
+    return;
+  }
+
+  if (qrScannerResumeMode === 'ar') {
+    qrScannerResumeMode = null;
+    void beginArSession();
+    return;
+  }
+
+  qrScannerResumeMode = null;
+  openCameraDialog();
+  void refreshCameraPreflight();
+}
+
+async function scanQrFromFile(file: File): Promise<void> {
+  const BarcodeDetector = getBarcodeDetectorCtor();
+  if (!BarcodeDetector) {
+    qrScannerStatus.textContent = 'Este navegador no ofrece lectura QR desde imagen.';
+    return;
+  }
+
+  qrScannerStatus.textContent = 'Analizando imagen...';
+  try {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const modelId = await detectModelIdFromImage(bitmap);
+      if (!modelId) {
+        qrScannerStatus.textContent = 'No se reconocio un QR de modelo valido en la imagen.';
+        return;
+      }
+      applyScannedModelFromQr(modelId);
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    qrScannerStatus.textContent = 'No se pudo leer la imagen seleccionada.';
+  }
+}
+
+async function startQrScannerStream(): Promise<void> {
+  const BarcodeDetector = getBarcodeDetectorCtor();
+  if (!BarcodeDetector) {
+    qrScannerStatus.textContent = 'Este navegador no permite escanear QR con la camara.';
+    return;
+  }
+
+  qrScannerStatus.textContent = 'Solicitando acceso a la camara...';
+  try {
+    qrScannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    qrScannerVideo.srcObject = qrScannerStream;
+    await qrScannerVideo.play();
+    qrScannerStatus.textContent = 'Enfoca un QR de modelo.';
+  } catch {
+    qrScannerStatus.textContent = 'No se pudo abrir la camara del escaner. Puedes elegir una imagen.';
+    return;
+  }
+
+  const detectFrame = async (): Promise<void> => {
+    if (!qrScannerStream || qrScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      qrScannerFrameRequestId = window.requestAnimationFrame(() => {
+        void detectFrame();
+      });
+      return;
+    }
+
+    try {
+      const modelId = await detectModelIdFromImage(qrScannerVideo);
+      if (modelId) {
+        applyScannedModelFromQr(modelId);
+        return;
+      }
+    } catch {
+      qrScannerStatus.textContent = 'No se pudo leer el QR en este momento. Sigue enfocando.';
+    }
+
+    qrScannerFrameRequestId = window.requestAnimationFrame(() => {
+      void detectFrame();
+    });
+  };
+
+  qrScannerFrameRequestId = window.requestAnimationFrame(() => {
+    void detectFrame();
+  });
+}
+
+async function openQrScannerDialog(): Promise<void> {
+  stopQrScannerStream();
+  qrScannerStatus.textContent = 'Preparando el escaner...';
+  if (!qrScannerDialog.open) {
+    if (typeof qrScannerDialog.showModal === 'function') qrScannerDialog.showModal();
+    else qrScannerDialog.setAttribute('open', '');
+  }
+  await startQrScannerStream();
+}
+
+function requestQrScan(): void {
+  qrScannerResumeMode = activeExperienceMode;
+  if (activeExperienceMode === 'ar' && arSessionActive) {
+    pendingQrScannerLaunchAfterArExit = true;
+    closeModelMenus();
+    xrMessage.textContent = 'Cerrando AR para abrir el escaner QR...';
+    closeButton.disabled = true;
+    closeButton.textContent = 'Saliendo...';
+    void experience.end().catch(() => {
+      pendingQrScannerLaunchAfterArExit = false;
+      closeButton.disabled = false;
+      closeButton.textContent = 'Salir';
+      xrMessage.textContent = 'No se pudo cerrar la sesion para escanear el QR.';
+    });
+    return;
+  }
+
+  void openQrScannerDialog();
+}
+
+async function beginArSession(): Promise<void> {
+  const attemptId = ++arAttemptId;
+  arFlowPending = true;
+  resumableView = 'landing';
+  checkpoint('ar:start-requested', 'landing');
+  cameraConfirmButton.disabled = true;
+  closeCameraDialog();
+  compatibility.textContent = '';
+  compatibility.dataset.error = 'false';
+  try {
+    await experience.start();
+    if (interruptedArAttemptId === attemptId) await experience.interrupt();
+  } catch (error: unknown) {
+    if (isCameraAccessBlockedError(error)) {
+      showBlockedCameraGuidance(
+        'No se pudo abrir la cámara. Puede estar desactivada en el dispositivo, bloqueada para el navegador o denegada para este sitio.',
+      );
+    }
+  } finally {
+    arFlowPending = false;
+    cameraConfirmButton.disabled = false;
+  }
+}
+
 startButton.addEventListener('click', () => {
   if (arMode === 'quick-look') {
     checkpoint('ios:quick-look-open', 'landing');
@@ -1278,30 +1558,7 @@ cameraVirtualButton.addEventListener('click', () => {
     });
 });
 cameraConfirmButton.addEventListener('click', () => {
-  const attemptId = ++arAttemptId;
-  arFlowPending = true;
-  resumableView = 'landing';
-  checkpoint('ar:start-requested', 'landing');
-  cameraConfirmButton.disabled = true;
-  closeCameraDialog();
-  compatibility.textContent = '';
-  compatibility.dataset.error = 'false';
-  void experience.start()
-    .then(() => {
-      if (interruptedArAttemptId === attemptId) return experience.interrupt();
-      return undefined;
-    })
-    .catch((error: unknown) => {
-      if (isCameraAccessBlockedError(error)) {
-        showBlockedCameraGuidance(
-          'No se pudo abrir la cámara. Puede estar desactivada en el dispositivo, bloqueada para el navegador o denegada para este sitio.',
-        );
-      }
-    })
-    .finally(() => {
-      arFlowPending = false;
-      cameraConfirmButton.disabled = false;
-    });
+  void beginArSession();
 });
 
 document.addEventListener('visibilitychange', () => {
@@ -1420,12 +1677,31 @@ handsToggle.addEventListener('click', () => {
   checkpoint('ar:hands-unavailable', 'landing');
 });
 
+scanQrToggle.addEventListener('click', () => {
+  checkpoint(`${activeExperienceMode ?? 'ar'}:qr-scan-open`, 'landing');
+  requestQrScan();
+});
+qrScannerCloseButton.addEventListener('click', () => {
+  closeQrScannerDialog();
+});
+qrScannerDialog.addEventListener('close', () => {
+  stopQrScannerStream();
+});
+qrScannerDialog.addEventListener('click', (event) => {
+  if (event.target === qrScannerDialog) closeQrScannerDialog();
+});
+qrScannerFileButton.addEventListener('click', () => {
+  qrScannerFileInput.click();
+});
+qrScannerFileInput.addEventListener('change', () => {
+  const [file] = [...(qrScannerFileInput.files ?? [])];
+  if (!file) return;
+  void scanQrFromFile(file);
+});
+
 modelButtons.forEach((button, modelId) => {
   button.addEventListener('click', () => {
-    if (!getActiveModelExperience().placeModel(modelId as ModelId)) return;
-    configureModelActions(modelId as ModelId);
-    closeModelMenus();
-    checkpoint(`${activeExperienceMode ?? 'ar'}:model-placed:${modelId}`, 'landing');
+    applySelectedModel(modelId as ModelId);
   });
 });
 
@@ -1466,7 +1742,9 @@ function closePanorama(): void {
 
 closePanoramaButton.addEventListener('click', closePanorama);
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && document.body.classList.contains('panorama-active')) {
+  if (event.key === 'Escape' && qrScannerDialog.open) {
+    closeQrScannerDialog();
+  } else if (event.key === 'Escape' && document.body.classList.contains('panorama-active')) {
     if (!panoramaInfoCard.hidden) {
       closePanoramaInfo();
     } else if (!panoramaTourPanel.hidden) {

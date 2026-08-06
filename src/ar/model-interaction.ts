@@ -159,6 +159,13 @@ export class ModelInteraction {
           new THREE.Vector3(1 + envelope * 0.16, 1 + envelope * 0.05, 1 + envelope * 0.16),
         );
         break;
+      case 'empty-house':
+        scene.position.y += envelope * 0.012;
+        scene.rotateY(envelope * 0.32);
+        scene.scale.multiply(
+          new THREE.Vector3(1 + envelope * 0.04, 1 + pulse * 0.018, 1 + envelope * 0.04),
+        );
+        break;
     }
 
     this.active.emissiveLevels.forEach((baseLevel, material) => {

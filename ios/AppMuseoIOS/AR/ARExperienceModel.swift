@@ -20,7 +20,8 @@ enum OcclusionState: String {
 @MainActor
 final class ARExperienceModel: ObservableObject {
     @Published private(set) var state: ARExperienceState = .starting
-    @Published private(set) var message = "Preparando la cámara y el seguimiento espacial…"
+    @Published private(set) var activeModelName = "Modelos QR"
+    @Published private(set) var message = "Preparando la camara y el seguimiento espacial..."
     @Published private(set) var occlusion: OcclusionState = .checking
     @Published var sliceProgress: Double = 0 {
         didSet { setSliceHandler?(Float(sliceProgress)) }
@@ -29,7 +30,6 @@ final class ARExperienceModel: ObservableObject {
         didSet { setSizeHandler?(Float(modelSizeCentimetres / 100)) }
     }
 
-    var placeModelHandler: (() -> Void)?
     var setSliceHandler: ((Float) -> Void)?
     var setSizeHandler: ((Float) -> Void)?
     var endHandler: (() -> Void)?
@@ -43,10 +43,8 @@ final class ARExperienceModel: ObservableObject {
         occlusion = state
     }
 
-    func placeMushroom() {
-        sliceProgress = 0
-        modelSizeCentimetres = 20
-        placeModelHandler?()
+    func setActiveModelName(_ name: String) {
+        activeModelName = name
     }
 
     func end() {

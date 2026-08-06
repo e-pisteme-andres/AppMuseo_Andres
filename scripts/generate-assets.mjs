@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import QRCode from 'qrcode';
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { IOS_MODEL_ASSETS, getModelQrTargetUrl } from './model-assets.mjs';
 
 class NodeFileReader {
   result = null;
@@ -34,11 +35,22 @@ globalThis.FileReader ??= NodeFileReader;
 
 const outputRoot = resolve('public');
 const modelDirectory = resolve(outputRoot, 'models');
+const modelQrDirectory = resolve(outputRoot, 'qr');
 const qrFileName = process.env.QR_FILE_NAME ?? 'qr-app-museo.png';
 const qrTargetUrl = process.env.QR_TARGET_URL ?? 'https://e-pisteme-andres.github.io/AppMuseo_Andres/';
 const qrPath = resolve(outputRoot, qrFileName);
 
 await mkdir(modelDirectory, { recursive: true });
+await mkdir(modelQrDirectory, { recursive: true });
+
+const selectedModelIds = (process.env.MODEL_ASSET_ONLY ?? '')
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean);
+
+function isSelectedModel(id) {
+  return selectedModelIds.length === 0 || selectedModelIds.includes(id);
+}
 
 const capMaterial = new THREE.MeshStandardMaterial({
   name: 'Sombrero rojo',
@@ -406,20 +418,155 @@ function createCosmicFlower() {
   return group;
 }
 
-await exportModel('mushroom.glb', 'Seta AR', mushroom);
-await exportModel('crystal.glb', 'Cristal aurora AR', createCrystal());
-await exportModel('jellyfish.glb', 'Medusa celeste AR', createJellyfish());
-await exportModel('totem.glb', 'Tótem solar AR', createTotem());
-await exportModel('cosmic-flower.glb', 'Flor cósmica AR', createCosmicFlower());
+function createEmptyHouse() {
+  const group = new THREE.Group();
+  group.name = 'Casa_Vacia_AR_20cm';
 
-await QRCode.toFile(qrPath, qrTargetUrl, {
-  width: 1200,
-  margin: 4,
-  errorCorrectionLevel: 'H',
-  color: {
-    dark: '#07130FFF',
-    light: '#FFFFFFFF',
-  },
-});
+  const floorMaterial = new THREE.MeshStandardMaterial({
+    name: 'Suelo claro',
+    color: 0xd8c3a5,
+    roughness: 0.76,
+    metalness: 0.04,
+  });
+  const wallMaterial = new THREE.MeshStandardMaterial({
+    name: 'Muros calidos',
+    color: 0xf0e4cf,
+    roughness: 0.68,
+    metalness: 0,
+  });
+  const innerWallMaterial = new THREE.MeshStandardMaterial({
+    name: 'Muros interiores',
+    color: 0xdce9ef,
+    roughness: 0.74,
+    metalness: 0,
+  });
+  const trimMaterial = new THREE.MeshStandardMaterial({
+    name: 'Marcos madera',
+    color: 0x8f6542,
+    roughness: 0.58,
+    metalness: 0.06,
+  });
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    name: 'Cristal azul',
+    color: 0x8bd8ff,
+    emissive: 0x1b6d9b,
+    emissiveIntensity: 0.22,
+    roughness: 0.18,
+    metalness: 0.08,
+    transparent: true,
+    opacity: 0.55,
+  });
+  const lightMaterial = new THREE.MeshStandardMaterial({
+    name: 'Luz interior',
+    color: 0xffe1a8,
+    emissive: 0xffb238,
+    emissiveIntensity: 0.65,
+    roughness: 0.42,
+  });
 
-console.log(`QR generado: ${qrPath}`);
+  const addBox = (name, size, position, material, rotation = [0, 0, 0]) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+    mesh.name = name;
+    mesh.position.set(...position);
+    mesh.rotation.set(...rotation);
+    group.add(mesh);
+    return mesh;
+  };
+
+  addBox('Losa_suelo', [0.2, 0.008, 0.16], [0, 0.004, 0], floorMaterial);
+  addBox('Muro_trasero', [0.2, 0.112, 0.008], [0, 0.064, -0.076], wallMaterial);
+  addBox('Muro_lateral_izquierdo', [0.008, 0.112, 0.16], [-0.096, 0.064, 0], wallMaterial);
+  addBox('Muro_lateral_derecho', [0.008, 0.112, 0.16], [0.096, 0.064, 0], wallMaterial);
+  addBox('Zocalo_frontal_izquierdo', [0.068, 0.024, 0.008], [-0.064, 0.02, 0.076], wallMaterial);
+  addBox('Zocalo_frontal_derecho', [0.068, 0.024, 0.008], [0.064, 0.02, 0.076], wallMaterial);
+  addBox('Dintel_frontal', [0.2, 0.014, 0.008], [0, 0.108, 0.076], wallMaterial);
+
+  addBox('Tabique_central', [0.008, 0.086, 0.062], [0, 0.053, -0.043], innerWallMaterial);
+  addBox('Tabique_central_entrada', [0.008, 0.086, 0.036], [0, 0.053, 0.057], innerWallMaterial);
+  addBox('Tabique_transversal_izquierdo', [0.088, 0.078, 0.006], [-0.048, 0.049, 0.014], innerWallMaterial);
+  addBox('Marco_puerta_izquierdo', [0.004, 0.066, 0.006], [-0.018, 0.041, 0.014], trimMaterial);
+  addBox('Marco_puerta_derecho', [0.004, 0.066, 0.006], [0.018, 0.041, 0.014], trimMaterial);
+  addBox('Dintel_puerta', [0.04, 0.005, 0.006], [0, 0.074, 0.014], trimMaterial);
+
+  addBox('Ventana_trasera_izquierda', [0.04, 0.035, 0.003], [-0.055, 0.071, -0.081], glassMaterial);
+  addBox('Ventana_trasera_derecha', [0.04, 0.035, 0.003], [0.055, 0.071, -0.081], glassMaterial);
+  addBox('Ventana_lateral_izquierda', [0.003, 0.032, 0.045], [-0.101, 0.07, -0.012], glassMaterial);
+  addBox('Ventana_lateral_derecha', [0.003, 0.032, 0.045], [0.101, 0.07, -0.012], glassMaterial);
+  addBox('Umbral_entrada', [0.048, 0.006, 0.014], [0, 0.011, 0.084], trimMaterial);
+
+  addBox('Viga_cumbrera', [0.012, 0.012, 0.18], [0, 0.145, 0], trimMaterial);
+  addBox('Alero_izquierdo', [0.012, 0.01, 0.18], [-0.104, 0.114, 0], trimMaterial);
+  addBox('Alero_derecho', [0.012, 0.01, 0.18], [0.104, 0.114, 0], trimMaterial);
+  for (const z of [-0.065, -0.032, 0, 0.032, 0.065]) {
+    addBox('Cabio_izquierdo', [0.112, 0.006, 0.006], [-0.052, 0.13, z], trimMaterial, [0, 0, -0.5]);
+    addBox('Cabio_derecho', [0.112, 0.006, 0.006], [0.052, 0.13, z], trimMaterial, [0, 0, 0.5]);
+  }
+
+  const lampGeometry = new THREE.SphereGeometry(0.009, 20, 12);
+  const lamps = [
+    [-0.052, 0.095, -0.033],
+    [0.052, 0.095, -0.033],
+    [-0.052, 0.095, 0.045],
+    [0.052, 0.095, 0.045],
+  ];
+  lamps.forEach(([x, y, z], index) => {
+    const lamp = new THREE.Mesh(lampGeometry, lightMaterial);
+    lamp.name = `Luz_interior_${index + 1}`;
+    lamp.position.set(x, y, z);
+    group.add(lamp);
+  });
+
+  return group;
+}
+
+const modelGenerators = [
+  { id: 'mushroom', fileName: 'mushroom.glb', sceneName: 'Seta AR', create: () => mushroom },
+  { id: 'crystal', fileName: 'crystal.glb', sceneName: 'Cristal aurora AR', create: createCrystal },
+  { id: 'jellyfish', fileName: 'jellyfish.glb', sceneName: 'Medusa celeste AR', create: createJellyfish },
+  { id: 'totem', fileName: 'totem.glb', sceneName: 'Totem solar AR', create: createTotem },
+  { id: 'cosmic-flower', fileName: 'cosmic-flower.glb', sceneName: 'Flor cosmica AR', create: createCosmicFlower },
+  { id: 'empty-house', fileName: 'empty-house.glb', sceneName: 'Casa vacia AR', create: createEmptyHouse },
+];
+
+const unknownModelIds = selectedModelIds.filter(
+  (id) => !modelGenerators.some((generator) => generator.id === id),
+);
+if (unknownModelIds.length > 0) {
+  throw new Error(`Modelos desconocidos para generar: ${unknownModelIds.join(', ')}`);
+}
+
+for (const generator of modelGenerators) {
+  if (isSelectedModel(generator.id)) {
+    await exportModel(generator.fileName, generator.sceneName, generator.create());
+  }
+}
+
+if (selectedModelIds.length === 0) {
+  await QRCode.toFile(qrPath, qrTargetUrl, {
+    width: 1200,
+    margin: 4,
+    errorCorrectionLevel: 'H',
+    color: {
+      dark: '#07130FFF',
+      light: '#FFFFFFFF',
+    },
+  });
+
+  console.log(`QR generado: ${qrPath}`);
+}
+
+await Promise.all(
+  IOS_MODEL_ASSETS.filter((model) => isSelectedModel(model.id)).map(async (model) => {
+    const target = resolve(modelQrDirectory, model.qrFile);
+    await QRCode.toFile(target, getModelQrTargetUrl(qrTargetUrl, model.id), {
+      width: 1200,
+      margin: 4,
+      errorCorrectionLevel: 'H',
+      color: {
+        dark: '#07130FFF',
+        light: '#FFFFFFFF',
+      },
+    });
+    console.log(`QR de modelo generado: ${target}`);
+  }),
+);

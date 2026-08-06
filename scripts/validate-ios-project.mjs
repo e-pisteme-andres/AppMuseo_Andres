@@ -5,11 +5,11 @@ import {
   statSync,
 } from 'node:fs';
 import { basename, extname, resolve } from 'node:path';
+import { IOS_MODEL_ASSETS } from './model-assets.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const iosRoot = resolve(root, 'ios');
 const projectPath = resolve(iosRoot, 'AppMuseoIOS.xcodeproj/project.pbxproj');
-const modelPath = resolve(root, 'public/models/mushroom.usdz');
 const iconPath = resolve(
   iosRoot,
   'AppMuseoIOS/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png',
@@ -30,12 +30,18 @@ function filesUnder(directory) {
 }
 
 function validateUSDZ() {
-  invariant(existsSync(modelPath), 'Falta public/models/mushroom.usdz.');
-  const bytes = readFileSync(modelPath);
-  invariant(bytes.length > 10_000, 'El USDZ generado es demasiado pequeño.');
-  invariant(bytes[0] === 0x50 && bytes[1] === 0x4b, 'El activo mushroom.usdz no es un contenedor ZIP válido.');
-  const archiveText = bytes.toString('latin1');
-  invariant(/\.usd[ac]?\b/i.test(archiveText), 'El USDZ no contiene una escena USD.');
+  for (const model of IOS_MODEL_ASSETS) {
+    const modelPath = resolve(root, 'public/models', model.usdzFile);
+    invariant(existsSync(modelPath), `Falta public/models/${model.usdzFile}.`);
+    const bytes = readFileSync(modelPath);
+    invariant(bytes.length > 10_000, `El USDZ ${model.usdzFile} es demasiado pequeno.`);
+    invariant(
+      bytes[0] === 0x50 && bytes[1] === 0x4b,
+      `El activo ${model.usdzFile} no es un contenedor ZIP valido.`,
+    );
+    const archiveText = bytes.toString('latin1');
+    invariant(/\.usd[ac]?\b/i.test(archiveText), `El USDZ ${model.usdzFile} no contiene una escena USD.`);
+  }
 }
 
 function validatePNG() {
@@ -43,9 +49,19 @@ function validatePNG() {
   const bytes = readFileSync(iconPath);
   invariant(
     bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
-    'El icono de iOS no es un PNG válido.',
+    'El icono de iOS no es un PNG valido.',
   );
-  invariant(bytes.readUInt32BE(16) === 1024 && bytes.readUInt32BE(20) === 1024, 'El icono debe medir 1024 × 1024.');
+  invariant(bytes.readUInt32BE(16) === 1024 && bytes.readUInt32BE(20) === 1024, 'El icono debe medir 1024 x 1024.');
+
+  for (const model of IOS_MODEL_ASSETS) {
+    const qrPath = resolve(root, 'public/qr', model.qrFile);
+    invariant(existsSync(qrPath), `Falta public/qr/${model.qrFile}.`);
+    const qrBytes = readFileSync(qrPath);
+    invariant(
+      qrBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+      `El QR ${model.qrFile} no es un PNG valido.`,
+    );
+  }
 }
 
 function validateXcodeProject() {
@@ -76,12 +92,12 @@ function validateXcodeProject() {
 
 function validateConfiguration() {
   const info = readFileSync(infoPlistPath, 'utf8');
-  invariant(info.includes('NSCameraUsageDescription'), 'Info.plist no explica el uso de cámara.');
+  invariant(info.includes('NSCameraUsageDescription'), 'Info.plist no explica el uso de camara.');
   invariant(info.includes('<string>arkit</string>'), 'Info.plist no declara ARKit como capacidad requerida.');
   invariant(existsSync(privacyManifestPath), 'Falta PrivacyInfo.xcprivacy.');
 
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  invariant(manifest.display === 'standalone', 'El manifiesto web no está configurado como aplicación instalable.');
+  invariant(manifest.display === 'standalone', 'El manifiesto web no esta configurado como aplicacion instalable.');
   for (const icon of manifest.icons ?? []) {
     invariant(existsSync(resolve(root, 'public', icon.src)), `Falta el icono web ${icon.src}.`);
   }
@@ -92,4 +108,5 @@ validatePNG();
 validateXcodeProject();
 validateConfiguration();
 
-console.log(`Proyecto iOS válido · USDZ ${(statSync(modelPath).size / 1024).toFixed(1)} KiB`);
+const firstModelPath = resolve(root, 'public/models', IOS_MODEL_ASSETS[0].usdzFile);
+console.log(`Proyecto iOS valido · USDZ ${(statSync(firstModelPath).size / 1024).toFixed(1)} KiB`);

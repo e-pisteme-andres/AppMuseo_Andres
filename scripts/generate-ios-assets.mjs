@@ -8,15 +8,23 @@ import { dirname, resolve } from 'node:path';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { USDZExporter } from 'three/addons/exporters/USDZExporter.js';
+import { IOS_MODEL_ASSETS } from './model-assets.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const sourceModelPath = resolve(root, 'public/models/mushroom.glb');
-const usdzOutputPath = resolve(root, 'public/models/mushroom.usdz');
 const appIconPath = resolve(
   root,
   'ios/AppMuseoIOS/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png',
 );
 const webAppIconPath = resolve(root, 'public/app-museo-icon.png');
+
+const selectedModelIds = (process.env.MODEL_ASSET_ONLY ?? '')
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean);
+
+function isSelectedModel(id) {
+  return selectedModelIds.length === 0 || selectedModelIds.includes(id);
+}
 
 function loadGLB(path) {
   const loader = new GLTFLoader();
@@ -56,7 +64,9 @@ function normalisePhysicalSize(scene, sizeMeters) {
   scene.updateMatrixWorld(true);
 }
 
-async function generateUSDZ() {
+async function generateUSDZ(model) {
+  const sourceModelPath = resolve(root, 'public/models', model.glbFile);
+  const usdzOutputPath = resolve(root, 'public/models', model.usdzFile);
   const gltf = await loadGLB(sourceModelPath);
   normalisePhysicalSize(gltf.scene, 0.2);
 
@@ -71,6 +81,7 @@ async function generateUSDZ() {
   });
   mkdirSync(dirname(usdzOutputPath), { recursive: true });
   writeFileSync(usdzOutputPath, new Uint8Array(usdz));
+  console.log(`USDZ iOS: ${usdzOutputPath}`);
 }
 
 const crcTable = (() => {
@@ -192,9 +203,18 @@ function generateAppIcon() {
   writeFileSync(webAppIconPath, icon);
 }
 
-await generateUSDZ();
-generateAppIcon();
+const unknownModelIds = selectedModelIds.filter(
+  (id) => !IOS_MODEL_ASSETS.some((model) => model.id === id),
+);
+if (unknownModelIds.length > 0) {
+  throw new Error(`Modelos desconocidos para generar en iOS: ${unknownModelIds.join(', ')}`);
+}
 
-console.log(`USDZ iOS: ${usdzOutputPath}`);
-console.log(`Icono iOS: ${appIconPath}`);
-console.log(`Icono web: ${webAppIconPath}`);
+for (const model of IOS_MODEL_ASSETS.filter((asset) => isSelectedModel(asset.id))) {
+  await generateUSDZ(model);
+}
+if (selectedModelIds.length === 0) {
+  generateAppIcon();
+  console.log(`Icono iOS: ${appIconPath}`);
+  console.log(`Icono web: ${webAppIconPath}`);
+}
