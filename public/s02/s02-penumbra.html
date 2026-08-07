@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>S-02 · Penumbra (P-13)</title>
+<!--
+  INSTRUMENTO DE SPIKE. Código desechable (docs/tests/README.md, regla del spike).
+  Responde a P-13: ¿ancla la RA en penumbra, cuánta luz hace falta, cuánto tarda
+  y qué pasa cuando pierde el anclaje?
+
+  Dos vías de medida, y la diferencia entre ellas ES un resultado:
+
+  · WebXR       — la sesión ocurre DENTRO de la página. La biblioteca emite
+                  ar-status y ar-tracking, así que los tiempos se cronometran
+                  solos y las pérdidas de anclaje se cuentan solas.
+  · Scene Viewer— se sale del navegador a otra aplicación de Android. NO hay
+                  eventos, no hay telemetría, no hay nada. Ahí el cronómetro es
+                  manual, y esa limitación es un hallazgo, no un defecto de esta
+                  página.
+
+  La cámara se pide SOLO al pulsar su botón y con explicación previa
+  (docs/01-arquitectura.md). Nunca al cargar.
+
+  Sin tokens.css: es un aparato de medida, no una pantalla.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:10px 10px 40px; background:#000; color:#eee;
+         font:13px/1.5 ui-monospace, "SF Mono", Consolas, monospace; }
+  h1 { font-size:14px; margin:0 0 2px; }
+  p.sub { margin:0 0 12px; color:#999; font-size:11px; }
+  h2 { font-size:12px; margin:16px 0 6px; color:#9cf; text-transform:uppercase;
+       letter-spacing:.06em; border-top:1px solid #333; padding-top:10px; }
+  model-viewer { width:100%; height:34vh; background:#111; display:block; }
+  button { font:inherit; padding:12px; min-height:48px; background:#222;
+           color:#eee; border:1px solid #555; width:100%; margin-top:6px; }
+  button.grande { min-height:64px; font-size:15px; border-color:#888; }
+  .rejilla { display:flex; gap:6px; flex-wrap:wrap; }
+  .rejilla button { flex:1 1 45%; width:auto; }
+  label { display:block; margin-top:8px; color:#aaa; font-size:11px; }
+  select, input { font:inherit; width:100%; padding:10px; min-height:44px;
+                  background:#111; color:#eee; border:1px solid #444; }
+  #crono { font-size:34px; text-align:center; padding:10px 0; letter-spacing:.05em; }
+  table { border-collapse:collapse; width:100%; font-size:11px; margin-top:8px; }
+  th, td { padding:4px 3px; border-bottom:1px solid #222; text-align:left; }
+  th { color:#9cf; font-weight:normal; }
+  ol { padding-left:18px; color:#bbb; font-size:12px; }
+  ol li { margin-bottom:5px; }
+  #luz { font-size:26px; text-align:center; padding:6px 0; }
+  .aviso { border:1px solid #555; padding:8px; font-size:11px; color:#bbb;
+           margin-top:6px; }
+  #estado { padding:8px; border:2px solid #666; margin-top:8px; font-size:13px; }
+</style>
+</head>
+<body>
+
+<h1>S-02 · Penumbra — P-13 <a href="s02.html" style="float:right;color:#9cf">← puerta</a></h1>
+<p class="sub">¿Ancla la RA en un gabinete a oscuras? Cuánta luz, cuánto tarda,
+y qué pasa al perder el anclaje.</p>
+
+<div class="rotulo" id="rotulo"></div>
+
+<h2>1 · Protocolo, por orden</h2>
+<ol>
+  <li>Anota las <b>condiciones</b> (bloque 2) antes de cada intento.</li>
+  <li>Mide la <b>luz</b> con la cámara (bloque 3). Es un número relativo del
+      propio móvil, no lux: sirve para comparar intentos <em>en este mismo
+      dispositivo</em>.</li>
+  <li>Pulsa <b>Empezar intento</b> y a continuación el botón de RA.</li>
+  <li>Cuando el objeto quede colocado, pulsa <b>Anclado</b>. Si al minuto no
+      ancla, pulsa <b>No ancla</b>.</li>
+  <li>Muévete: aléjate, tapa el suelo, apaga la luz. Cada pérdida de anclaje se
+      cuenta sola en WebXR; en Scene Viewer, pulsa <b>Pérdida</b> a mano.</li>
+  <li><b>Guardar fila</b>. Al final, <b>Exportar</b> y pegar en
+      <code>docs/tests/S-02-ra-model-viewer.md</code>.</li>
+</ol>
+<p class="sub">Serie mínima recomendada, de más a menos luz: sala iluminada ·
+penumbra de gabinete · casi a oscuras. Y en cada una, dos superficies: una
+texturada (madera, moqueta, papel impreso) y una lisa y uniforme (mesa mate,
+suelo continuo). Son los dos ejes de la pregunta.</p>
+
+<h2>2 · Condiciones del intento</h2>
+<label>Luz — descripción</label>
+<select id="c-luz">
+  <option>Sala iluminada</option>
+  <option>Penumbra de gabinete (expositivo típico)</option>
+  <option>Muy oscuro, solo luz de emergencia</option>
+  <option>A oscuras del todo</option>
+</select>
+<label>Superficie</label>
+<select id="c-sup">
+  <option>Texturada (madera, moqueta, papel impreso)</option>
+  <option>Lisa y uniforme (mesa mate, suelo continuo)</option>
+  <option>Reflectante (cristal, vitrina, metal)</option>
+  <option>Vertical (pared)</option>
+</select>
+<label>Distancia al plano (cm, aproximada)</label>
+<input id="c-dist" type="number" inputmode="numeric" value="60">
+<label>Nota libre</label>
+<input id="c-nota" type="text" placeholder="p. ej. linterna del móvil encendida">
+
+<h2>3 · Luz medida con la cámara</h2>
+<div class="aviso">
+  Al pulsar se pide permiso de <b>cámara</b>. Se toma un fotograma de la cámara
+  trasera, se calcula su luminancia media y <b>se cierra la cámara</b>. No se
+  guarda ninguna imagen. El número (0–255) es comparable entre intentos del mismo
+  móvil, no entre móviles ni con un luxómetro.
+</div>
+<div id="luz">— </div>
+<button id="b-luz">Medir luz ahora</button>
+
+<h2>4 · Cronómetro</h2>
+<div id="crono">0.0 s</div>
+<button id="b-empezar" class="grande">Empezar intento</button>
+<div class="rejilla">
+  <button id="b-anclado">Anclado</button>
+  <button id="b-noancla">No ancla</button>
+  <button id="b-perdida">Pérdida (manual)</button>
+  <button id="b-recuperado">Recuperado</button>
+</div>
+<div id="estado">Sin intento en curso.</div>
+
+<h2>5 · El visor</h2>
+<p class="sub">Vía: <select id="c-via" style="width:auto;display:inline-block">
+  <option value="webxr scene-viewer quick-look">automática (webxr → scene-viewer → quick-look)</option>
+  <option value="webxr">solo WebXR — cronometrado automáticamente</option>
+  <option value="scene-viewer">solo Scene Viewer — cronómetro a mano</option>
+  <option value="quick-look">solo Quick Look (iOS)</option>
+</select></p>
+
+<model-viewer
+  id="mv"
+  src="s02-recursos/ToyCar.glb"
+  alt="Modelo de prueba. Solo mide comportamiento."
+  ar
+  ar-modes="webxr scene-viewer quick-look"
+  ar-placement="floor"
+  camera-controls
+  touch-action="pan-y">
+</model-viewer>
+<button id="b-ar" class="grande">Ver en RA (activateAR)</button>
+
+<h2>6 · Mediciones</h2>
+<button id="b-guardar">Guardar fila</button>
+<div class="rejilla">
+  <button id="b-exportar">Exportar como tabla</button>
+  <button id="b-borrar">Borrar todo</button>
+</div>
+<table id="tabla"><thead><tr>
+  <th>Luz</th><th>Cám.</th><th>Superficie</th><th>Ancla</th>
+  <th>t (s)</th><th>Pérd.</th><th>Vía</th>
+</tr></thead><tbody></tbody></table>
+
+<h2>7 · Registro de eventos</h2>
+<div id="registro" style="background:#0a0a0a;border:1px solid #333;padding:6px;
+     height:140px;overflow:auto;font-size:11px;white-space:pre-wrap"></div>
+
+<script src="s02-recursos/ruta-ra.js"></script>
+<script type="module" src="s02-recursos/model-viewer-4.3.1.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const CLAVE_FILAS = 's02-penumbra-filas';
+  const CLAVE_LOG   = 's02-penumbra-log';
+  const mv = document.getElementById('mv');
+  const $ = function (id) { return document.getElementById(id); };
+
+  let filas = [];
+  let log = [];
+  try { filas = JSON.parse(localStorage.getItem(CLAVE_FILAS) || '[]'); } catch (e) {}
+  try { log = JSON.parse(sessionStorage.getItem(CLAVE_LOG) || '[]'); } catch (e) {}
+
+  let intento = null;   // { t0, tAncla, perdidas, resultado, via, luz }
+  let ultimaLuz = null;
+  let temporizador = null;
+
+  function anota(txt) {
+    log.push(new Date().toISOString().slice(11, 23) + '  ' + txt);
+    try { sessionStorage.setItem(CLAVE_LOG, JSON.stringify(log.slice(-300))); } catch (e) {}
+    const r = $('registro');
+    r.textContent = log.join('\n');
+    r.scrollTop = r.scrollHeight;
+  }
+  $('registro').textContent = log.join('\n');
+
+  function estado(txt) { $('estado').textContent = txt; }
+
+  // --- Cronómetro ------------------------------------------------------------
+  function tic() {
+    if (!intento) return;
+    $('crono').textContent = ((performance.now() - intento.t0) / 1000).toFixed(1) + ' s';
+  }
+  $('b-empezar').addEventListener('click', function () {
+    intento = { t0: performance.now(), tAncla: null, perdidas: 0,
+                resultado: 'en curso', via: mv.getAttribute('ar-modes'),
+                luz: ultimaLuz };
+    clearInterval(temporizador);
+    temporizador = setInterval(tic, 100);
+    anota('>>> intento iniciado · vía=' + intento.via + ' · luz=' + ultimaLuz);
+    estado('Intento en curso. Pulsa «Ver en RA».');
+  });
+  $('b-anclado').addEventListener('click', function () {
+    if (!intento) return estado('No hay intento en curso.');
+    if (intento.tAncla == null) intento.tAncla = performance.now() - intento.t0;
+    intento.resultado = 'sí';
+    clearInterval(temporizador);
+    anota('ANCLADO a mano en ' + (intento.tAncla / 1000).toFixed(1) + ' s');
+    estado('Anclado en ' + (intento.tAncla / 1000).toFixed(1) + ' s. Ahora prueba a perderlo.');
+  });
+  $('b-noancla').addEventListener('click', function () {
+    if (!intento) return estado('No hay intento en curso.');
+    intento.resultado = 'NO';
+    clearInterval(temporizador);
+    anota('NO ANCLA tras ' + ((performance.now() - intento.t0) / 1000).toFixed(1) + ' s');
+    estado('Anotado como «no ancla». Guarda la fila.');
+  });
+  $('b-perdida').addEventListener('click', function () {
+    if (!intento) return;
+    intento.perdidas++;
+    anota('pérdida de anclaje (manual) — total ' + intento.perdidas);
+    estado('Pérdidas: ' + intento.perdidas);
+  });
+  $('b-recuperado').addEventListener('click', function () {
+    anota('anclaje recuperado (manual)');
+  });
+
+  // --- Eventos de la biblioteca (solo llegan en WebXR) ------------------------
+  mv.addEventListener('ar-status', function (e) {
+    const s = e.detail.status;
+    anota('ar-status: ' + s);
+    if (!intento) return;
+    if (s === 'session-started') {
+      intento.tSesion = performance.now() - intento.t0;
+      estado('Sesión de RA abierta a los ' + (intento.tSesion / 1000).toFixed(1) + ' s. Buscando superficie…');
+    }
+    if (s === 'object-placed' && intento.tAncla == null) {
+      intento.tAncla = performance.now() - intento.t0;
+      intento.resultado = 'sí';
+      clearInterval(temporizador);
+      estado('OBJETO COLOCADO a los ' + (intento.tAncla / 1000).toFixed(1) + ' s (medido por la biblioteca).');
+    }
+    if (s === 'failed') {
+      intento.resultado = 'fallo';
+      estado('La biblioteca informa de fallo (ar-status: failed).');
+    }
+  });
+  mv.addEventListener('ar-tracking', function (e) {
+    const s = e.detail.status;
+    anota('ar-tracking: ' + s);
+    if (!intento) return;
+    if (s === 'not-tracking') {
+      intento.perdidas++;
+      estado('Anclaje perdido. Total: ' + intento.perdidas);
+    }
+  });
+  mv.addEventListener('error', function (e) {
+    anota('!! error: ' + JSON.stringify(e.detail));
+  });
+  mv.addEventListener('load', function () { anota('modelo cargado'); });
+
+  addEventListener('pagehide', function () { anota('pagehide — se sale del navegador (¿Scene Viewer?)'); });
+  addEventListener('pageshow', function (e) { anota('pageshow persisted=' + e.persisted); });
+
+  // --- Vía -------------------------------------------------------------------
+  $('c-via').addEventListener('change', function () {
+    mv.setAttribute('ar-modes', this.value);
+    anota('ar-modes → ' + this.value);
+    setTimeout(function () {
+      anota('canActivateAR = ' + mv.canActivateAR);
+    }, 200);
+  });
+  $('b-ar').addEventListener('click', function () {
+    anota('>> activateAR() · canActivateAR=' + mv.canActivateAR);
+    if (!mv.canActivateAR) {
+      estado('La biblioteca dice que NO puede activar RA por esta vía. Eso también es un resultado.');
+    }
+    mv.activateAR();
+  });
+
+  // --- Luz con la cámara ------------------------------------------------------
+  $('b-luz').addEventListener('click', async function () {
+    $('luz').textContent = 'pidiendo cámara…';
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } }, audio: false
+      });
+      const v = document.createElement('video');
+      v.srcObject = stream; v.playsInline = true; v.muted = true;
+      await v.play();
+      await new Promise(function (r) { setTimeout(r, 700); }); // exposición
+      const w = 64, h = 48;
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(v, 0, 0, w, h);
+      const d = ctx.getImageData(0, 0, w, h).data;
+      let suma = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        suma += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      }
+      ultimaLuz = +(suma / (w * h)).toFixed(1);
+      $('luz').textContent = ultimaLuz + ' / 255';
+      anota('luz medida: ' + ultimaLuz + '/255');
+      if (intento) intento.luz = ultimaLuz;
+    } catch (err) {
+      $('luz').textContent = 'no se pudo: ' + err.name;
+      anota('!! cámara: ' + err.name + ' — ' + err.message);
+    } finally {
+      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+  });
+
+  // --- Filas ------------------------------------------------------------------
+  function pintaFilas() {
+    $('tabla').querySelector('tbody').innerHTML = filas.map(function (f) {
+      return '<tr><td>' + f.luz + '</td><td>' + (f.lux == null ? '—' : f.lux) +
+             '</td><td>' + f.sup.split(' ')[0] + '</td><td>' + f.resultado +
+             '</td><td>' + (f.t == null ? '—' : f.t) + '</td><td>' + f.perdidas +
+             '</td><td>' + (f.ruta || f.via) + '</td></tr>';
+    }).join('');
+  }
+  pintaFilas();
+
+  $('b-guardar').addEventListener('click', function () {
+    if (!intento) return estado('No hay intento que guardar.');
+    filas.push({
+      fecha: new Date().toISOString(),
+      luz: $('c-luz').value,
+      lux: intento.luz,
+      sup: $('c-sup').value,
+      dist: $('c-dist').value,
+      nota: $('c-nota').value,
+      resultado: intento.resultado,
+      t: intento.tAncla == null ? null : +(intento.tAncla / 1000).toFixed(1),
+      tSesion: intento.tSesion == null ? null : +(intento.tSesion / 1000).toFixed(1),
+      perdidas: intento.perdidas,
+      // Se lee AHORA, no al empezar: si se cambia la vía a mitad de intento, lo
+      // que hay que guardar es la que se acabó usando.
+      via: mv.getAttribute('ar-modes'),
+      // La ruta que la biblioteca dijo estar usando al lanzar. Si está vacía es
+      // que no se llegó a lanzar la RA, y eso también hay que poder leerlo.
+      ruta: intento.rutaReal || '(no se lanzó)',
+      dispositivo: RutaRA.dispositivo() + ' · ' + RutaRA.navegador()
+    });
+    localStorage.setItem(CLAVE_FILAS, JSON.stringify(filas));
+    pintaFilas();
+    anota('fila guardada (' + filas.length + ' en total)');
+    intento = null; clearInterval(temporizador);
+    estado('Fila guardada. Cambia las condiciones y empieza otro intento.');
+  });
+
+  $('b-exportar').addEventListener('click', function () {
+    const cab = '| Luz | Cámara (0-255) | Superficie | Dist. cm | Ruta usada | ¿Ancla? | ' +
+                't sesión (s) | t anclaje (s) | Pérdidas | Nota |';
+    const sep = '|---|---|---|---|---|---|---|---|---|---|';
+    const cuerpo = filas.map(function (f) {
+      return '| ' + [f.luz, f.lux == null ? '—' : f.lux, f.sup, f.dist,
+                     f.ruta || f.via,
+                     f.resultado, f.tSesion == null ? '—' : f.tSesion,
+                     f.t == null ? '—' : f.t, f.perdidas,
+                     f.nota || ''].join(' | ') + ' |';
+    });
+    const equipo = filas.length && filas[0].dispositivo ? filas[0].dispositivo : RutaRA.dispositivo();
+    const txt = ['**Medido en ' + equipo + '** · ' + new Date().toLocaleString('es-ES'),
+                 '', '<!-- ' + navigator.userAgent + ' -->', '', cab, sep]
+                .concat(cuerpo).join('\n');
+    if (navigator.clipboard) navigator.clipboard.writeText(txt);
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.width = '100%'; ta.rows = 12;
+    document.body.appendChild(ta); ta.select();
+  });
+
+  $('b-borrar').addEventListener('click', function () {
+    if (!confirm('¿Borrar las ' + filas.length + ' filas guardadas?')) return;
+    filas = []; localStorage.removeItem(CLAVE_FILAS); pintaFilas();
+  });
+
+  // --- Rótulo: qué ruta y por qué, visible en cualquier captura --------------
+  var rot = RutaRA.rotulo('rotulo', {
+    elemento: mv,
+    alConfirmar: function (ruta) {
+      anota('RUTA CONFIRMADA por la biblioteca: ' + ruta);
+      // Lo que se guarda en la fila es la ruta REAL, no el ar-modes pedido.
+      if (intento) intento.rutaReal = ruta;
+    }
+  });
+  $('c-via').addEventListener('change', function () { setTimeout(rot.recalcular, 250); });
+
+  customElements.whenDefined('model-viewer').then(function () {
+    rot.recalcular();
+    anota('biblioteca lista · canActivateAR=' + mv.canActivateAR +
+          ' · contexto seguro=' + self.isSecureContext);
+    if (!self.isSecureContext) {
+      estado('SIN CONTEXTO SEGURO: no se ofrecerá ni cámara ni RA. Sirve por HTTPS (túnel).');
+    }
+  });
+})();
+</script>
+</body>
+</html>

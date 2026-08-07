@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>S-02 · RA mínima</title>
+<!--
+  INSTRUMENTO DE SPIKE. Código desechable (docs/tests/README.md, regla del spike).
+  Responde: ¿carga el modelo, cuánto pesa, cuánto tarda y aparece el botón de RA?
+
+  Página aislada a propósito: <model-viewer>, un modelo y un cronómetro. Sin
+  Astro, sin service worker, sin transición de vista. Si algo falla aquí, no hay
+  duda de qué ha fallado.
+
+  Sin tokens.css y sin estilos del sistema de diseño: es un aparato de medida.
+  El botón «Ver en RA» que se ve es el de serie de la biblioteca, SIN TOCAR, a
+  propósito: parte de lo que se mide es qué trae puesto.
+
+  Biblioteca autoalojada (RNF-44, sin CDN): s02-recursos/model-viewer-4.3.1.min.js
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:10px; background:#000; color:#eee;
+         font:13px/1.45 ui-monospace, "SF Mono", Consolas, monospace; }
+  h1 { font-size:14px; margin:0 0 8px; }
+  model-viewer { width:100%; height:58vh; background:#111; display:block; }
+  table { border-collapse:collapse; width:100%; margin-top:10px; }
+  td { padding:4px; border-bottom:1px solid #222; word-break:break-word; }
+  td:first-child { color:#aaa; width:50%; }
+  #registro { margin-top:10px; background:#0a0a0a; border:1px solid #333;
+              padding:6px; height:150px; overflow:auto; font-size:11px;
+              white-space:pre-wrap; }
+  .barra { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  button { font:inherit; padding:12px; min-height:48px; flex:1 1 45%;
+           background:#222; color:#eee; border:1px solid #555; }
+  b.ok { color:#6f6; } b.mal { color:#f77; }
+</style>
+</head>
+<body>
+
+<h1>S-02 · RA mínima <a href="s02.html" style="float:right;color:#9cf">← puerta</a></h1>
+
+<div class="rotulo" id="rotulo"></div>
+
+<model-viewer
+  id="mv"
+  src="s02-recursos/ToyCar.glb"
+  alt="Modelo de prueba: coche de juguete. Solo mide comportamiento; el asunto es irrelevante."
+  ar
+  ar-modes="webxr scene-viewer quick-look"
+  ar-placement="floor"
+  camera-controls
+  touch-action="pan-y"
+  poster=""
+  reveal="auto">
+</model-viewer>
+
+<table id="tabla"></table>
+
+<div class="barra">
+  <button id="b-ar">Lanzar RA (activateAR)</button>
+  <button id="b-limpiar">Limpiar registro</button>
+  <button id="b-copiar">Copiar medición</button>
+</div>
+
+<div id="registro"></div>
+
+<script src="s02-recursos/ruta-ra.js"></script>
+<script type="module" src="s02-recursos/model-viewer-4.3.1.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const CLAVE = 's02-registro';
+  const t0 = performance.now();
+  const marcas = Object.create(null);
+  const reg = document.getElementById('registro');
+  let lineas = [];
+
+  // El registro sobrevive al viaje de ida y vuelta a Scene Viewer / Quick Look,
+  // que sacan del navegador y vuelven con la página recargada o restaurada.
+  try { lineas = JSON.parse(sessionStorage.getItem(CLAVE) || '[]'); } catch (e) { lineas = []; }
+
+  function log(txt) {
+    const l = '+' + (performance.now() - t0).toFixed(0).padStart(6) + ' ms  ' + txt;
+    lineas.push(l);
+    try { sessionStorage.setItem(CLAVE, JSON.stringify(lineas.slice(-400))); } catch (e) {}
+    reg.textContent = lineas.join('\n');
+    reg.scrollTop = reg.scrollHeight;
+  }
+  reg.textContent = lineas.join('\n');
+
+  function marca(k) { marcas[k] = performance.now() - t0; log('· ' + k); }
+
+  const mv = document.getElementById('mv');
+  const filas = [];
+  function pinta() {
+    document.getElementById('tabla').innerHTML = filas.map(function (f) {
+      return '<tr><td>' + f[0] + '</td><td>' + f[1] + '</td></tr>';
+    }).join('');
+  }
+  function set(k, v) {
+    const i = filas.findIndex(function (f) { return f[0] === k; });
+    if (i === -1) filas.push([k, v]); else filas[i][1] = v;
+    pinta();
+  }
+
+  log('=== carga de página ' + new Date().toISOString() + ' ===');
+
+  // --- Tiempos ---------------------------------------------------------------
+  customElements.whenDefined('model-viewer').then(function () {
+    marca('customElements: model-viewer definido');
+    set('Biblioteca definida', marcas['customElements: model-viewer definido'].toFixed(0) + ' ms');
+    set('Puede activar RA (canActivateAR)',
+        mv.canActivateAR ? '<b class="ok">sí</b>' : '<b class="mal">no</b>');
+    set('ar-status inicial', mv.getAttribute('ar-status') || '(sin atributo)');
+  });
+
+  mv.addEventListener('progress', function (e) {
+    const p = e.detail.totalProgress;
+    set('Progreso de carga', (p * 100).toFixed(0) + ' %');
+    if (p === 1 && !marcas.progreso100) { marcas.progreso100 = performance.now() - t0; log('· progreso 100 %'); }
+  });
+
+  mv.addEventListener('load', function () {
+    marca('load: modelo listo');
+    set('Modelo listo (evento load)', marcas['load: modelo listo'].toFixed(0) + ' ms');
+    set('Puede activar RA (canActivateAR)',
+        mv.canActivateAR ? '<b class="ok">sí</b>' : '<b class="mal">no</b>');
+    const d = mv.getDimensions ? mv.getDimensions() : null;
+    if (d) set('Tamaño del modelo (m)',
+               [d.x, d.y, d.z].map(function (n) { return n.toFixed(2); }).join(' × '));
+    medirRecursos();
+  });
+
+  mv.addEventListener('error', function (e) {
+    log('!! error: ' + JSON.stringify(e.detail));
+    set('Error', '<b class="mal">' + (e.detail && e.detail.type) + '</b>');
+  });
+
+  ['ar-status', 'ar-tracking', 'quick-look-button-tapped', 'poster-dismissed',
+   'camera-change', 'model-visibility'].forEach(function (ev) {
+    mv.addEventListener(ev, function (e) {
+      const d = e.detail || {};
+      const v = d.status || d.source || JSON.stringify(d);
+      log('evento ' + ev + ': ' + v);
+      if (ev === 'ar-status') set('ar-status', d.status);
+      if (ev === 'ar-tracking') set('ar-tracking', d.status);
+    });
+  });
+
+  // --- Peso real transferido -------------------------------------------------
+  function medirRecursos() {
+    const rs = performance.getEntriesByType('resource');
+    ['ToyCar.glb', 'model-viewer-4.3.1.min.js'].forEach(function (nombre) {
+      const r = rs.filter(function (x) { return x.name.indexOf(nombre) !== -1; }).pop();
+      if (!r) return;
+      const kb = function (n) { return n ? (n / 1024).toFixed(0) + ' KB' : 'no expuesto'; };
+      set(nombre, kb(r.transferSize) + ' transferido · ' + kb(r.decodedBodySize) +
+                  ' descomprimido · ' + r.duration.toFixed(0) + ' ms' +
+                  (r.transferSize === 0 && r.decodedBodySize > 0 ? ' · <b class="ok">desde caché</b>' : ''));
+      log(nombre + ': transfer=' + r.transferSize + ' decoded=' + r.decodedBodySize +
+          ' dur=' + r.duration.toFixed(0) + 'ms');
+    });
+    const nav = performance.getEntriesByType('navigation')[0];
+    if (nav) set('Navegación', 'DOMContentLoaded ' + nav.domContentLoadedEventEnd.toFixed(0) +
+                 ' ms · load ' + nav.loadEventEnd.toFixed(0) + ' ms · tipo ' + nav.type);
+  }
+
+  // --- Contexto --------------------------------------------------------------
+  set('Contexto seguro', self.isSecureContext ? '<b class="ok">sí</b>' : '<b class="mal">no — la RA y la cámara no se ofrecerán</b>');
+  set('Orientación', (screen.orientation && screen.orientation.type) || '—');
+  set('Ventana', innerWidth + ' × ' + innerHeight + ' · DPR ' + (devicePixelRatio || 1));
+
+  addEventListener('orientationchange', function () {
+    setTimeout(function () {
+      set('Orientación', (screen.orientation && screen.orientation.type) || '—');
+      set('Ventana', innerWidth + ' × ' + innerHeight + ' · DPR ' + (devicePixelRatio || 1));
+      log('cambio de orientación → ' + innerWidth + '×' + innerHeight);
+    }, 300);
+  });
+
+  // Al volver de Scene Viewer / Quick Look la página se restaura desde bfcache
+  // o se recarga: queda anotado para poder distinguir un caso del otro.
+  addEventListener('pageshow', function (e) { log('pageshow (persisted=' + e.persisted + ')'); });
+  addEventListener('pagehide', function () { log('pagehide — se sale del navegador'); });
+  addEventListener('visibilitychange', function () { log('visibilidad: ' + document.visibilityState); });
+  addEventListener('hashchange', function () { log('hashchange: ' + location.hash); });
+
+  // --- Botones ---------------------------------------------------------------
+  document.getElementById('b-ar').addEventListener('click', function () {
+    log('>> activateAR() a mano. Modo que la biblioteca dice poder usar: ' +
+        (mv.canActivateAR ? 'sí hay' : 'NINGUNO'));
+    mv.activateAR();
+  });
+  document.getElementById('b-limpiar').addEventListener('click', function () {
+    lineas = []; sessionStorage.removeItem(CLAVE); reg.textContent = '';
+  });
+  document.getElementById('b-copiar').addEventListener('click', function () {
+    const txt = 'S-02 RA mínima · ' + new Date().toISOString() + '\n' +
+      navigator.userAgent + '\n\n' +
+      filas.map(function (f) { return f[0] + ': ' + String(f[1]).replace(/<[^>]+>/g, ''); }).join('\n') +
+      '\n\n--- registro ---\n' + lineas.join('\n');
+    if (navigator.clipboard) navigator.clipboard.writeText(txt);
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.width = '100%'; ta.rows = 14;
+    document.body.appendChild(ta); ta.select();
+  });
+
+  // Rótulo: qué ruta y por qué, para que una captura se explique sola.
+  var rot = RutaRA.rotulo('rotulo', {
+    elemento: mv,
+    alConfirmar: function (ruta) { log('RUTA CONFIRMADA por la biblioteca: ' + ruta); }
+  });
+  customElements.whenDefined('model-viewer').then(function () { rot.recalcular(); });
+
+  // La previsión del rótulo y lo que dice el elemento tienen que coincidir. Si
+  // no, uno de los dos miente y hay que saberlo antes de anotar una medición.
+  setTimeout(function () {
+    var previsto = rot.estado.prevista && rot.estado.prevista.modo;
+    var hayRuta = previsto && previsto !== 'ninguna' && previsto !== '…';
+    if (hayRuta !== !!mv.canActivateAR) {
+      log('!! DESACUERDO: el rótulo prevé «' + previsto + '» y canActivateAR=' +
+          mv.canActivateAR + '. Anótalo, es un hallazgo.');
+      set('Aviso', '<b class="mal">el rótulo y la biblioteca no coinciden</b>');
+    }
+  }, 2500);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>S-02 · Puerta</title>
+<!--
+  INSTRUMENTO DE SPIKE. Código desechable (docs/tests/README.md, regla del spike).
+
+  Lo único que hay que abrir en el móvil. Enlaza los tres instrumentos en el
+  orden en que se usan y dice qué mirar en cada uno.
+
+  Sin tokens.css, igual que los otros tres: es un aparato de medida, no una
+  propuesta de pantalla. Nada de aquí decide interfaz.
+
+  Botones grandes y pocos: se usa con una mano, en una sala a oscuras y
+  probablemente de pie.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:12px 12px 40px; background:#000; color:#eee;
+         font:15px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+         -webkit-text-size-adjust:100%; }
+  h1 { font-size:17px; margin:0 0 2px; }
+  p.sub { margin:0 0 14px; color:#999; font-size:12px; }
+  a.paso { display:block; text-decoration:none; color:inherit;
+           border:2px solid #555; padding:14px; margin-bottom:12px;
+           min-height:48px; background:#111; }
+  a.paso:active { background:#222; }
+  .num { display:inline-block; min-width:26px; height:26px; line-height:26px;
+         text-align:center; background:#333; color:#9cf; font-weight:bold;
+         margin-right:8px; }
+  .tit { font-size:17px; font-weight:bold; }
+  .que { display:block; margin-top:8px; font-size:13px; color:#ccc; line-height:1.45; }
+  .fallo { display:block; margin-top:6px; font-size:12px; color:#fa8; line-height:1.45; }
+  h2 { font-size:13px; margin:22px 0 8px; color:#9cf; text-transform:uppercase;
+       letter-spacing:.06em; border-top:1px solid #333; padding-top:12px; }
+  .aviso { border:2px solid #764; background:#140f08; padding:10px; font-size:13px;
+           line-height:1.5; margin-bottom:12px; }
+  .aviso b { color:#fc9; }
+  ul { padding-left:20px; font-size:13px; color:#bbb; line-height:1.5; }
+  li { margin-bottom:7px; }
+  code { color:#9cf; }
+</style>
+</head>
+<body>
+
+<h1>S-02 · Realidad aumentada</h1>
+<p class="sub">Los tres instrumentos, en el orden en que hay que usarlos.
+Registro del spike en <code>docs/tests/S-02-ra-model-viewer.md</code>.</p>
+
+<div class="rotulo" id="rotulo"></div>
+
+<a class="paso" href="s02-capacidades.html">
+  <span class="num">1</span><span class="tit">Capacidades</span>
+  <span class="que"><b>Qué mirar:</b> la ruta que dice el rótulo de arriba, y en
+  «candidaturas», cuál de las tres sale en verde. Tarda un segundo y no descarga
+  nada.</span>
+  <span class="fallo"><b>Si dice «ninguna»:</b> este móvil no hace RA y los otros
+  dos pasos solo enseñarán el visor 3D. No es un fallo — es el nivel 2, y
+  comprobar que se cae ahí limpiamente es parte de la prueba.</span>
+</a>
+
+<a class="paso" href="s02-ra-minima.html">
+  <span class="num">2</span><span class="tit">RA mínima</span>
+  <span class="que"><b>Qué mirar:</b> que el coche aparezca y gire con el dedo, y
+  el tiempo de «Modelo listo». Si hay RA, que salga el botón de la biblioteca
+  abajo a la derecha del visor.</span>
+  <span class="fallo"><b>Si el modelo no aparece nunca:</b> mira el registro de
+  abajo. Si no hay ninguna línea de <code>ToyCar.glb</code>, es que la descarga no
+  llegó a empezar — casi siempre el túnel. Si aparece «error», cópialo entero.</span>
+</a>
+
+<a class="paso" href="s02-penumbra.html">
+  <span class="num">3</span><span class="tit">Penumbra — <b>P-13</b></span>
+  <span class="que"><b>Es el que importa.</b> Lleva el protocolo escrito dentro.
+  De cada intento salen tres números: luz, segundos hasta anclar y pérdidas de
+  anclaje. Al final, «Exportar como tabla» y me lo pegas.</span>
+  <span class="fallo"><b>Si no ancla en penumbra:</b> eso <em>es</em> la
+  respuesta, y es la que empuja a marcadores impresos. Anótala igual que si
+  anclara — un «no» medido vale tanto como un «sí».</span>
+</a>
+
+<h2>Antes de empezar, tres cosas que parecen fallos y no lo son</h2>
+
+<div class="aviso">
+  <b>1 · El modelo tarda.</b> Son 5,4 MB. <b>El túnel no es el cuello de
+  botella</b>: medido el 2026-08-03, entrega el archivo entero en <b>1,9 s</b> a
+  2,8 MB/s. Lo que varía es la pata del móvil: por WiFi decente cuenta <b>entre 3
+  y 10 segundos</b>; por datos móviles, <b>de 15 a 45</b>. Hasta un minuto por una
+  red mala no significa que esté roto. Si pasa de ahí, sí.
+</div>
+
+<div class="aviso">
+  <b>2 · La consola escupe mensajes.</b> La versión 4.3.1 se publicó con trazas de
+  depuración dentro: verás <code>[$updateSource] called!</code> y
+  <code>BAILING OUT EARLY!</code> nada más cargar. <b>Son suyas y no significan
+  nada.</b> «BAILING OUT EARLY» solo dice que el visor aún no está a la vista.
+</div>
+
+<div class="aviso">
+  <b>3 · En iOS, tras pulsar, hay un silencio largo.</b> El <code>.usdz</code> se
+  fabrica en el propio móvil: en un portátil tardó <b>entre 1,4 y 9,8 segundos</b>
+  sin enseñar nada. En un iPhone será igual o peor. No es que se haya colgado.
+</div>
+
+<h2>Y una que sí sería un fallo</h2>
+<ul>
+  <li>Si el rótulo de arriba dice <b>SIN CONTEXTO SEGURO</b>, estás entrando por
+      <code>http://</code> y no por el túnel. <b>Así no hay ni cámara ni RA</b>, y
+      ningún instrumento sirve. Es el error más fácil de cometer y el más fácil de
+      arreglar: usa la dirección de <code>trycloudflare.com</code>.</li>
+  <li>Si el paso 2 avisa de que <b>«el rótulo y la biblioteca no coinciden»</b>,
+      la réplica de la lógica se ha quedado vieja respecto a la biblioteca. No
+      rompe la medición, pero anótalo.</li>
+</ul>
+
+<h2>Qué NO hace falta</h2>
+<ul>
+  <li>Instalar nada en el móvil. Todo va en el navegador.</li>
+  <li>Repetir lo que ya está medido: peso de la biblioteca, peso del modelo,
+      tamaño del USDZ. Eso está hecho y en el informe.</li>
+  <li>Que el modelo tenga que ver con el microbioma. Es un coche de juguete con
+      licencia CC0 y está ahí para medir comportamiento, no contenido.</li>
+</ul>
+
+<script src="s02-recursos/ruta-ra.js"></script>
+<script>RutaRA.rotulo('rotulo');</script>
+</body>
+</html>
