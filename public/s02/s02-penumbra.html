@@ -67,7 +67,10 @@ y qué pasa al perder el anclaje.</p>
   <li>Mide la <b>luz</b> con la cámara (bloque 3). Es un número relativo del
       propio móvil, no lux: sirve para comparar intentos <em>en este mismo
       dispositivo</em>.</li>
-  <li>Pulsa <b>Empezar intento</b> y a continuación el botón de RA.</li>
+  <li>Pulsa <b>Preparar intento</b>. Esto no arranca el cronómetro: solo fija
+      las condiciones de la fila.</li>
+  <li>Pulsa <b>Ver en RA</b>. El cronómetro empieza ahí; si la vía es WebXR, se
+      reajusta automáticamente cuando la sesión de RA queda abierta.</li>
   <li>Cuando el objeto quede colocado, pulsa <b>Anclado</b>. Si al minuto no
       ancla, pulsa <b>No ancla</b>.</li>
   <li>Muévete: aléjate, tapa el suelo, apaga la luz. Cada pérdida de anclaje se
@@ -112,7 +115,13 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
 
 <h2>4 · Cronómetro</h2>
 <div id="crono">0.0 s</div>
-<button id="b-empezar" class="grande">Empezar intento</button>
+<button id="b-empezar" class="grande">Preparar intento</button>
+<div class="aviso">
+  El reloj no corre mientras bajas hasta el visor. Se pone en marcha al pulsar
+  <b>Ver en RA</b>; en WebXR se reinicia en <code>ar-status: session-started</code>.
+  Se detiene al registrar resultado: <code>object-placed</code>, <b>Anclado</b>
+  o <b>No ancla</b>.
+</div>
 <div class="rejilla">
   <button id="b-anclado">Anclado</button>
   <button id="b-noancla">No ancla</button>
@@ -172,7 +181,7 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
   try { filas = JSON.parse(localStorage.getItem(CLAVE_FILAS) || '[]'); } catch (e) {}
   try { log = JSON.parse(sessionStorage.getItem(CLAVE_LOG) || '[]'); } catch (e) {}
 
-  let intento = null;   // { t0, tAncla, perdidas, resultado, via, luz }
+  let intento = null;   // { t0, tLanzar, tAncla, perdidas, resultado, via, luz }
   let ultimaLuz = null;
   let temporizador = null;
 
@@ -189,30 +198,70 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
 
   // --- Cronómetro ------------------------------------------------------------
   function tic() {
-    if (!intento) return;
+    if (!intento || intento.t0 == null) return;
     $('crono').textContent = ((performance.now() - intento.t0) / 1000).toFixed(1) + ' s';
   }
-  $('b-empezar').addEventListener('click', function () {
-    intento = { t0: performance.now(), tAncla: null, perdidas: 0,
+
+  function preparaIntento() {
+    intento = { preparadoEn: performance.now(), tLanzar: null, t0: null,
+                tSesion: null, tAncla: null, perdidas: 0,
                 resultado: 'en curso', via: mv.getAttribute('ar-modes'),
                 luz: ultimaLuz };
     clearInterval(temporizador);
+    $('crono').textContent = '0.0 s';
+    anota('>>> intento preparado · vía=' + intento.via + ' · luz=' + ultimaLuz);
+    estado('Intento preparado. Pulsa «Ver en RA»: ahí empieza el reloj.');
+  }
+
+  function arrancaCronometro(origen) {
+    if (!intento) return false;
+    if (intento.t0 == null) {
+      intento.t0 = performance.now();
+      intento.origenCrono = origen;
+      clearInterval(temporizador);
+      temporizador = setInterval(tic, 100);
+      tic();
+      anota('cronómetro iniciado · ' + origen);
+    }
+    return true;
+  }
+
+  function reajustaCronometroAWebXR() {
+    if (!intento) return;
+    const ahora = performance.now();
+    if (intento.tLanzar != null) intento.tSesion = ahora - intento.tLanzar;
+    intento.t0 = ahora;
+    intento.origenCrono = 'ar-status: session-started';
+    clearInterval(temporizador);
     temporizador = setInterval(tic, 100);
-    anota('>>> intento iniciado · vía=' + intento.via + ' · luz=' + ultimaLuz);
-    estado('Intento en curso. Pulsa «Ver en RA».');
+    tic();
+    anota('cronómetro reajustado · session-started');
+  }
+
+  function detieneCronometro(motivo) {
+    clearInterval(temporizador);
+    temporizador = null;
+    anota('cronómetro detenido · ' + motivo);
+  }
+
+  $('b-empezar').addEventListener('click', function () {
+    preparaIntento();
+    $('b-ar').scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
   $('b-anclado').addEventListener('click', function () {
     if (!intento) return estado('No hay intento en curso.');
+    if (intento.t0 == null) return estado('El intento está preparado, pero todavía no se ha lanzado la RA.');
     if (intento.tAncla == null) intento.tAncla = performance.now() - intento.t0;
     intento.resultado = 'sí';
-    clearInterval(temporizador);
+    detieneCronometro('Anclado manual');
     anota('ANCLADO a mano en ' + (intento.tAncla / 1000).toFixed(1) + ' s');
     estado('Anclado en ' + (intento.tAncla / 1000).toFixed(1) + ' s. Ahora prueba a perderlo.');
   });
   $('b-noancla').addEventListener('click', function () {
     if (!intento) return estado('No hay intento en curso.');
+    if (intento.t0 == null) return estado('El intento está preparado, pero todavía no se ha lanzado la RA.');
     intento.resultado = 'NO';
-    clearInterval(temporizador);
+    detieneCronometro('No ancla manual');
     anota('NO ANCLA tras ' + ((performance.now() - intento.t0) / 1000).toFixed(1) + ' s');
     estado('Anotado como «no ancla». Guarda la fila.');
   });
@@ -232,18 +281,23 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
     anota('ar-status: ' + s);
     if (!intento) return;
     if (s === 'session-started') {
-      intento.tSesion = performance.now() - intento.t0;
-      estado('Sesión de RA abierta a los ' + (intento.tSesion / 1000).toFixed(1) + ' s. Buscando superficie…');
+      reajustaCronometroAWebXR();
+      estado('Sesión de RA abierta. Reloj reiniciado en 0.0 s; buscando superficie…');
     }
     if (s === 'object-placed' && intento.tAncla == null) {
+      if (intento.t0 == null) arrancaCronometro('object-placed sin session-started');
       intento.tAncla = performance.now() - intento.t0;
       intento.resultado = 'sí';
-      clearInterval(temporizador);
+      detieneCronometro('object-placed automático');
       estado('OBJETO COLOCADO a los ' + (intento.tAncla / 1000).toFixed(1) + ' s (medido por la biblioteca).');
     }
     if (s === 'failed') {
       intento.resultado = 'fallo';
+      detieneCronometro('ar-status: failed');
       estado('La biblioteca informa de fallo (ar-status: failed).');
+    }
+    if (s === 'not-presenting' && intento.resultado === 'en curso') {
+      estado('La sesión de RA se ha cerrado sin resultado. Pulsa «No ancla» si el intento debe contar como fallo.');
     }
   });
   mv.addEventListener('ar-tracking', function (e) {
@@ -272,6 +326,9 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
     }, 200);
   });
   $('b-ar').addEventListener('click', function () {
+    if (!intento) preparaIntento();
+    intento.tLanzar = performance.now();
+    arrancaCronometro('pulsar Ver en RA');
     anota('>> activateAR() · canActivateAR=' + mv.canActivateAR);
     if (!mv.canActivateAR) {
       estado('La biblioteca dice que NO puede activar RA por esta vía. Eso también es un resultado.');
@@ -342,7 +399,8 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
       // La ruta que la biblioteca dijo estar usando al lanzar. Si está vacía es
       // que no se llegó a lanzar la RA, y eso también hay que poder leerlo.
       ruta: intento.rutaReal || '(no se lanzó)',
-      dispositivo: RutaRA.dispositivo() + ' · ' + RutaRA.navegador()
+      dispositivo: RutaRA.dispositivo() + ' · ' + RutaRA.navegador(),
+      reloj: intento.origenCrono || 'sin cronómetro'
     });
     localStorage.setItem(CLAVE_FILAS, JSON.stringify(filas));
     pintaFilas();
@@ -356,11 +414,13 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
                 't sesión (s) | t anclaje (s) | Pérdidas | Nota |';
     const sep = '|---|---|---|---|---|---|---|---|---|---|';
     const cuerpo = filas.map(function (f) {
+      const nota = [f.nota || '', f.reloj ? 'reloj: ' + f.reloj : '']
+        .filter(Boolean).join(' · ');
       return '| ' + [f.luz, f.lux == null ? '—' : f.lux, f.sup, f.dist,
                      f.ruta || f.via,
                      f.resultado, f.tSesion == null ? '—' : f.tSesion,
                      f.t == null ? '—' : f.t, f.perdidas,
-                     f.nota || ''].join(' | ') + ' |';
+                     nota].join(' | ') + ' |';
     });
     const equipo = filas.length && filas[0].dispositivo ? filas[0].dispositivo : RutaRA.dispositivo();
     const txt = ['**Medido en ' + equipo + '** · ' + new Date().toLocaleString('es-ES'),
