@@ -70,6 +70,10 @@ app.innerHTML = `
               <span class="button-dot"></span>
               <span id="start-label">Comprobando compatibilidad…</span>
             </button>
+            <button class="scan-button" id="open-scan" type="button">
+              <span class="scan-button-icon" aria-hidden="true"></span>
+              Escaneo
+            </button>
             <button class="panorama-button" id="open-panorama" type="button">
               <span class="panorama-icon" aria-hidden="true">360°</span>
               Explorar paisaje
@@ -362,6 +366,7 @@ app.innerHTML = `
 const stage = getRequiredElement<HTMLElement>('#xr-stage');
 const overlay = getRequiredElement<HTMLElement>('#xr-overlay');
 const startButton = getRequiredElement<HTMLButtonElement>('#start-ar');
+const openScanButton = getRequiredElement<HTMLButtonElement>('#open-scan');
 const startLabel = getRequiredElement<HTMLElement>('#start-label');
 const compatibility = getRequiredElement<HTMLElement>('#compatibility');
 const cameraDialog = getRequiredElement<HTMLDialogElement>('#camera-dialog');
@@ -1119,7 +1124,7 @@ function updateExperienceState(
     startLabel.textContent = 'Revisar acceso a cámara';
   } else if (mode === 'ar' && state === 'ready') {
     startButton.disabled = false;
-    startLabel.textContent = 'Ver modelos en AR';
+    startLabel.textContent = 'Modelo AR';
   }
 
   checkpoint(`${mode}:state:${state}`, 'landing');
@@ -1218,7 +1223,7 @@ async function checkCompatibility(): Promise<void> {
     compatibility.textContent = 'Compatible · ARKit mediante AR Quick Look en iPhone y iPad';
     compatibility.dataset.error = 'false';
     startButton.disabled = false;
-    startLabel.textContent = 'Ver modelos en AR';
+    startLabel.textContent = 'Modelo AR';
     return;
   }
 
@@ -1226,7 +1231,7 @@ async function checkCompatibility(): Promise<void> {
   compatibility.textContent = copy.summary;
   compatibility.dataset.error = String(!arAvailability.canStart);
   startButton.disabled = false;
-  startLabel.textContent = arAvailability.canStart ? 'Ver modelos en AR' : 'Ver opciones de AR';
+  startLabel.textContent = arAvailability.canStart ? 'Modelo AR' : 'Opciones AR';
 }
 
 function setCameraCheck(state: string, title: string, detail: string): void {
@@ -1516,6 +1521,10 @@ startButton.addEventListener('click', () => {
   void refreshCameraPreflight();
 });
 
+openScanButton.addEventListener('click', () => {
+  checkpoint('landing:scan-open', 'landing');
+  requestQrScan();
+});
 cameraCancelButton.addEventListener('click', () => {
   closeCameraDialog();
   checkpoint('camera-dialog:cancel', 'landing');

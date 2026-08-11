@@ -56,6 +56,50 @@ h1 span { color: transparent; -webkit-text-stroke: 1.5px rgba(244, 247, 245, .78
 .primary-button:disabled { cursor: not-allowed; opacity: .55; }
 .button-dot { width: 9px; height: 9px; border: 2px solid currentColor; border-radius: 50%; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.scan-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  min-height: 58px;
+  padding: 0 23px;
+  border: 1px solid rgba(111,238,186,.32);
+  border-radius: 17px;
+  color: #d8ebe3;
+  background: rgba(111,238,186,.055);
+  font-weight: 780;
+  cursor: pointer;
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.scan-button:hover { border-color: rgba(111,238,186,.7); background: rgba(111,238,186,.11); }
+.scan-button:active { transform: scale(.98); }
+.scan-button-icon {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+}
+.scan-button-icon::before,
+.scan-button-icon::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+}
+.scan-button-icon::before {
+  left: -2px;
+  top: -2px;
+  border-left: 1.5px solid currentColor;
+  border-top: 1.5px solid currentColor;
+}
+.scan-button-icon::after {
+  right: -2px;
+  bottom: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+}
 .panorama-button { display: inline-flex; align-items: center; justify-content: center; gap: 11px; min-height: 58px; padding: 0 23px; border: 1px solid rgba(111,238,186,.32); border-radius: 17px; color: #d8ebe3; background: rgba(111,238,186,.055); font-weight: 780; cursor: pointer; transition: transform .2s ease, border-color .2s ease, background .2s ease; }
 .panorama-button:hover { border-color: rgba(111,238,186,.7); background: rgba(111,238,186,.11); }
 .panorama-button:active { transform: scale(.98); }
@@ -773,6 +817,7 @@ body.panorama-active .panorama-view { display: block; }
   .steps li { min-height: auto; display: flex; align-items: flex-start; gap: 15px; padding: 13px 15px; }
   .steps li > span { margin: 3px 0 0; }
   .primary-button { width: 100%; }
+  .scan-button { width: 100%; }
   .hero-actions { display: grid; }
   .panorama-button { width: 100%; }
   .visual { order: -1; min-height: 245px; }
