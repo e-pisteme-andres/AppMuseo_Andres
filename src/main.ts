@@ -946,6 +946,10 @@ const modelPreviews = new Map(
     new ModelPreview(modelPreviewCanvases.get(model.id)!),
   ]),
 );
+const qrScannerModelPreview = new ModelPreview(qrScannerModelCanvas, {
+  width: qrScannerModelPreviewSize,
+  height: qrScannerModelPreviewSize,
+});
 let arAvailability: ArAvailability | null = null;
 let experienceModelLoaded = false;
 let previewModelsLoaded = false;
