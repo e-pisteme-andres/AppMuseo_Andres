@@ -1337,6 +1337,7 @@ function stopQrScannerStream(): void {
 
 function closeQrScannerDialog(): void {
   stopQrScannerStream();
+  overlay.style.display = '';
   if (!qrScannerDialog.open) return;
   if (typeof qrScannerDialog.close === 'function') {
     qrScannerDialog.close();
@@ -1539,6 +1540,7 @@ async function startQrScannerStream(): Promise<void> {
 
 async function openQrScannerDialog(): Promise<void> {
   stopQrScannerStream();
+  overlay.style.display = 'block';
   qrScannerStatus.textContent = 'Preparando la camara...';
   if (!qrScannerDialog.open) {
     if (typeof qrScannerDialog.showModal === 'function') qrScannerDialog.showModal();
