@@ -87,7 +87,7 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
     totalLuminance += value;
   }
 
-  const threshold = clamp(totalLuminance / pixelCount * 0.72, 40, 145);
+  const threshold = clamp(totalLuminance / pixelCount * 0.82, 55, 175);
   const darkMask = new Uint8Array(pixelCount);
   for (let index = 0; index < pixelCount; index += 1) {
     darkMask[index] = luminance[index] <= threshold ? 1 : 0;
@@ -96,8 +96,8 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
   const visited = new Uint8Array(pixelCount);
   const queue = new Int32Array(pixelCount);
   const candidates: CandidateComponent[] = [];
-  const minArea = pixelCount * 0.00045;
-  const maxArea = pixelCount * 0.08;
+  const minArea = pixelCount * 0.00018;
+  const maxArea = pixelCount * 0.12;
 
   for (let startIndex = 0; startIndex < pixelCount; startIndex += 1) {
     if (darkMask[startIndex] === 0 || visited[startIndex] === 1) continue;
@@ -132,12 +132,18 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
       maxX = Math.max(maxX, x);
       maxY = Math.max(maxY, y);
 
-      const left = x > 0 ? index - 1 : -1;
-      const right = x < width - 1 ? index + 1 : -1;
-      const up = y > 0 ? index - width : -1;
-      const down = y < height - 1 ? index + width : -1;
+      const neighbors = [
+        x > 0 ? index - 1 : -1,
+        x < width - 1 ? index + 1 : -1,
+        y > 0 ? index - width : -1,
+        y < height - 1 ? index + width : -1,
+        x > 0 && y > 0 ? index - width - 1 : -1,
+        x < width - 1 && y > 0 ? index - width + 1 : -1,
+        x > 0 && y < height - 1 ? index + width - 1 : -1,
+        x < width - 1 && y < height - 1 ? index + width + 1 : -1,
+      ];
 
-      for (const neighbor of [left, right, up, down]) {
+      for (const neighbor of neighbors) {
         if (neighbor < 0 || visited[neighbor] === 1 || darkMask[neighbor] === 0) continue;
         visited[neighbor] = 1;
         queue[queueEnd] = neighbor;
@@ -149,13 +155,13 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
 
     const componentWidth = maxX - minX + 1;
     const componentHeight = maxY - minY + 1;
-    if (componentWidth < 8 || componentHeight < 8) continue;
+    if (componentWidth < 6 || componentHeight < 6) continue;
 
     const aspectRatio = componentWidth / componentHeight;
-    if (aspectRatio < 0.45 || aspectRatio > 2.2) continue;
+    if (aspectRatio < 0.3 || aspectRatio > 3.1) continue;
 
     const fillRatio = area / (componentWidth * componentHeight);
-    if (fillRatio < 0.08 || fillRatio > 0.55) continue;
+    if (fillRatio < 0.03 || fillRatio > 0.72) continue;
 
     for (let queueIndex = 0; queueIndex < queueEnd; queueIndex += 1) {
       const index = queue[queueIndex];
@@ -163,13 +169,13 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
       const y = Math.floor(index / width);
       const normalizedX = (x - minX) / Math.max(1, componentWidth - 1);
       const normalizedY = (y - minY) / Math.max(1, componentHeight - 1);
-      if (Math.abs(normalizedX - normalizedY) <= 0.2) mainDiagonalHits += 1;
-      if (Math.abs((1 - normalizedX) - normalizedY) <= 0.2) antiDiagonalHits += 1;
+      if (Math.abs(normalizedX - normalizedY) <= 0.3) mainDiagonalHits += 1;
+      if (Math.abs((1 - normalizedX) - normalizedY) <= 0.3) antiDiagonalHits += 1;
     }
 
     const mainRatio = mainDiagonalHits / area;
     const antiRatio = antiDiagonalHits / area;
-    if (mainRatio < 0.22 || antiRatio < 0.22) continue;
+    if (mainRatio < 0.14 || antiRatio < 0.14) continue;
 
     const score = area * (mainRatio + antiRatio);
     candidates.push({
@@ -181,7 +187,7 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
     });
   }
 
-  return candidates.sort((first, second) => second.score - first.score).slice(0, 8);
+  return candidates.sort((first, second) => second.score - first.score).slice(0, 12);
 }
 
 export function detectMarker(imageData: ImageData): MarkerDetection | null {
@@ -220,13 +226,13 @@ export function detectMarker(imageData: ImageData): MarkerDetection | null {
             ),
           );
 
-          if (averageWidth < imageData.width * 0.18 || averageHeight < imageData.height * 0.18) continue;
-          if (Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth)) > 1.8) continue;
-          if (Math.max(leftHeight, rightHeight) / Math.max(1, Math.min(leftHeight, rightHeight)) > 1.8) continue;
-          if (diagonalRatio > 1.6) continue;
+          if (averageWidth < imageData.width * 0.12 || averageHeight < imageData.height * 0.12) continue;
+          if (Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth)) > 2.5) continue;
+          if (Math.max(leftHeight, rightHeight) / Math.max(1, Math.min(leftHeight, rightHeight)) > 2.5) continue;
+          if (diagonalRatio > 2.1) continue;
 
           const shapeArea = polygonArea(corners);
-          if (shapeArea < imageData.width * imageData.height * 0.035) continue;
+          if (shapeArea < imageData.width * imageData.height * 0.018) continue;
 
           const score = candidates[first].score
             + candidates[second].score
