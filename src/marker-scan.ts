@@ -11,6 +11,12 @@ export interface MarkerDetection {
   score: number;
 }
 
+export interface MarkerFrameAnalysis {
+  detection: MarkerDetection | null;
+  candidateCount: number;
+  quadrantCount: number;
+}
+
 interface CandidateComponent {
   center: MarkerPoint;
   area: number;
@@ -35,6 +41,27 @@ function polygonArea(points: readonly MarkerPoint[]): number {
     total += point.x * next.y - next.x * point.y;
   }
   return Math.abs(total) * 0.5;
+}
+
+function getBounds(points: readonly MarkerPoint[]): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+} {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+
+  return { minX, minY, maxX, maxY };
 }
 
 function orderQuadrants(points: readonly MarkerPoint[]): [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint] | null {
@@ -158,10 +185,10 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
     if (componentWidth < 6 || componentHeight < 6) continue;
 
     const aspectRatio = componentWidth / componentHeight;
-    if (aspectRatio < 0.3 || aspectRatio > 3.1) continue;
+    if (aspectRatio < 0.45 || aspectRatio > 2.2) continue;
 
     const fillRatio = area / (componentWidth * componentHeight);
-    if (fillRatio < 0.03 || fillRatio > 0.72) continue;
+    if (fillRatio < 0.05 || fillRatio > 0.58) continue;
 
     for (let queueIndex = 0; queueIndex < queueEnd; queueIndex += 1) {
       const index = queue[queueIndex];
@@ -175,7 +202,7 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
 
     const mainRatio = mainDiagonalHits / area;
     const antiRatio = antiDiagonalHits / area;
-    if (mainRatio < 0.14 || antiRatio < 0.14) continue;
+    if (mainRatio < 0.18 || antiRatio < 0.18) continue;
 
     const score = area * (mainRatio + antiRatio);
     candidates.push({
@@ -190,9 +217,47 @@ function collectCandidates(imageData: ImageData): CandidateComponent[] {
   return candidates.sort((first, second) => second.score - first.score).slice(0, 12);
 }
 
-export function detectMarker(imageData: ImageData): MarkerDetection | null {
+function countQuadrants(candidates: readonly CandidateComponent[]): number {
+  if (candidates.length === 0) return 0;
+
+  const relevantCandidates = candidates.slice(0, 6);
+  const centroid = relevantCandidates.reduce(
+    (accumulator, candidate) => ({
+      x: accumulator.x + candidate.center.x,
+      y: accumulator.y + candidate.center.y,
+    }),
+    { x: 0, y: 0 },
+  );
+  centroid.x /= relevantCandidates.length;
+  centroid.y /= relevantCandidates.length;
+
+  let topLeft = false;
+  let topRight = false;
+  let bottomRight = false;
+  let bottomLeft = false;
+
+  for (const candidate of relevantCandidates) {
+    const { x, y } = candidate.center;
+    if (x <= centroid.x && y <= centroid.y) topLeft = true;
+    else if (x > centroid.x && y <= centroid.y) topRight = true;
+    else if (x > centroid.x && y > centroid.y) bottomRight = true;
+    else bottomLeft = true;
+  }
+
+  return Number(topLeft) + Number(topRight) + Number(bottomRight) + Number(bottomLeft);
+}
+
+export function analyzeMarkerFrame(imageData: ImageData): MarkerFrameAnalysis {
   const candidates = collectCandidates(imageData);
-  if (candidates.length < 4) return null;
+  const candidateCount = Math.min(4, candidates.length);
+  const quadrantCount = countQuadrants(candidates);
+  if (candidates.length < 4) {
+    return {
+      detection: null,
+      candidateCount,
+      quadrantCount,
+    };
+  }
 
   let bestDetection: MarkerDetection | null = null;
 
@@ -209,12 +274,24 @@ export function detectMarker(imageData: ImageData): MarkerDetection | null {
           if (!corners) continue;
 
           const [topLeft, topRight, bottomRight, bottomLeft] = corners;
+          const selectedCandidates = [
+            candidates[first],
+            candidates[second],
+            candidates[third],
+            candidates[fourth],
+          ];
           const topWidth = distance(topLeft, topRight);
           const bottomWidth = distance(bottomLeft, bottomRight);
           const leftHeight = distance(topLeft, bottomLeft);
           const rightHeight = distance(topRight, bottomRight);
           const averageWidth = (topWidth + bottomWidth) * 0.5;
           const averageHeight = (leftHeight + rightHeight) * 0.5;
+          const areaValues = selectedCandidates.map((candidate) => candidate.area);
+          const widthValues = selectedCandidates.map((candidate) => candidate.width);
+          const heightValues = selectedCandidates.map((candidate) => candidate.height);
+          const areaRatio = Math.max(...areaValues) / Math.max(1, Math.min(...areaValues));
+          const widthRatio = Math.max(...widthValues) / Math.max(1, Math.min(...widthValues));
+          const heightRatio = Math.max(...heightValues) / Math.max(1, Math.min(...heightValues));
           const diagonalRatio = Math.max(
             distance(topLeft, bottomRight),
             distance(topRight, bottomLeft),
@@ -225,19 +302,27 @@ export function detectMarker(imageData: ImageData): MarkerDetection | null {
               distance(topRight, bottomLeft),
             ),
           );
+          const bounds = getBounds(corners);
+          const boundsWidth = Math.max(1, bounds.maxX - bounds.minX);
+          const boundsHeight = Math.max(1, bounds.maxY - bounds.minY);
+          const boundsArea = boundsWidth * boundsHeight;
+          const quadrilateralAspectRatio = boundsWidth / boundsHeight;
 
           if (averageWidth < imageData.width * 0.12 || averageHeight < imageData.height * 0.12) continue;
-          if (Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth)) > 2.5) continue;
-          if (Math.max(leftHeight, rightHeight) / Math.max(1, Math.min(leftHeight, rightHeight)) > 2.5) continue;
-          if (diagonalRatio > 2.1) continue;
+          if (Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth)) > 1.9) continue;
+          if (Math.max(leftHeight, rightHeight) / Math.max(1, Math.min(leftHeight, rightHeight)) > 1.9) continue;
+          if (diagonalRatio > 1.6) continue;
+          if (areaRatio > 2.2 || widthRatio > 2 || heightRatio > 2) continue;
+          if (quadrilateralAspectRatio < 0.45 || quadrilateralAspectRatio > 2.2) continue;
 
           const shapeArea = polygonArea(corners);
           if (shapeArea < imageData.width * imageData.height * 0.018) continue;
+          if (shapeArea / boundsArea < 0.46) continue;
 
-          const score = candidates[first].score
-            + candidates[second].score
-            + candidates[third].score
-            + candidates[fourth].score
+          const score = selectedCandidates[0].score
+            + selectedCandidates[1].score
+            + selectedCandidates[2].score
+            + selectedCandidates[3].score
             + shapeArea * 0.02;
 
           if (!bestDetection || score > bestDetection.score) {
@@ -257,7 +342,15 @@ export function detectMarker(imageData: ImageData): MarkerDetection | null {
     }
   }
 
-  return bestDetection;
+  return {
+    detection: bestDetection,
+    candidateCount,
+    quadrantCount,
+  };
+}
+
+export function detectMarker(imageData: ImageData): MarkerDetection | null {
+  return analyzeMarkerFrame(imageData).detection;
 }
 
 export function smoothMarkerDetection(

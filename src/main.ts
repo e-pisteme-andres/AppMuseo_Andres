@@ -28,7 +28,7 @@ import {
   type ResumableView,
 } from './progress-cache';
 import {
-  detectMarker,
+  analyzeMarkerFrame,
   mapPointFromVideoToViewport,
   smoothMarkerDetection,
   type MarkerDetection,
@@ -509,9 +509,12 @@ let qrScannerStream: MediaStream | null = null;
 let qrScannerDetection: MarkerDetection | null = null;
 let qrScannerLostFrames = 0;
 let qrScannerOverlayVisible = false;
+let qrScannerStableDetectionFrames = 0;
 let qrScannerModelPreviewSize = 256;
 let qrScannerLoadedModelId: ModelId | null = null;
 const qrScannerAnalysisContext = qrScannerAnalysisCanvas.getContext('2d', { willReadFrequently: true });
+const QR_SCANNER_CONFIRMATION_FRAMES = 6;
+const QR_SCANNER_LOST_FRAME_TOLERANCE = 8;
 
 function checkpoint(action: string, view: ResumableView = resumableView): void {
   appProgress = saveAppProgress(progressStorage, {
@@ -1325,8 +1328,10 @@ function stopQrScannerStream(): void {
   qrScannerDetection = null;
   qrScannerLostFrames = 0;
   qrScannerOverlayVisible = false;
+  qrScannerStableDetectionFrames = 0;
   qrScannerStage.dataset.state = 'searching';
   qrScannerHint.hidden = false;
+  qrScannerHint.textContent = 'Busca las cuatro X en negro';
   qrScannerPolygon.setAttribute('points', '0,0 0,0 0,0 0,0');
   qrScannerModelCanvas.style.opacity = '0';
   qrScannerModelCanvas.style.left = '50%';
@@ -1359,6 +1364,7 @@ function hideQrScannerOverlay(): void {
   qrScannerPolygon.setAttribute('points', '0,0 0,0 0,0 0,0');
   qrScannerModelCanvas.style.opacity = '0';
   qrScannerHint.hidden = false;
+  qrScannerHint.textContent = 'Busca las cuatro X en negro';
   qrScannerStage.dataset.state = 'searching';
 }
 
@@ -1366,6 +1372,7 @@ function updateQrScannerOverlay(
   detection: MarkerDetection,
   sourceWidth: number,
   sourceHeight: number,
+  showModel: boolean,
 ): void {
   const stageWidth = qrScannerStage.clientWidth;
   const stageHeight = qrScannerStage.clientHeight;
@@ -1414,16 +1421,28 @@ function updateQrScannerOverlay(
   qrScannerModelCanvas.style.top = `${mappedCenter.y}px`;
   qrScannerModelCanvas.style.width = `${overlaySize}px`;
   qrScannerModelCanvas.style.height = `${overlaySize}px`;
-  qrScannerModelCanvas.style.opacity = '1';
+  qrScannerModelCanvas.style.opacity = showModel ? '1' : '0';
   qrScannerModelCanvas.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
-  qrScannerHint.hidden = true;
-  qrScannerStage.dataset.state = 'locked';
+  qrScannerHint.hidden = false;
+  qrScannerHint.textContent = showModel
+    ? '4 X confirmadas'
+    : 'Manten la hoja quieta para confirmar';
+  qrScannerStage.dataset.state = showModel ? 'locked' : 'searching';
 
   const roundedSize = Math.round(overlaySize);
   if (Math.abs(roundedSize - qrScannerModelPreviewSize) >= 4) {
     qrScannerModelPreviewSize = roundedSize;
     qrScannerModelPreview.setSize(roundedSize, roundedSize);
   }
+}
+
+function getQrScannerDetectedMarks(
+  candidateCount: number,
+  quadrantCount: number,
+  hasCompleteDetection: boolean,
+): number {
+  if (hasCompleteDetection) return 4;
+  return Math.max(0, Math.min(4, Math.min(candidateCount, quadrantCount)));
 }
 
 async function ensureQrScannerModelLoaded(modelId: ModelId): Promise<boolean> {
@@ -1506,7 +1525,13 @@ async function startQrScannerStream(): Promise<void> {
     try {
       qrScannerAnalysisContext.drawImage(qrScannerVideo, 0, 0, analysisWidth, analysisHeight);
       const frame = qrScannerAnalysisContext.getImageData(0, 0, analysisWidth, analysisHeight);
-      const nextDetection = detectMarker(frame);
+      const analysis = analyzeMarkerFrame(frame);
+      const nextDetection = analysis.detection;
+      const detectedMarks = getQrScannerDetectedMarks(
+        analysis.candidateCount,
+        analysis.quadrantCount,
+        Boolean(nextDetection),
+      );
 
       if (nextDetection) {
         const smoothedDetection = smoothMarkerDetection(qrScannerDetection, nextDetection);
@@ -1516,16 +1541,31 @@ async function startQrScannerStream(): Promise<void> {
         }
         qrScannerDetection = smoothedDetection;
         qrScannerLostFrames = 0;
-        updateQrScannerOverlay(smoothedDetection, analysisWidth, analysisHeight);
-        if (!qrScannerOverlayVisible) navigator.vibrate?.(18);
-        qrScannerOverlayVisible = true;
-        qrScannerStatus.textContent = `Marcas detectadas. ${model.name} ya esta colocado sobre la hoja.`;
+        qrScannerStableDetectionFrames += 1;
+        const confirmed = qrScannerStableDetectionFrames >= QR_SCANNER_CONFIRMATION_FRAMES;
+        updateQrScannerOverlay(smoothedDetection, analysisWidth, analysisHeight, confirmed);
+
+        if (confirmed) {
+          if (!qrScannerOverlayVisible) navigator.vibrate?.(18);
+          qrScannerOverlayVisible = true;
+          qrScannerStatus.textContent = `4/4 X detectadas. ${model.name} colocado sobre la hoja.`;
+        } else {
+          qrScannerOverlayVisible = false;
+          qrScannerStatus.textContent = `4/4 X localizadas. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`;
+        }
       } else {
+        qrScannerStableDetectionFrames = 0;
         qrScannerLostFrames += 1;
-        if (qrScannerLostFrames > 8) {
+        if (qrScannerLostFrames > QR_SCANNER_LOST_FRAME_TOLERANCE) {
           qrScannerDetection = null;
           hideQrScannerOverlay();
-          qrScannerStatus.textContent = 'Mueve la hoja hasta que las cuatro X entren completas en la imagen.';
+          qrScannerStatus.textContent = detectedMarks > 0
+            ? `Solo se detectan ${detectedMarks}/4 X. Mueve la hoja hasta que entren las cuatro esquinas.`
+            : 'No se detectan las X todavia. Enfoca la hoja completa y evita fondos con cruces o trazos negros.';
+        } else if (!qrScannerOverlayVisible) {
+          qrScannerStatus.textContent = detectedMarks > 0
+            ? `Viendo ${detectedMarks}/4 X. Ajusta la hoja hasta completar las cuatro esquinas.`
+            : `Camara activa. Busca las cuatro X para colocar ${model.name}.`;
         }
       }
     } catch {
