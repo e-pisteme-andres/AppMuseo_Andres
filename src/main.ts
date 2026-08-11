@@ -27,6 +27,13 @@ import {
   type ProgressStorage,
   type ResumableView,
 } from './progress-cache';
+import {
+  detectMarker,
+  mapPointFromVideoToViewport,
+  smoothMarkerDetection,
+  type MarkerDetection,
+  type MarkerPoint,
+} from './marker-scan';
 
 function getRequiredElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -247,7 +254,7 @@ app.innerHTML = `
           </button>
           <button class="xr-tool-button" id="scan-qr-toggle" type="button">
             <span class="xr-tool-icon xr-scan-icon" aria-hidden="true"></span>
-            <span>Escanear<br>QR</span>
+            <span>Escaneo<br>X</span>
           </button>
           <button class="xr-tool-button" id="hands-toggle" type="button" aria-disabled="true">
             <span class="xr-tool-icon xr-hand-icon" aria-hidden="true">✋</span>
@@ -273,25 +280,36 @@ app.innerHTML = `
           <div class="qr-scanner-heading">
             <span class="qr-scanner-icon" aria-hidden="true"></span>
             <div>
-              <p class="qr-scanner-kicker">Modelos AR</p>
-              <h2 id="qr-scanner-title">Escanear QR</h2>
+              <p class="qr-scanner-kicker">Escaneo guiado</p>
+              <h2 id="qr-scanner-title">Buscar 4 marcas X</h2>
             </div>
           </div>
           <p class="qr-scanner-description" id="qr-scanner-description">
-            Enfoca un QR de modelo para seleccionar automaticamente la forma correspondiente.
+            Apunta la camara a una hoja con una X negra en cada esquina. Cuando localicemos las cuatro marcas, el modelo 3D aparecera sobre la hoja.
           </p>
           <div class="qr-scanner-stage" id="qr-scanner-stage">
-            <video id="qr-scanner-video" class="qr-scanner-video" playsinline muted></video>
-            <div class="qr-scanner-frame" aria-hidden="true"></div>
+            <video id="qr-scanner-video" class="qr-scanner-video" playsinline muted autoplay></video>
+            <svg id="qr-scanner-overlay" class="qr-scanner-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <polygon id="qr-scanner-polygon" class="qr-scanner-polygon" points="0,0 0,0 0,0 0,0"></polygon>
+            </svg>
+            <canvas id="qr-scanner-model" class="qr-scanner-model" width="256" height="256" aria-hidden="true"></canvas>
+            <div class="qr-scanner-frame" aria-hidden="true">
+              <span class="qr-scanner-corner corner-top-left"></span>
+              <span class="qr-scanner-corner corner-top-right"></span>
+              <span class="qr-scanner-corner corner-bottom-right"></span>
+              <span class="qr-scanner-corner corner-bottom-left"></span>
+            </div>
+            <div class="qr-scanner-hint" id="qr-scanner-hint" aria-hidden="true">
+              Busca las cuatro X en negro
+            </div>
           </div>
+          <canvas id="qr-scanner-analysis" hidden></canvas>
           <p class="qr-scanner-status" id="qr-scanner-status" role="status" aria-live="polite">
-            Preparando el escaner...
+            Preparando la camara...
           </p>
           <div class="qr-scanner-actions">
-            <button class="camera-secondary-button" id="qr-scanner-file-button" type="button">Elegir imagen</button>
             <button class="camera-secondary-button" id="qr-scanner-close" type="button">Cerrar</button>
           </div>
-          <input id="qr-scanner-file" type="file" accept="image/*" hidden>
         </div>
       </dialog>
     </div>
@@ -453,11 +471,14 @@ const panoramaGazeLabels = [...panoramaGazeTeleport.querySelectorAll<HTMLElement
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
 const qrScannerDialog = getRequiredElement<HTMLDialogElement>('#qr-scanner-dialog');
+const qrScannerStage = getRequiredElement<HTMLElement>('#qr-scanner-stage');
 const qrScannerVideo = getRequiredElement<HTMLVideoElement>('#qr-scanner-video');
+const qrScannerPolygon = getRequiredElement<SVGPolygonElement>('#qr-scanner-polygon');
+const qrScannerHint = getRequiredElement<HTMLElement>('#qr-scanner-hint');
+const qrScannerModelCanvas = getRequiredElement<HTMLCanvasElement>('#qr-scanner-model');
+const qrScannerAnalysisCanvas = getRequiredElement<HTMLCanvasElement>('#qr-scanner-analysis');
 const qrScannerStatus = getRequiredElement<HTMLElement>('#qr-scanner-status');
 const qrScannerCloseButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-close');
-const qrScannerFileButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-file-button');
-const qrScannerFileInput = getRequiredElement<HTMLInputElement>('#qr-scanner-file');
 let arMode: ARMode = 'unavailable';
 
 const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
@@ -482,51 +503,15 @@ let activeExperienceMode: 'ar' | 'virtual' | null = null;
 let arFlowPending = false;
 let arAttemptId = 0;
 let interruptedArAttemptId = -1;
-let pendingScannedModelId: ModelId | null = null;
 let pendingQrScannerLaunchAfterArExit = false;
-let qrScannerResumeMode: 'ar' | 'virtual' | null = null;
 let qrScannerFrameRequestId: number | null = null;
 let qrScannerStream: MediaStream | null = null;
-
-type BarcodeDetectorResultLike = { rawValue?: string };
-type BarcodeDetectorLike = {
-  detect(source: ImageBitmapSource): Promise<BarcodeDetectorResultLike[]>;
-};
-type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => BarcodeDetectorLike;
-
-function getBarcodeDetectorCtor(): BarcodeDetectorCtor | null {
-  const candidate = (window as Window & { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
-  return typeof candidate === 'function' ? candidate : null;
-}
-
-function parseScannedModelId(rawValue: string): ModelId | null {
-  const trimmed = rawValue.trim();
-  if (!trimmed) return null;
-
-  const directMatch = MODEL_CATALOG.find((model) => model.id === trimmed);
-  if (directMatch) return directMatch.id;
-
-  try {
-    const url = new URL(trimmed);
-    const modelId = url.searchParams.get('model');
-    return MODEL_CATALOG.some((model) => model.id === modelId) ? modelId as ModelId : null;
-  } catch {
-    return null;
-  }
-}
-
-async function detectModelIdFromImage(source: ImageBitmapSource): Promise<ModelId | null> {
-  const BarcodeDetector = getBarcodeDetectorCtor();
-  if (!BarcodeDetector) return null;
-  const detector = new BarcodeDetector({ formats: ['qr_code'] });
-  const results = await detector.detect(source);
-  for (const result of results) {
-    if (!result.rawValue) continue;
-    const modelId = parseScannedModelId(result.rawValue);
-    if (modelId) return modelId;
-  }
-  return null;
-}
+let qrScannerDetection: MarkerDetection | null = null;
+let qrScannerLostFrames = 0;
+let qrScannerOverlayVisible = false;
+let qrScannerModelPreviewSize = 256;
+let qrScannerLoadedModelId: ModelId | null = null;
+const qrScannerAnalysisContext = qrScannerAnalysisCanvas.getContext('2d', { willReadFrequently: true });
 
 function checkpoint(action: string, view: ResumableView = resumableView): void {
   appProgress = saveAppProgress(progressStorage, {
@@ -1057,15 +1042,6 @@ function applySelectedModel(modelId: ModelId): boolean {
   return true;
 }
 
-function tryPlacePendingScannedModel(state: ExperienceState): void {
-  if (state !== 'surfacePlaced' || !pendingScannedModelId) return;
-  const modelId = pendingScannedModelId;
-  pendingScannedModelId = null;
-  if (!applySelectedModel(modelId)) {
-    pendingScannedModelId = modelId;
-  }
-}
-
 function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
   if (active) activeExperienceMode = mode;
   else if (activeExperienceMode === mode) activeExperienceMode = null;
@@ -1112,7 +1088,6 @@ function updateExperienceState(
   scaleControl.hidden = state !== 'placed';
   xrLibrary.hidden = state !== 'surfacePlaced';
   if (state !== 'surfacePlaced') closeModelMenus();
-  tryPlacePendingScannedModel(state);
 
   if (mode === 'ar' && state === 'starting') {
     startButton.disabled = true;
@@ -1343,11 +1318,21 @@ function stopQrScannerStream(): void {
   qrScannerVideo.srcObject = null;
   qrScannerStream?.getTracks().forEach((track) => track.stop());
   qrScannerStream = null;
+  qrScannerDetection = null;
+  qrScannerLostFrames = 0;
+  qrScannerOverlayVisible = false;
+  qrScannerStage.dataset.state = 'searching';
+  qrScannerHint.hidden = false;
+  qrScannerPolygon.setAttribute('points', '0,0 0,0 0,0 0,0');
+  qrScannerModelCanvas.style.opacity = '0';
+  qrScannerModelCanvas.style.left = '50%';
+  qrScannerModelCanvas.style.top = '50%';
+  qrScannerModelCanvas.style.transform = 'translate(-50%, -50%) rotate(0deg)';
+  qrScannerModelPreview.stop();
 }
 
 function closeQrScannerDialog(): void {
   stopQrScannerStream();
-  qrScannerFileInput.value = '';
   if (!qrScannerDialog.open) return;
   if (typeof qrScannerDialog.close === 'function') {
     qrScannerDialog.close();
@@ -1356,107 +1341,201 @@ function closeQrScannerDialog(): void {
   }
 }
 
-function applyScannedModelFromQr(modelId: ModelId): void {
-  pendingScannedModelId = modelId;
-  const scannedModel = findModelDefinition(modelId);
-  qrScannerStatus.textContent = `QR detectado: ${scannedModel.name}.`;
-  checkpoint(`qr-scan:detected:${modelId}`, 'landing');
-  closeQrScannerDialog();
-
-  if (qrScannerResumeMode === 'virtual' && virtualExperienceActive) {
-    applySelectedModel(modelId);
-    qrScannerResumeMode = null;
-    return;
-  }
-
-  if (qrScannerResumeMode === 'ar') {
-    qrScannerResumeMode = null;
-    void beginArSession();
-    return;
-  }
-
-  qrScannerResumeMode = null;
-  openCameraDialog();
-  void refreshCameraPreflight();
+function getQrScannerModelId(): ModelId {
+  return activeModelId ?? MODEL_CATALOG[0].id;
 }
 
-async function scanQrFromFile(file: File): Promise<void> {
-  const BarcodeDetector = getBarcodeDetectorCtor();
-  if (!BarcodeDetector) {
-    qrScannerStatus.textContent = 'Este navegador no ofrece lectura QR desde imagen.';
-    return;
-  }
+function distanceBetweenPoints(first: MarkerPoint, second: MarkerPoint): number {
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
 
-  qrScannerStatus.textContent = 'Analizando imagen...';
-  try {
-    const bitmap = await createImageBitmap(file);
-    try {
-      const modelId = await detectModelIdFromImage(bitmap);
-      if (!modelId) {
-        qrScannerStatus.textContent = 'No se reconocio un QR de modelo valido en la imagen.';
-        return;
-      }
-      applyScannedModelFromQr(modelId);
-    } finally {
-      bitmap.close();
-    }
-  } catch {
-    qrScannerStatus.textContent = 'No se pudo leer la imagen seleccionada.';
+function hideQrScannerOverlay(): void {
+  qrScannerOverlayVisible = false;
+  qrScannerPolygon.setAttribute('points', '0,0 0,0 0,0 0,0');
+  qrScannerModelCanvas.style.opacity = '0';
+  qrScannerHint.hidden = false;
+  qrScannerStage.dataset.state = 'searching';
+}
+
+function updateQrScannerOverlay(
+  detection: MarkerDetection,
+  sourceWidth: number,
+  sourceHeight: number,
+): void {
+  const stageWidth = qrScannerStage.clientWidth;
+  const stageHeight = qrScannerStage.clientHeight;
+  if (stageWidth <= 0 || stageHeight <= 0) return;
+
+  const mappedCorners = detection.corners.map((corner) => mapPointFromVideoToViewport(
+    corner,
+    sourceWidth,
+    sourceHeight,
+    stageWidth,
+    stageHeight,
+  ));
+  const mappedCenter = mapPointFromVideoToViewport(
+    detection.center,
+    sourceWidth,
+    sourceHeight,
+    stageWidth,
+    stageHeight,
+  );
+
+  const overlayWidth = (
+    distanceBetweenPoints(mappedCorners[0], mappedCorners[1])
+    + distanceBetweenPoints(mappedCorners[3], mappedCorners[2])
+  ) * 0.5;
+  const overlayHeight = (
+    distanceBetweenPoints(mappedCorners[0], mappedCorners[3])
+    + distanceBetweenPoints(mappedCorners[1], mappedCorners[2])
+  ) * 0.5;
+  const overlaySize = Math.max(
+    120,
+    Math.min(
+      Math.max(overlayWidth, overlayHeight) * 0.76,
+      Math.min(stageWidth, stageHeight) * 0.82,
+    ),
+  );
+
+  const topLeft = mappedCorners[0];
+  const topRight = mappedCorners[1];
+  const angle = Math.atan2(topRight.y - topLeft.y, topRight.x - topLeft.x) * 180 / Math.PI;
+  const polygonPoints = mappedCorners
+    .map((corner) => `${corner.x / stageWidth * 100},${corner.y / stageHeight * 100}`)
+    .join(' ');
+
+  qrScannerPolygon.setAttribute('points', polygonPoints);
+  qrScannerModelCanvas.style.left = `${mappedCenter.x}px`;
+  qrScannerModelCanvas.style.top = `${mappedCenter.y}px`;
+  qrScannerModelCanvas.style.width = `${overlaySize}px`;
+  qrScannerModelCanvas.style.height = `${overlaySize}px`;
+  qrScannerModelCanvas.style.opacity = '1';
+  qrScannerModelCanvas.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+  qrScannerHint.hidden = true;
+  qrScannerStage.dataset.state = 'locked';
+
+  const roundedSize = Math.round(overlaySize);
+  if (Math.abs(roundedSize - qrScannerModelPreviewSize) >= 4) {
+    qrScannerModelPreviewSize = roundedSize;
+    qrScannerModelPreview.setSize(roundedSize, roundedSize);
   }
+}
+
+async function ensureQrScannerModelLoaded(modelId: ModelId): Promise<boolean> {
+  if (qrScannerLoadedModelId === modelId) return true;
+
+  try {
+    const model = findModelDefinition(modelId);
+    await qrScannerModelPreview.load(`${import.meta.env.BASE_URL}models/${model.file}`);
+    qrScannerLoadedModelId = modelId;
+    return true;
+  } catch {
+    qrScannerStatus.textContent = 'No se pudo cargar el modelo 3D para el escaneo.';
+    return false;
+  }
+}
+
+function scheduleQrScannerFrame(callback: () => void): void {
+  qrScannerFrameRequestId = window.requestAnimationFrame(callback);
 }
 
 async function startQrScannerStream(): Promise<void> {
-  const BarcodeDetector = getBarcodeDetectorCtor();
-  if (!BarcodeDetector) {
-    qrScannerStatus.textContent = 'Este navegador no permite escanear QR con la camara.';
+  if (!navigator.mediaDevices?.getUserMedia) {
+    qrScannerStatus.textContent = 'Este navegador no permite abrir la camara desde esta pagina.';
+    return;
+  }
+  if (!qrScannerAnalysisContext) {
+    qrScannerStatus.textContent = 'No se pudo preparar el analisis visual en este dispositivo.';
     return;
   }
 
+  const modelId = getQrScannerModelId();
+  const model = findModelDefinition(modelId);
   qrScannerStatus.textContent = 'Solicitando acceso a la camara...';
+
   try {
     qrScannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
       audio: false,
     });
     qrScannerVideo.srcObject = qrScannerStream;
+    qrScannerVideo.setAttribute('playsinline', 'true');
+    qrScannerVideo.muted = true;
     await qrScannerVideo.play();
-    qrScannerStatus.textContent = 'Enfoca un QR de modelo.';
   } catch {
-    qrScannerStatus.textContent = 'No se pudo abrir la camara del escaner. Puedes elegir una imagen.';
+    qrScannerStatus.textContent = 'No se pudo abrir la camara. Revisa el permiso del navegador y vuelve a intentarlo.';
     return;
   }
 
-  const detectFrame = async (): Promise<void> => {
-    if (!qrScannerStream || qrScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      qrScannerFrameRequestId = window.requestAnimationFrame(() => {
-        void detectFrame();
-      });
+  qrScannerStatus.textContent = `Camara activa. Busca las cuatro X para colocar ${model.name}.`;
+  qrScannerHint.textContent = 'Busca las cuatro X en negro';
+  qrScannerStage.dataset.state = 'searching';
+  hideQrScannerOverlay();
+
+  if (!await ensureQrScannerModelLoaded(modelId)) {
+    stopQrScannerStream();
+    return;
+  }
+  qrScannerModelPreview.start();
+
+  const detectFrame = (): void => {
+    if (!qrScannerStream) return;
+
+    if (qrScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || qrScannerVideo.videoWidth === 0) {
+      scheduleQrScannerFrame(detectFrame);
       return;
     }
 
-    try {
-      const modelId = await detectModelIdFromImage(qrScannerVideo);
-      if (modelId) {
-        applyScannedModelFromQr(modelId);
-        return;
-      }
-    } catch {
-      qrScannerStatus.textContent = 'No se pudo leer el QR en este momento. Sigue enfocando.';
+    const analysisWidth = Math.min(320, qrScannerVideo.videoWidth);
+    const analysisHeight = Math.max(1, Math.round(qrScannerVideo.videoHeight * (analysisWidth / qrScannerVideo.videoWidth)));
+
+    if (qrScannerAnalysisCanvas.width !== analysisWidth || qrScannerAnalysisCanvas.height !== analysisHeight) {
+      qrScannerAnalysisCanvas.width = analysisWidth;
+      qrScannerAnalysisCanvas.height = analysisHeight;
     }
 
-    qrScannerFrameRequestId = window.requestAnimationFrame(() => {
-      void detectFrame();
-    });
+    try {
+      qrScannerAnalysisContext.drawImage(qrScannerVideo, 0, 0, analysisWidth, analysisHeight);
+      const frame = qrScannerAnalysisContext.getImageData(0, 0, analysisWidth, analysisHeight);
+      const nextDetection = detectMarker(frame);
+
+      if (nextDetection) {
+        const smoothedDetection = smoothMarkerDetection(qrScannerDetection, nextDetection);
+        if (!smoothedDetection) {
+          scheduleQrScannerFrame(detectFrame);
+          return;
+        }
+        qrScannerDetection = smoothedDetection;
+        qrScannerLostFrames = 0;
+        updateQrScannerOverlay(smoothedDetection, analysisWidth, analysisHeight);
+        if (!qrScannerOverlayVisible) navigator.vibrate?.(18);
+        qrScannerOverlayVisible = true;
+        qrScannerStatus.textContent = `Marcas detectadas. ${model.name} ya esta colocado sobre la hoja.`;
+      } else {
+        qrScannerLostFrames += 1;
+        if (qrScannerLostFrames > 8) {
+          qrScannerDetection = null;
+          hideQrScannerOverlay();
+          qrScannerStatus.textContent = 'Mueve la hoja hasta que las cuatro X entren completas en la imagen.';
+        }
+      }
+    } catch {
+      qrScannerStatus.textContent = 'No se pudo analizar la imagen de la camara en este momento.';
+    }
+
+    scheduleQrScannerFrame(detectFrame);
   };
 
-  qrScannerFrameRequestId = window.requestAnimationFrame(() => {
-    void detectFrame();
-  });
+  scheduleQrScannerFrame(detectFrame);
 }
 
 async function openQrScannerDialog(): Promise<void> {
   stopQrScannerStream();
-  qrScannerStatus.textContent = 'Preparando el escaner...';
+  qrScannerStatus.textContent = 'Preparando la camara...';
   if (!qrScannerDialog.open) {
     if (typeof qrScannerDialog.showModal === 'function') qrScannerDialog.showModal();
     else qrScannerDialog.setAttribute('open', '');
@@ -1465,20 +1544,25 @@ async function openQrScannerDialog(): Promise<void> {
 }
 
 function requestQrScan(): void {
-  qrScannerResumeMode = activeExperienceMode;
   if (activeExperienceMode === 'ar' && arSessionActive) {
     pendingQrScannerLaunchAfterArExit = true;
     closeModelMenus();
-    xrMessage.textContent = 'Cerrando AR para abrir el escaner QR...';
+    xrMessage.textContent = 'Cerrando AR para abrir el escaneo...';
     closeButton.disabled = true;
     closeButton.textContent = 'Saliendo...';
     void experience.end().catch(() => {
       pendingQrScannerLaunchAfterArExit = false;
       closeButton.disabled = false;
       closeButton.textContent = 'Salir';
-      xrMessage.textContent = 'No se pudo cerrar la sesion para escanear el QR.';
+      xrMessage.textContent = 'No se pudo cerrar la sesion para abrir el escaneo.';
     });
     return;
+  }
+
+  if (activeExperienceMode === 'virtual' && virtualExperienceActive) {
+    closeModelMenus();
+    xrMessage.textContent = 'Abriendo escaneo...';
+    virtualExperience.end();
   }
 
   void openQrScannerDialog();
@@ -1525,6 +1609,7 @@ openScanButton.addEventListener('click', () => {
   checkpoint('landing:scan-open', 'landing');
   requestQrScan();
 });
+
 cameraCancelButton.addEventListener('click', () => {
   closeCameraDialog();
   checkpoint('camera-dialog:cancel', 'landing');
@@ -1687,7 +1772,7 @@ handsToggle.addEventListener('click', () => {
 });
 
 scanQrToggle.addEventListener('click', () => {
-  checkpoint(`${activeExperienceMode ?? 'ar'}:qr-scan-open`, 'landing');
+  checkpoint(`${activeExperienceMode ?? 'ar'}:scan-open`, 'landing');
   requestQrScan();
 });
 qrScannerCloseButton.addEventListener('click', () => {
@@ -1698,14 +1783,6 @@ qrScannerDialog.addEventListener('close', () => {
 });
 qrScannerDialog.addEventListener('click', (event) => {
   if (event.target === qrScannerDialog) closeQrScannerDialog();
-});
-qrScannerFileButton.addEventListener('click', () => {
-  qrScannerFileInput.click();
-});
-qrScannerFileInput.addEventListener('change', () => {
-  const [file] = [...(qrScannerFileInput.files ?? [])];
-  if (!file) return;
-  void scanQrFromFile(file);
 });
 
 modelButtons.forEach((button, modelId) => {

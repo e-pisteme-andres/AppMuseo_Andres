@@ -6,9 +6,13 @@ export class ModelPreview {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(32, 1, 0.01, 20);
   private readonly pivot = new THREE.Group();
+  private currentModel: THREE.Object3D | null = null;
   private animationFrame: number | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    size: { width?: number; height?: number } = {},
+  ) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
@@ -16,7 +20,7 @@ export class ModelPreview {
       powerPreference: 'low-power',
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(136, 136, false);
+    this.setSize(size.width ?? 136, size.height ?? 136);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.camera.position.set(0, 0.12, 2.7);
@@ -28,9 +32,18 @@ export class ModelPreview {
     this.scene.add(keyLight);
   }
 
+  setSize(width: number, height: number): void {
+    const safeWidth = Math.max(1, Math.round(width));
+    const safeHeight = Math.max(1, Math.round(height));
+    this.renderer.setSize(safeWidth, safeHeight, false);
+    this.camera.aspect = safeWidth / safeHeight;
+    this.camera.updateProjectionMatrix();
+  }
+
   async load(url: string): Promise<void> {
     const gltf = await new GLTFLoader().loadAsync(url);
     const model = gltf.scene;
+    if (this.currentModel) this.pivot.remove(this.currentModel);
     const bounds = new THREE.Box3().setFromObject(model);
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
@@ -39,6 +52,7 @@ export class ModelPreview {
 
     model.scale.setScalar(scale);
     model.position.copy(center).multiplyScalar(-scale);
+    this.currentModel = model;
     this.pivot.add(model);
     this.renderer.render(this.scene, this.camera);
   }
