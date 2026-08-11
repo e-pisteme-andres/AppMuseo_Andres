@@ -510,7 +510,6 @@ let qrScannerDetection: MarkerDetection | null = null;
 let qrScannerLostFrames = 0;
 let qrScannerOverlayVisible = false;
 let qrScannerStableDetectionFrames = 0;
-let qrScannerPlacementLocked = false;
 let qrScannerModelPreviewSize = 256;
 let qrScannerLoadedModelId: ModelId | null = null;
 const qrScannerAnalysisContext = qrScannerAnalysisCanvas.getContext('2d', { willReadFrequently: true });
@@ -1330,7 +1329,6 @@ function stopQrScannerStream(): void {
   qrScannerLostFrames = 0;
   qrScannerOverlayVisible = false;
   qrScannerStableDetectionFrames = 0;
-  qrScannerPlacementLocked = false;
   qrScannerStage.dataset.state = 'searching';
   qrScannerHint.hidden = false;
   qrScannerHint.textContent = 'Busca las cuatro X en negro';
@@ -1510,7 +1508,6 @@ async function startQrScannerStream(): Promise<void> {
 
   const detectFrame = (): void => {
     if (!qrScannerStream) return;
-    if (qrScannerPlacementLocked) return;
 
     if (qrScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || qrScannerVideo.videoWidth === 0) {
       scheduleQrScannerFrame(detectFrame);
@@ -1551,10 +1548,7 @@ async function startQrScannerStream(): Promise<void> {
         if (confirmed) {
           if (!qrScannerOverlayVisible) navigator.vibrate?.(18);
           qrScannerOverlayVisible = true;
-          qrScannerPlacementLocked = true;
-          qrScannerHint.hidden = false;
-          qrScannerHint.textContent = 'Modelo fijado';
-          qrScannerStatus.textContent = `4/4 X detectadas. ${model.name} fijado sobre la hoja.`;
+          qrScannerStatus.textContent = `4/4 X detectadas. ${model.name} colocado sobre la hoja.`;
         } else {
           qrScannerOverlayVisible = false;
           qrScannerStatus.textContent = `4/4 X localizadas. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`;
