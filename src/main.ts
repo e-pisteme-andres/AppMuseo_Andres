@@ -510,6 +510,7 @@ let qrScannerDetection: MarkerDetection | null = null;
 let qrScannerLostFrames = 0;
 let qrScannerOverlayVisible = false;
 let qrScannerStableDetectionFrames = 0;
+let qrScannerPlacementLocked = false;
 let qrScannerModelPreviewSize = 256;
 let qrScannerLoadedModelId: ModelId | null = null;
 const qrScannerAnalysisContext = qrScannerAnalysisCanvas.getContext('2d', { willReadFrequently: true });
@@ -1329,6 +1330,7 @@ function stopQrScannerStream(): void {
   qrScannerLostFrames = 0;
   qrScannerOverlayVisible = false;
   qrScannerStableDetectionFrames = 0;
+  qrScannerPlacementLocked = false;
   qrScannerStage.dataset.state = 'searching';
   qrScannerHint.hidden = false;
   qrScannerHint.textContent = 'Busca las cuatro X en negro';
@@ -1508,6 +1510,10 @@ async function startQrScannerStream(): Promise<void> {
 
   const detectFrame = (): void => {
     if (!qrScannerStream) return;
+    if (qrScannerPlacementLocked) {
+      qrScannerFrameRequestId = null;
+      return;
+    }
 
     if (qrScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || qrScannerVideo.videoWidth === 0) {
       scheduleQrScannerFrame(detectFrame);
@@ -1548,7 +1554,10 @@ async function startQrScannerStream(): Promise<void> {
         if (confirmed) {
           if (!qrScannerOverlayVisible) navigator.vibrate?.(18);
           qrScannerOverlayVisible = true;
-          qrScannerStatus.textContent = `4/4 X detectadas. ${model.name} colocado sobre la hoja.`;
+          qrScannerPlacementLocked = true;
+          qrScannerHint.hidden = false;
+          qrScannerHint.textContent = 'Modelo anclado';
+          qrScannerStatus.textContent = `4/4 X detectadas. ${model.name} anclado sobre la hoja.`;
         } else {
           qrScannerOverlayVisible = false;
           qrScannerStatus.textContent = `4/4 X localizadas. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`;
@@ -1570,6 +1579,11 @@ async function startQrScannerStream(): Promise<void> {
       }
     } catch {
       qrScannerStatus.textContent = 'No se pudo analizar la imagen de la camara en este momento.';
+    }
+
+    if (qrScannerPlacementLocked) {
+      qrScannerFrameRequestId = null;
+      return;
     }
 
     scheduleQrScannerFrame(detectFrame);
