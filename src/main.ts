@@ -31,6 +31,7 @@ import {
   analyzeMarkerFrame,
   mapPointFromVideoToViewport,
   smoothMarkerDetection,
+  trackMarker,
   type MarkerDetection,
   type MarkerPoint,
 } from './marker-scan';
@@ -1510,10 +1511,6 @@ async function startQrScannerStream(): Promise<void> {
 
   const detectFrame = (): void => {
     if (!qrScannerStream) return;
-    if (qrScannerPlacementLocked) {
-      qrScannerFrameRequestId = null;
-      return;
-    }
 
     if (qrScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || qrScannerVideo.videoWidth === 0) {
       scheduleQrScannerFrame(detectFrame);
@@ -1531,6 +1528,30 @@ async function startQrScannerStream(): Promise<void> {
     try {
       qrScannerAnalysisContext.drawImage(qrScannerVideo, 0, 0, analysisWidth, analysisHeight);
       const frame = qrScannerAnalysisContext.getImageData(0, 0, analysisWidth, analysisHeight);
+
+      if (qrScannerPlacementLocked && qrScannerDetection) {
+        const trackedDetection = trackMarker(frame, qrScannerDetection);
+        if (trackedDetection) {
+          const smoothedTrackedDetection = smoothMarkerDetection(qrScannerDetection, trackedDetection, 0.42);
+          if (smoothedTrackedDetection) {
+            qrScannerDetection = smoothedTrackedDetection;
+            qrScannerLostFrames = 0;
+            updateQrScannerOverlay(smoothedTrackedDetection, analysisWidth, analysisHeight, true);
+            qrScannerHint.hidden = false;
+            qrScannerHint.textContent = 'Modelo anclado';
+            qrScannerStatus.textContent = `${model.name} anclado sobre la hoja.`;
+          }
+        } else {
+          qrScannerLostFrames += 1;
+          if (qrScannerLostFrames > QR_SCANNER_LOST_FRAME_TOLERANCE) {
+            qrScannerStatus.textContent = 'Seguimiento perdido. Vuelve a apuntar a la hoja para recuperar el anclaje.';
+          }
+        }
+
+        scheduleQrScannerFrame(detectFrame);
+        return;
+      }
+
       const analysis = analyzeMarkerFrame(frame);
       const nextDetection = analysis.detection;
       const detectedMarks = getQrScannerDetectedMarks(
@@ -1555,6 +1576,7 @@ async function startQrScannerStream(): Promise<void> {
           if (!qrScannerOverlayVisible) navigator.vibrate?.(18);
           qrScannerOverlayVisible = true;
           qrScannerPlacementLocked = true;
+          qrScannerLostFrames = 0;
           qrScannerHint.hidden = false;
           qrScannerHint.textContent = 'Modelo anclado';
           qrScannerStatus.textContent = `4/4 X detectadas. ${model.name} anclado sobre la hoja.`;
@@ -1579,11 +1601,6 @@ async function startQrScannerStream(): Promise<void> {
       }
     } catch {
       qrScannerStatus.textContent = 'No se pudo analizar la imagen de la camara en este momento.';
-    }
-
-    if (qrScannerPlacementLocked) {
-      qrScannerFrameRequestId = null;
-      return;
     }
 
     scheduleQrScannerFrame(detectFrame);

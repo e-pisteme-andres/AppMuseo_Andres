@@ -64,6 +64,27 @@ function getBounds(points: readonly MarkerPoint[]): {
   return { minX, minY, maxX, maxY };
 }
 
+function cropImageData(
+  imageData: ImageData,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): ImageData {
+  const cropped = new ImageData(width, height);
+
+  for (let y = 0; y < height; y += 1) {
+    const sourceOffset = ((top + y) * imageData.width + left) * 4;
+    const targetOffset = y * width * 4;
+    cropped.data.set(
+      imageData.data.subarray(sourceOffset, sourceOffset + width * 4),
+      targetOffset,
+    );
+  }
+
+  return cropped;
+}
+
 function orderQuadrants(points: readonly MarkerPoint[]): [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint] | null {
   const centroid = points.reduce(
     (accumulator, point) => ({ x: accumulator.x + point.x, y: accumulator.y + point.y }),
@@ -351,6 +372,52 @@ export function analyzeMarkerFrame(imageData: ImageData): MarkerFrameAnalysis {
 
 export function detectMarker(imageData: ImageData): MarkerDetection | null {
   return analyzeMarkerFrame(imageData).detection;
+}
+
+export function trackMarker(
+  imageData: ImageData,
+  previousDetection: MarkerDetection,
+): MarkerDetection | null {
+  const bounds = getBounds(previousDetection.corners);
+  const paddingX = Math.max(24, Math.round(previousDetection.width * 0.65));
+  const paddingY = Math.max(24, Math.round(previousDetection.height * 0.65));
+  const left = clamp(Math.floor(bounds.minX - paddingX), 0, Math.max(0, imageData.width - 1));
+  const top = clamp(Math.floor(bounds.minY - paddingY), 0, Math.max(0, imageData.height - 1));
+  const right = clamp(Math.ceil(bounds.maxX + paddingX), left + 1, imageData.width);
+  const bottom = clamp(Math.ceil(bounds.maxY + paddingY), top + 1, imageData.height);
+  const width = right - left;
+  const height = bottom - top;
+
+  if (width < 16 || height < 16) return null;
+
+  const cropped = cropImageData(imageData, left, top, width, height);
+  const tracked = analyzeMarkerFrame(cropped).detection;
+  if (!tracked) return null;
+
+  const remapped: MarkerDetection = {
+    corners: tracked.corners.map((corner) => ({
+      x: corner.x + left,
+      y: corner.y + top,
+    })) as [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint],
+    center: {
+      x: tracked.center.x + left,
+      y: tracked.center.y + top,
+    },
+    width: tracked.width,
+    height: tracked.height,
+    score: tracked.score,
+  };
+
+  const widthRatio = remapped.width / Math.max(1, previousDetection.width);
+  const heightRatio = remapped.height / Math.max(1, previousDetection.height);
+  const centerDelta = distance(remapped.center, previousDetection.center);
+  const maxCenterDelta = Math.max(previousDetection.width, previousDetection.height) * 0.9;
+
+  if (widthRatio < 0.45 || widthRatio > 1.9) return null;
+  if (heightRatio < 0.45 || heightRatio > 1.9) return null;
+  if (centerDelta > maxCenterDelta) return null;
+
+  return remapped;
 }
 
 export function smoothMarkerDetection(
