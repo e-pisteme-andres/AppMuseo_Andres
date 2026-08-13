@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>S-02 · RA mínima</title>
 <!--
-  INSTRUMENTO DE SPIKE. Código desechable (docs/tests/README.md, regla del spike).
+  INSTRUMENTO DE SPIKE. Código desechable (docs/penumbra.md, regla del spike).
   Responde: ¿carga el modelo, cuánto pesa, cuánto tarda y aparece el botón de RA?
 
   Página aislada a propósito: <model-viewer>, un modelo y un cronómetro. Sin
@@ -30,6 +30,9 @@
   #registro { margin-top:10px; background:#0a0a0a; border:1px solid #333;
               padding:6px; height:150px; overflow:auto; font-size:11px;
               white-space:pre-wrap; }
+  .rotulo-modelo { margin-top:8px; border:1px solid #355; background:#081112;
+                   padding:8px; font-size:12px; line-height:1.5; }
+  .rotulo-modelo strong { color:#9fe6d1; }
   .barra { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
   button { font:inherit; padding:12px; min-height:48px; flex:1 1 45%;
            background:#222; color:#eee; border:1px solid #555; }
@@ -44,8 +47,9 @@
 
 <model-viewer
   id="mv"
-  src="s02-recursos/ToyCar.glb"
-  alt="Modelo de prueba: coche de juguete. Solo mide comportamiento; el asunto es irrelevante."
+  src="modelos/bacilo-esquematico.glb"
+  ios-src="modelos/bacilo-esquematico.usdz"
+  alt="Bacilo esquemático aumentado 150.000 veces. El cuerpo representa 2 micras reales y no es una reconstrucción científica."
   ar
   ar-modes="webxr scene-viewer quick-look"
   ar-placement="floor"
@@ -54,6 +58,13 @@
   poster=""
   reveal="auto">
 </model-viewer>
+
+<div class="rotulo-modelo">
+  <strong>Aumentado 150.000 veces · en realidad mide 2 µm.</strong><br>
+  Modelo esquemático, no una reconstrucción científica.<br>
+  Objetivo de escala en sala: cuerpo de <b>30 cm</b>; envergadura total
+  aproximada de <b>48 × 22 × 27 cm</b>.
+</div>
 
 <table id="tabla"></table>
 
@@ -152,7 +163,7 @@
   // --- Peso real transferido -------------------------------------------------
   function medirRecursos() {
     const rs = performance.getEntriesByType('resource');
-    ['ToyCar.glb', 'model-viewer-4.3.1.min.js'].forEach(function (nombre) {
+    ['bacilo-esquematico.glb', 'model-viewer-4.3.1.min.js'].forEach(function (nombre) {
       const r = rs.filter(function (x) { return x.name.indexOf(nombre) !== -1; }).pop();
       if (!r) return;
       const kb = function (n) { return n ? (n / 1024).toFixed(0) + ' KB' : 'no expuesto'; };

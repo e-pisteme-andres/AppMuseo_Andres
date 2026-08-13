@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>S-02 · Puerta</title>
 <!--
-  INSTRUMENTO DE SPIKE. Código desechable (docs/tests/README.md, regla del spike).
+  INSTRUMENTO DE SPIKE. Código desechable (docs/penumbra.md, regla del spike).
 
   Lo único que hay que abrir en el móvil. Enlaza los tres instrumentos en el
   orden en que se usan y dice qué mirar en cada uno.
@@ -47,7 +47,7 @@
 
 <h1>S-02 · Realidad aumentada</h1>
 <p class="sub">Los tres instrumentos, en el orden en que hay que usarlos.
-Registro del spike en <code>docs/tests/S-02-ra-model-viewer.md</code>.</p>
+Registro operativo en <code>docs/penumbra.md</code>.</p>
 
 <div class="rotulo" id="rotulo"></div>
 
@@ -63,12 +63,13 @@ Registro del spike en <code>docs/tests/S-02-ra-model-viewer.md</code>.</p>
 
 <a class="paso" href="s02-ra-minima.html">
   <span class="num">2</span><span class="tit">RA mínima</span>
-  <span class="que"><b>Qué mirar:</b> que el coche aparezca y gire con el dedo, y
-  el tiempo de «Modelo listo». Si hay RA, que salga el botón de la biblioteca
-  abajo a la derecha del visor.</span>
+  <span class="que"><b>Qué mirar:</b> que el bacilo aparezca, conserve su rótulo
+  de escala y gire con el dedo, y el tiempo de «Modelo listo». Si hay RA, que
+  salga el botón de la biblioteca abajo a la derecha del visor.</span>
   <span class="fallo"><b>Si el modelo no aparece nunca:</b> mira el registro de
-  abajo. Si no hay ninguna línea de <code>ToyCar.glb</code>, es que la descarga no
-  llegó a empezar — casi siempre el túnel. Si aparece «error», cópialo entero.</span>
+  abajo. Si no hay ninguna línea de <code>bacilo-esquematico.glb</code>, es que la
+  descarga no llegó a empezar — casi siempre el túnel. Si aparece «error»,
+  cópialo entero.</span>
 </a>
 
 <a class="paso" href="s02-penumbra.html">
@@ -84,11 +85,10 @@ Registro del spike en <code>docs/tests/S-02-ra-model-viewer.md</code>.</p>
 <h2>Antes de empezar, tres cosas que parecen fallos y no lo son</h2>
 
 <div class="aviso">
-  <b>1 · El modelo tarda.</b> Son 5,4 MB. <b>El túnel no es el cuello de
-  botella</b>: medido el 2026-08-03, entrega el archivo entero en <b>1,9 s</b> a
-  2,8 MB/s. Lo que varía es la pata del móvil: por WiFi decente cuenta <b>entre 3
-  y 10 segundos</b>; por datos móviles, <b>de 15 a 45</b>. Hasta un minuto por una
-  red mala no significa que esté roto. Si pasa de ahí, sí.
+  <b>1 · El modelo ya no debería ser el cuello de botella.</b> El
+  <code>bacilo-esquematico.glb</code> pesa <b>159.812 bytes</b>. Si tarda mucho
+  en aparecer en RA, la sospecha principal deja de ser la descarga y pasa a ser
+  la apertura de sesión, la detección de superficie o la propia luz de la sala.
 </div>
 
 <div class="aviso">
@@ -99,9 +99,10 @@ Registro del spike en <code>docs/tests/S-02-ra-model-viewer.md</code>.</p>
 </div>
 
 <div class="aviso">
-  <b>3 · En iOS, tras pulsar, hay un silencio largo.</b> El <code>.usdz</code> se
-  fabrica en el propio móvil: en un portátil tardó <b>entre 1,4 y 9,8 segundos</b>
-  sin enseñar nada. En un iPhone será igual o peor. No es que se haya colgado.
+  <b>3 · En iOS se usa un USDZ ya hecho.</b> El archivo pesa
+  <b>517.372 bytes</b> y se entrega por <code>ios-src</code>. Si tras pulsar hay
+  silencio, lo que se está midiendo es el salto a Quick Look, no una
+  conversión local del modelo.
 </div>
 
 <h2>Y una que sí sería un fallo</h2>
@@ -120,8 +121,9 @@ Registro del spike en <code>docs/tests/S-02-ra-model-viewer.md</code>.</p>
   <li>Instalar nada en el móvil. Todo va en el navegador.</li>
   <li>Repetir lo que ya está medido: peso de la biblioteca, peso del modelo,
       tamaño del USDZ. Eso está hecho y en el informe.</li>
-  <li>Que el modelo tenga que ver con el microbioma. Es un coche de juguete con
-      licencia CC0 y está ahí para medir comportamiento, no contenido.</li>
+  <li>Olvidar el rótulo. En esta pasada el contenido sí importa: el modelo debe
+      mostrarse como <b>aumentado 150.000 veces</b> y como <b>esquemático, no
+      una reconstrucción científica</b>.</li>
 </ul>
 
 <script src="s02-recursos/ruta-ra.js"></script>

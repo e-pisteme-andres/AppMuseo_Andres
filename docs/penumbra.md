@@ -18,6 +18,12 @@ Spike publicado en GitHub Pages:
 Pagina de medicion:
 `/AppMuseo_Andres/s02/s02-penumbra.html`
 
+Estado del modelo a 2026-08-13:
+las siguientes pruebas deben correrse con `public/s02/modelos/bacilo-esquematico.glb`
+y su pareja `bacilo-esquematico.usdz`, ambos con rotulo visible de
+`Aumentado 150.000 veces · en realidad mide 2 µm` y
+`Modelo esquemático, no una reconstrucción científica`.
+
 ## Dispositivo
 
 | Campo | Valor |

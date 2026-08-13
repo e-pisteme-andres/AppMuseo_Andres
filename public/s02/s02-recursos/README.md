@@ -1,8 +1,8 @@
 # Recursos de S-02 · RA con `model-viewer`
 
 Material de **un spike**, no de la aplicación. Vive aquí mientras
-[`docs/tests/S-02-ra-model-viewer.md`](../../docs/tests/S-02-ra-model-viewer.md)
-siga en curso; **cuando el spike se cierre, esta carpeta se borra**. Son 6,5 MB
+[`docs/penumbra.md`](../../docs/penumbra.md) siga en curso; **cuando el spike se
+cierre, esta carpeta se borra**. Son 6,5 MB
 que no tienen por qué quedarse en el repositorio para siempre.
 
 **Nada de esto se promueve a producción.** Si la RA sale adelante, la biblioteca
@@ -22,6 +22,17 @@ procedencia que no se puede respaldar es peor que no atribuir ninguna.
 | `model-viewer-LICENSE.txt` | Licencia de lo anterior, tal cual viene en el paquete | Apache-2.0 | ídem |
 | `ToyCar.glb` | Modelo de referencia. 5 422 412 B · 108 936 triángulos · 8 texturas | **CC0 1.0** (dominio público) | Guido Odendahl (modelo) y Eric Chadwick (extensiones y escena) · Khronos glTF-Sample-Assets · https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ToyCar |
 | `ruta-ra.js` | El rótulo compartido de los cuatro instrumentos: qué ruta de RA, por qué, y en qué móvil | Nuestro, desechable con el spike | Escrito para S-02 |
+
+## Modelo activo desde 2026-08-13
+
+Las páginas `s02-ra-minima.html` y `s02-penumbra.html` ya no cargan
+`ToyCar.glb`. Para la prueba de escala y demo del museo usan:
+
+- `../modelos/bacilo-esquematico.glb`
+- `../modelos/bacilo-esquematico.usdz`
+
+Esos dos archivos son propios del proyecto, no de terceros, y van documentados
+en [`../modelos/README.md`](../modelos/README.md).
 
 **`ruta-ra.js` es el único sitio donde vive la réplica de la lógica de selección
 de `model-viewer`**, y eso es deliberado. Las cuatro páginas la comparten porque

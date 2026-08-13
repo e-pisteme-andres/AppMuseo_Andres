@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>S-02 · Penumbra (P-13)</title>
 <!--
-  INSTRUMENTO DE SPIKE. Código desechable (docs/tests/README.md, regla del spike).
+  INSTRUMENTO DE SPIKE. Código desechable (docs/penumbra.md, regla del spike).
   Responde a P-13: ¿ancla la RA en penumbra, cuánta luz hace falta, cuánto tarda
   y qué pasa cuando pierde el anclaje?
 
@@ -48,6 +48,9 @@
   ol { padding-left:18px; color:#bbb; font-size:12px; }
   ol li { margin-bottom:5px; }
   #luz { font-size:26px; text-align:center; padding:6px 0; }
+  .rotulo-modelo { margin:8px 0 0; border:1px solid #355; background:#081112;
+                   padding:8px; font-size:12px; line-height:1.5; }
+  .rotulo-modelo strong { color:#9fe6d1; }
   .aviso { border:1px solid #555; padding:8px; font-size:11px; color:#bbb;
            margin-top:6px; }
   #estado { padding:8px; border:2px solid #666; margin-top:8px; font-size:13px; }
@@ -76,7 +79,7 @@ y qué pasa al perder el anclaje.</p>
   <li>Muévete: aléjate, tapa el suelo, apaga la luz. Cada pérdida de anclaje se
       cuenta sola en WebXR; en Scene Viewer, pulsa <b>Pérdida</b> a mano.</li>
   <li><b>Guardar fila</b>. Al final, <b>Exportar</b> y pegar en
-      <code>docs/tests/S-02-ra-model-viewer.md</code>.</li>
+      <code>docs/penumbra.md</code>.</li>
 </ol>
 <p class="sub">Serie mínima recomendada, de más a menos luz: sala iluminada ·
 penumbra de gabinete · muy oscuro · a oscuras del todo. Y en cada una, dos superficies: una
@@ -140,14 +143,21 @@ suelo continuo). Son los dos ejes de la pregunta.</p>
 
 <model-viewer
   id="mv"
-  src="s02-recursos/ToyCar.glb"
-  alt="Modelo de prueba. Solo mide comportamiento."
+  src="modelos/bacilo-esquematico.glb"
+  ios-src="modelos/bacilo-esquematico.usdz"
+  alt="Bacilo esquemático aumentado 150.000 veces. El cuerpo representa 2 micras reales y no es una reconstrucción científica."
   ar
   ar-modes="webxr scene-viewer quick-look"
   ar-placement="floor"
   camera-controls
   touch-action="pan-y">
 </model-viewer>
+<div class="rotulo-modelo">
+  <strong>Aumentado 150.000 veces · en realidad mide 2 µm.</strong><br>
+  Modelo esquemático, no una reconstrucción científica.<br>
+  Esta prueba de penumbra mide además si el color y la escala siguen siendo
+  legibles con poca luz.
+</div>
 <button id="b-ar" class="grande">Ver en RA (activateAR)</button>
 
 <h2>6 · Mediciones</h2>

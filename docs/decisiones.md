@@ -382,3 +382,27 @@ seguir explorandolo.
 moviles, confirmar que los visitantes necesitan recentrar la vista sin salir del
 modo sensor, o disponer de pruebas en dispositivo que demuestren que el
 recalibrado aporta una mejora estable y no introduce confusion.
+
+## 2026-08-13 - Bacilo esquematico propio para la prueba de escala y demo
+
+**Que se probo:** sustituir el modelo de prueba generico de `S-02` por un
+`bacilo-esquematico.glb/usdz` propio, con escala declarada por coordinacion y
+rotulo obligatorio de contenido.
+
+**Que se eligio:** integrar el bacilo esquematico en `public/s02/` como modelo
+de prueba actual para RA minima y penumbra, manteniendo visible el texto
+`Aumentado 150.000 veces · en realidad mide 2 µm` y
+`Modelo esquemático, no una reconstrucción científica`.
+
+**Que se descarto:** seguir midiendo la escala de demo con `ToyCar.glb` como si
+su comportamiento sustituyera al modelo real que se quiere enseñar.
+
+**Por que:** con un activo propio desaparecen las dudas de licencia, se fija la
+escala que importa para la ficha 31 y se evita presentar como cientificamente
+fiel un modelo comercial que no lo es. Ademas, el peso del GLB recibido
+(`159.812 B`) reduce la sospecha de descarga como cuello de botella: si tarda,
+la explicacion principal pasa a ser apertura de sesion, luz o anclaje.
+
+**Que reabriria la decision:** que la medicion fisica con cinta muestre un
+tamaño distinto de `30 cm` en el cuerpo, que la pieza resulte incomoda en sala o
+que coordinacion regenere el modelo con otra escala declarada.
