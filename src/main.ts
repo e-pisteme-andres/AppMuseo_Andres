@@ -16,10 +16,12 @@ import { getPanoramaAngularDistance, PanoramaViewer } from './panorama-viewer';
 import {
   createPanoramaTour,
   findPanoramaScene,
-  type PanoramaHotspot,
-  type PanoramaInfoHotspot,
-  type PanoramaNavigationHotspot,
 } from './panorama-tour';
+import type {
+  PanoramaHotspot,
+  PanoramaInfoHotspot,
+  PanoramaNavigationHotspot,
+} from './panorama-types';
 import { VirtualExperience } from './virtual-experience';
 import {
   loadAppProgress,

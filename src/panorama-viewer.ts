@@ -13,7 +13,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import type { PanoramaHotspot } from './panorama-tour';
+import type { PanoramaHotspot } from './panorama-types';
 
 export type PanoramaControlMode = 'motion-pending' | 'motion' | 'drag';
 export type PanoramaMotionAccess = 'granted' | 'denied' | 'unsupported';
@@ -31,6 +31,8 @@ interface PanoramaViewerOptions {
   onControlModeChange?: (mode: PanoramaControlMode) => void;
   onViewChange?: (view: PanoramaViewState) => void;
   initialView?: PanoramaViewState;
+  canvasAriaLabel?: string;
+  hotspotsAriaLabel?: string;
 }
 
 interface PointerSnapshot {
@@ -184,6 +186,8 @@ export class PanoramaViewer {
   private readonly onLoadingChange?: (loading: boolean) => void;
   private readonly onControlModeChange?: (mode: PanoramaControlMode) => void;
   private readonly onViewChange?: (view: PanoramaViewState) => void;
+  private readonly canvasAriaLabel: string;
+  private readonly hotspotsAriaLabel: string;
   private renderer?: WebGLRenderer;
   private scene?: Scene;
   private camera?: PerspectiveCamera;
@@ -225,12 +229,16 @@ export class PanoramaViewer {
     onControlModeChange,
     onViewChange,
     initialView,
+    canvasAriaLabel,
+    hotspotsAriaLabel,
   }: PanoramaViewerOptions) {
     this.container = container;
     this.imageUrl = imageUrl;
     this.onLoadingChange = onLoadingChange;
     this.onControlModeChange = onControlModeChange;
     this.onViewChange = onViewChange;
+    this.canvasAriaLabel = canvasAriaLabel ?? 'Panorama interactivo';
+    this.hotspotsAriaLabel = hotspotsAriaLabel ?? 'Puntos de interés de la panorámica';
     if (initialView) {
       this.longitude = initialView.longitude;
       this.latitude = initialView.latitude;
@@ -365,7 +373,7 @@ export class PanoramaViewer {
     const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.domElement.className = 'panorama-canvas';
-    renderer.domElement.setAttribute('aria-label', 'Panorama interactivo de Paranal');
+    renderer.domElement.setAttribute('aria-label', this.canvasAriaLabel);
     this.container.append(renderer.domElement);
 
     this.scene = scene;
@@ -746,7 +754,7 @@ export class PanoramaViewer {
     if (this.hotspotLayer) return;
     const layer = document.createElement('div');
     layer.className = 'panorama-hotspots';
-    layer.setAttribute('aria-label', 'Puntos de interés de la panorámica');
+    layer.setAttribute('aria-label', this.hotspotsAriaLabel);
     this.container.append(layer);
     this.hotspotLayer = layer;
     this.renderHotspotElements();

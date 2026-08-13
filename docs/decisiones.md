@@ -271,3 +271,88 @@ diseñado para AR estereoscopica, o soporte web estandar futuro que permita
 passthrough AR en dos ojos y acceso controlado al compositor. Mientras tanto,
 para web movil se separan dos experiencias: AR normal con el movil en la mano, o
 visor VR/cardboard sin camara real.
+
+## 2026-08-13 - Modelos bacterianos de stock solo como placeholder tecnico
+
+**Que se probo:** una busqueda de bacterias intestinales reutilizables para la
+pieza 31 en marketplaces con licencia publica consultable, priorizando nombre de
+especie, formatos web y condiciones de uso expositivo.
+
+**Que se eligio:** recomendar `Bifidobacterium longum` y
+`Lactiplantibacillus plantarum` solo como candidatos de compra para demo o
+placeholder tecnico, nunca como modelo final de museo sin validacion cientifica.
+
+**Que se descarto:** tratar estos activos comerciales como reconstrucciones
+fidedignas por defecto o meter sus binarios en este repositorio publico.
+
+**Por que:** en esta pasada aparecen especies utiles, con mallas razonables y
+licencia comercial utilizable, pero no aparece bibliografia de reconstruccion ni
+base cientifica declarada por el autor. Ademas, la licencia comercial permite
+integrar el activo en una obra, no redistribuir el fichero 3D suelto desde un
+repo publico.
+
+**Que reabriria la decision:** validacion expresa de un microbiologo del museo,
+o un proveedor que entregue la misma especie con procedencia cientifica
+documentada y formatos cerrados para GLB/USDZ.
+
+## 2026-08-13 - Descartar Helicobacter pylori como icono principal del "bosque interior"
+
+**Que se probo:** comparar bacterias del mismo catalogo comercial con salida
+GLB/gltf/usdz o conversion equivalente para ver si convenia una especie mas
+llamativa visualmente.
+
+**Que se eligio:** no priorizar `Helicobacter pylori` para la pieza 31.
+
+**Que se descarto:** usar una bacteria asociada al estomago, a gastritis y a
+ulcera como primera imagen del microbioma intestinal de la demo.
+
+**Por que:** puede funcionar como ejemplo microbiologico aislado, pero empuja la
+narrativa hacia patologia gastrica y no hacia equilibrio, diversidad o
+microbioma intestinal. Introduce una lectura mas agresiva de la que pide la
+pieza.
+
+**Que reabriria la decision:** que el guion de sala cambie hacia enfermedad,
+inflamacion gastrica o relaciones microbioma-patologia, o que el museo pida
+explicitamente un contraste entre bacterias beneficiosas y dañinas.
+
+## 2026-08-13 - No presentar una reconstruccion 360 del microbioma como si fuera fotografia
+
+**Que se probo:** una busqueda de panoramas 360 ya publicados relacionados con
+laboratorio, suelo, bosque y posibles escenas "dentro del microbioma".
+
+**Que se eligio:** separar dos familias: fotografias 360 reales para
+laboratorio y entornos naturales, y reconstrucciones declaradas para cualquier
+escena interna del intestino o del ecosistema microbiano a escala
+microscopica.
+
+**Que se descarto:** sugerir que existe una fotografia 360 reutilizable del
+interior del microbioma o usar una reconstruccion sin rotularla como tal.
+
+**Por que:** en esta pasada si aparecen 360 reales reutilizables para
+laboratorio y bosque/suelo, pero no una captura fotografica del interior del
+microbioma. Si se fuerza esa equivalencia, la pieza gana espectacularidad y
+pierde honestidad.
+
+**Que reabriria la decision:** que el museo aporte una reconstruccion propia ya
+validada, o que aparezca un activo 360 con base cientifica, licencia y
+rotulacion suficientemente claras para usarlo como reconstruccion declarada.
+
+## 2026-08-13 - Entregar el 360 como modulo y no como pantalla copiada de la demo
+
+**Que se probo:** reutilizar el visor 360 existente y aislarlo del recorrido de
+Paranal y del cascaron de la app de pruebas.
+
+**Que se eligio:** empaquetar un modulo independiente en
+`src/panorama-module.ts`, con salida siempre visible, cadena de degradacion por
+modulo, equivalente textual y arranque sin framework.
+
+**Que se descarto:** pedir al integrador que copie pantallas de la demo o que
+reconstruya a mano la logica de hotspots, carga, textos y fallback.
+
+**Por que:** la app destino es Astro y hoy no comparte el shell de esta demo.
+La pieza util es el visor encapsulado y cargable bajo demanda, no la pagina
+completa.
+
+**Que reabriria la decision:** que la app del museo adopte exactamente el mismo
+stack y layout que esta demo, o que se necesite una integracion mas profunda que
+un modulo autocontenido no cubra.

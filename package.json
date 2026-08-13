@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "build:panorama-module": "powershell -Command \"$env:VITE_BUILD_TARGET='panorama-module'; node .\\node_modules\\typescript\\bin\\tsc -b; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node .\\node_modules\\vite\\bin\\vite.js build\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "download:panoramas": "node scripts/download-panorama-assets.mjs",
