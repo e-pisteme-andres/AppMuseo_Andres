@@ -356,3 +356,29 @@ completa.
 **Que reabriria la decision:** que la app del museo adopte exactamente el mismo
 stack y layout que esta demo, o que se necesite una integracion mas profunda que
 un modulo autocontenido no cubra.
+
+## 2026-07-31 - Recalibrado manual de orientacion 360 revertido el mismo dia
+
+**Que se probo:** el commit `cdbdf75` del 31 de julio de 2026 añadio un boton
+`Restablecer orientacion segun el movil` en el visor 360 y un metodo
+`resetMotionOrientation()` en `src/panorama-viewer.ts` para borrar la
+calibracion de sensores y volver a alinear la vista con el dispositivo.
+
+**Que se eligio:** conservar el visor 360 sin ese recalibrado manual en la
+interfaz.
+
+**Que se descarto:** mantener un control explicito de recalibrado durante el
+modo por sensores.
+
+**Por que:** el propio historial del repositorio muestra que la funcion se
+introdujo en `cdbdf75` y se revirtio 13 minutos despues en `5053a80`, sin
+entrada de bitacora, issue ni prueba adjunta que conserve el motivo. Lo unico
+seguro que queda documentado es el intento y el revert. A partir de ese
+historial inferimos algo mas modesto: el recalibrado no llego a consolidarse
+como mejora validada y se prefirio volver al comportamiento anterior antes de
+seguir explorandolo.
+
+**Que reabriria la decision:** reproducir una deriva real de orientacion en
+moviles, confirmar que los visitantes necesitan recentrar la vista sin salir del
+modo sensor, o disponer de pruebas en dispositivo que demuestren que el
+recalibrado aporta una mejora estable y no introduce confusion.

@@ -80,10 +80,10 @@ que declararse como reconstrucción.
 
 Archivos principales:
 
-- [src/panorama-module.ts](/C:/Users/it/Documents/GitHub/AppMuseo_Andres/src/panorama-module.ts)
-- [src/panorama-module.css](/C:/Users/it/Documents/GitHub/AppMuseo_Andres/src/panorama-module.css)
-- [src/panorama-types.ts](/C:/Users/it/Documents/GitHub/AppMuseo_Andres/src/panorama-types.ts)
-- [docs/panorama-module.md](/C:/Users/it/Documents/GitHub/AppMuseo_Andres/docs/panorama-module.md)
+- [src/panorama-module.ts](../src/panorama-module.ts)
+- [src/panorama-module.css](../src/panorama-module.css)
+- [src/panorama-types.ts](../src/panorama-types.ts)
+- [docs/panorama-module.md](./panorama-module.md)
 
 Qué queda resuelto en el módulo:
 
@@ -110,3 +110,7 @@ Comando de build verificado:
 ```powershell
 pnpm build:panorama-module
 ```
+
+Artefacto versionado para integrar sin montar `pnpm`:
+
+- [releases/panorama-module/v2026-08-13/panorama-module.js](../releases/panorama-module/v2026-08-13/panorama-module.js)

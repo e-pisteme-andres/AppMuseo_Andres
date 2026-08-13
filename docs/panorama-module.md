@@ -1,6 +1,6 @@
 # Visor 360 empaquetado
 
-Entrada reusable: [src/panorama-module.ts](/C:/Users/it/Documents/GitHub/AppMuseo_Andres/src/panorama-module.ts)
+Entrada reusable: [src/panorama-module.ts](../src/panorama-module.ts)
 
 ## Arranque en una línea
 
@@ -27,7 +27,7 @@ contenedor y datos serializables.
 - `onExit`: callback opcional; si no se pasa, el módulo se destruye al cerrar.
 
 Los tipos compartidos están en
-[src/panorama-types.ts](/C:/Users/it/Documents/GitHub/AppMuseo_Andres/src/panorama-types.ts).
+[src/panorama-types.ts](../src/panorama-types.ts).
 
 ## Comportamiento
 
@@ -54,5 +54,7 @@ pnpm build:panorama-module
 Artefacto emitido:
 
 - `dist/panorama-module/panorama-module.js`
+- copia versionada para consumo directo:
+  [`releases/panorama-module/v2026-08-13/panorama-module.js`](../releases/panorama-module/v2026-08-13/panorama-module.js)
 - Peso emitido: `811,465 B`
 - Peso gzip reportado por Vite: `172.93 kB`
