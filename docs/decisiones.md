@@ -240,3 +240,34 @@ penumbra, impresion domestica y fondo no controlado; o una necesidad operativa
 clara de usar marcador impreso si `P-13` falla en baja luz. Si aparecen falsos
 positivos, jitter o perdida frecuente de seguimiento, esta linea debe volver a
 cuestionarse antes de proponerse como alternativa de sala.
+
+## 2026-08-13 - Incompatibilidad entre AR web y visor pasivo tipo cardboard
+
+**Que se probo:** una prueba web con un cubo de 3 x 3 x 3 m colocado mediante
+WebXR `immersive-ar`, y una opcion `Visor` para intentar usar el movil dentro de
+gafas pasivas como si fuera una vista estereoscopica.
+
+**Que se eligio:** documentar que la combinacion exacta solicitada no es viable
+en esta app web: AR real con camara passthrough, modelo fijo en el mundo fisico
+y visor pasivo estereoscopico para mover la cabeza sin sostener el movil.
+
+**Que se descarto:** presentar como funcional una division de pantalla dentro de
+la sesion AR, o prometer que el visor de gafas conserva el anclaje real del
+modelo.
+
+**Por que:** en navegadores moviles, la sesion WebXR `immersive-ar` la compone
+el propio navegador con ARCore/ARKit: camara, tracking espacial, hit-test,
+anchors y overlay DOM. Esa sesion no expone el video passthrough como textura ni
+permite re-renderizarlo en dos ojos tipo cardboard. Tampoco permite convertir la
+misma sesion AR en una vista `immersive-vr` estereoscopica. El modo cardboard
+que si se puede construir en web es un visor 3D/360 sin camara real: pantalla
+partida, fullscreen y sensores de orientacion. Ese modo puede mostrar el cubo en
+un entorno virtual, pero ya no conserva la relacion optica con la realidad ni el
+anclaje visual sobre la superficie detectada por AR.
+
+**Que reabriria la decision:** una app nativa especifica con control completo de
+ARKit/ARCore y renderizado estereoscopico propio, hardware de passthrough
+diseñado para AR estereoscopica, o soporte web estandar futuro que permita
+passthrough AR en dos ojos y acceso controlado al compositor. Mientras tanto,
+para web movil se separan dos experiencias: AR normal con el movil en la mano, o
+visor VR/cardboard sin camara real.
