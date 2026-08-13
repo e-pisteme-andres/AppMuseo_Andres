@@ -1,9 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import QRCode from 'qrcode';
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { IOS_MODEL_ASSETS, getModelQrTargetUrl } from './model-assets.mjs';
+import {
+  IOS_MODEL_ASSETS,
+  IOS_REFERENCE_MARKER_ASSET,
+  getModelQrTargetUrl,
+} from './model-assets.mjs';
 
 class NodeFileReader {
   result = null;
@@ -36,12 +41,15 @@ globalThis.FileReader ??= NodeFileReader;
 const outputRoot = resolve('public');
 const modelDirectory = resolve(outputRoot, 'models');
 const modelQrDirectory = resolve(outputRoot, 'qr');
+const markerDirectory = resolve(outputRoot, 'markers');
 const qrFileName = process.env.QR_FILE_NAME ?? 'qr-app-museo.png';
 const qrTargetUrl = process.env.QR_TARGET_URL ?? 'https://e-pisteme-andres.github.io/AppMuseo_Andres/';
 const qrPath = resolve(outputRoot, qrFileName);
+const markerPath = resolve(outputRoot, IOS_REFERENCE_MARKER_ASSET.relativePath);
 
 await mkdir(modelDirectory, { recursive: true });
 await mkdir(modelQrDirectory, { recursive: true });
+await mkdir(markerDirectory, { recursive: true });
 
 const selectedModelIds = (process.env.MODEL_ASSET_ONLY ?? '')
   .split(',')
@@ -50,6 +58,132 @@ const selectedModelIds = (process.env.MODEL_ASSET_ONLY ?? '')
 
 function isSelectedModel(id) {
   return selectedModelIds.length === 0 || selectedModelIds.includes(id);
+}
+
+const crcTable = (() => {
+  const values = new Uint32Array(256);
+  for (let index = 0; index < values.length; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value & 1) !== 0 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    values[index] = value >>> 0;
+  }
+  return values;
+})();
+
+function crc32(bytes) {
+  let value = 0xffffffff;
+  for (const byte of bytes) value = crcTable[(value ^ byte) & 0xff] ^ (value >>> 8);
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBytes = Buffer.from(type, 'ascii');
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])));
+  return Buffer.concat([length, typeBytes, data, checksum]);
+}
+
+function encodePng(width, height, pixels) {
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * (width * 4 + 1);
+    raw[rowStart] = 0;
+    pixels.copy(raw, rowStart + 1, y * width * 4, (y + 1) * width * 4);
+  }
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function createReferenceMarkerSheetPng(width = 1400, height = 1980) {
+  const white = [255, 255, 255, 255];
+  const black = [10, 10, 10, 255];
+  const pixels = Buffer.alloc(width * height * 4, 255);
+
+  const setPixel = (x, y, color) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return;
+    const offset = (y * width + x) * 4;
+    pixels[offset] = color[0];
+    pixels[offset + 1] = color[1];
+    pixels[offset + 2] = color[2];
+    pixels[offset + 3] = color[3];
+  };
+
+  const fillRect = (left, top, rectWidth, rectHeight, color) => {
+    const startX = Math.max(0, Math.floor(left));
+    const endX = Math.min(width - 1, Math.ceil(left + rectWidth));
+    const startY = Math.max(0, Math.floor(top));
+    const endY = Math.min(height - 1, Math.ceil(top + rectHeight));
+    for (let y = startY; y <= endY; y += 1) {
+      for (let x = startX; x <= endX; x += 1) {
+        setPixel(x, y, color);
+      }
+    }
+  };
+
+  const distanceToSegment = (px, py, ax, ay, bx, by) => {
+    const abx = bx - ax;
+    const aby = by - ay;
+    const apx = px - ax;
+    const apy = py - ay;
+    const squaredLength = abx * abx + aby * aby;
+    if (squaredLength === 0) return Math.hypot(apx, apy);
+    const projected = Math.max(0, Math.min(1, (apx * abx + apy * aby) / squaredLength));
+    const closestX = ax + abx * projected;
+    const closestY = ay + aby * projected;
+    return Math.hypot(px - closestX, py - closestY);
+  };
+
+  const drawThickLine = (ax, ay, bx, by, thickness, color) => {
+    const padding = Math.ceil(thickness);
+    const startX = Math.max(0, Math.floor(Math.min(ax, bx) - padding));
+    const endX = Math.min(width - 1, Math.ceil(Math.max(ax, bx) + padding));
+    const startY = Math.max(0, Math.floor(Math.min(ay, by) - padding));
+    const endY = Math.min(height - 1, Math.ceil(Math.max(ay, by) + padding));
+    const radius = thickness * 0.5;
+
+    for (let y = startY; y <= endY; y += 1) {
+      for (let x = startX; x <= endX; x += 1) {
+        if (distanceToSegment(x + 0.5, y + 0.5, ax, ay, bx, by) <= radius) {
+          setPixel(x, y, color);
+        }
+      }
+    }
+  };
+
+  const drawX = (centerX, centerY, size, thickness, color) => {
+    const half = size * 0.5;
+    drawThickLine(centerX - half, centerY - half, centerX + half, centerY + half, thickness, color);
+    drawThickLine(centerX + half, centerY - half, centerX - half, centerY + half, thickness, color);
+  };
+
+  fillRect(0, 0, width, height, white);
+
+  const xMargin = width * 0.14;
+  const yMargin = height * 0.1;
+  const xSize = width * 0.12;
+  const stroke = width * 0.02;
+
+  drawX(xMargin, yMargin, xSize, stroke, black);
+  drawX(width - xMargin, yMargin, xSize, stroke, black);
+  drawX(xMargin, height - yMargin, xSize, stroke, black);
+  drawX(width - xMargin, height - yMargin, xSize, stroke, black);
+
+  return encodePng(width, height, pixels);
 }
 
 const capMaterial = new THREE.MeshStandardMaterial({
@@ -554,6 +688,9 @@ if (selectedModelIds.length === 0) {
 
   console.log(`QR generado: ${qrPath}`);
 }
+
+await writeFile(markerPath, createReferenceMarkerSheetPng());
+console.log(`Plantilla marcador generada: ${markerPath}`);
 
 await Promise.all(
   IOS_MODEL_ASSETS.filter((model) => isSelectedModel(model.id)).map(async (model) => {

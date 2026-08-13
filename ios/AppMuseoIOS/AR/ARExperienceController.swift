@@ -10,7 +10,6 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         let id: String
         let displayName: String
         let usdzResourceName: String
-        let qrResourceName: String
     }
 
     private struct LoadedModel {
@@ -20,44 +19,40 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         let boundsMax: SIMD3<Float>
     }
 
-    private static let qrPhysicalWidthMetres: CGFloat = 0.12
+    private static let referenceMarkerPhysicalWidthMetres: CGFloat = 0.21
     private static let defaultModelOrientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+    private static let defaultModelId = "mushroom"
+    private static let referenceMarkerResourceName = "x-corner-marker-sheet.png"
     private static let modelResources = [
         ModelResource(
             id: "mushroom",
             displayName: "Seta roja",
-            usdzResourceName: "mushroom.usdz",
-            qrResourceName: "qr-mushroom.png"
+            usdzResourceName: "mushroom.usdz"
         ),
         ModelResource(
             id: "crystal",
             displayName: "Cristal aurora",
-            usdzResourceName: "crystal.usdz",
-            qrResourceName: "qr-crystal.png"
+            usdzResourceName: "crystal.usdz"
         ),
         ModelResource(
             id: "jellyfish",
             displayName: "Medusa celeste",
-            usdzResourceName: "jellyfish.usdz",
-            qrResourceName: "qr-jellyfish.png"
+            usdzResourceName: "jellyfish.usdz"
         ),
         ModelResource(
             id: "totem",
             displayName: "Totem solar",
-            usdzResourceName: "totem.usdz",
-            qrResourceName: "qr-totem.png"
+            usdzResourceName: "totem.usdz"
         ),
         ModelResource(
             id: "cosmic-flower",
             displayName: "Flor cosmica",
-            usdzResourceName: "cosmic-flower.usdz",
-            qrResourceName: "qr-cosmic-flower.png"
+            usdzResourceName: "cosmic-flower.usdz"
         ),
         ModelResource(
             id: "empty-house",
             displayName: "Casa vacia",
-            usdzResourceName: "empty-house.usdz",
-            qrResourceName: "qr-empty-house.png"
+            usdzResourceName: "empty-house.usdz"
         ),
     ]
 
@@ -159,7 +154,7 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         guard let detectionImages = loadReferenceImages() else {
             experienceModel.transition(
                 to: .error,
-                message: "No se encontraron los QR de referencia para iniciar la experiencia."
+                message: "No se encontro la hoja marcador para iniciar la experiencia."
             )
             return
         }
@@ -188,11 +183,11 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         }
 
         experienceModel.setOcclusion(hasDepthOcclusion ? .active : .unavailable)
-        experienceModel.setActiveModelName("Modelos QR")
+        experienceModel.setActiveModelName("Hoja marcador")
         arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
         experienceModel.transition(
             to: .scanning,
-            message: "Apunta al QR del modelo para que aparezca sobre el marcador."
+            message: "Apunta a la hoja con cuatro X negras para colocar el modelo sobre el papel."
         )
     }
 
@@ -224,26 +219,20 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
     }
 
     private func loadReferenceImages() -> Set<ARReferenceImage>? {
-        var images = Set<ARReferenceImage>()
-
-        for resource in Self.modelResources {
-            guard
-                let url = Bundle.main.url(forResource: resource.qrResourceName, withExtension: nil),
-                let image = UIImage(contentsOfFile: url.path)?.cgImage
-            else {
-                return nil
-            }
-
-            let referenceImage = ARReferenceImage(
-                image,
-                orientation: .up,
-                physicalWidth: Self.qrPhysicalWidthMetres
-            )
-            referenceImage.name = resource.id
-            images.insert(referenceImage)
+        guard
+            let url = Bundle.main.url(forResource: Self.referenceMarkerResourceName, withExtension: nil),
+            let image = UIImage(contentsOfFile: url.path)?.cgImage
+        else {
+            return nil
         }
 
-        return images
+        let referenceImage = ARReferenceImage(
+            image,
+            orientation: .up,
+            physicalWidth: Self.referenceMarkerPhysicalWidthMetres
+        )
+        referenceImage.name = "x-corner-marker-sheet"
+        return [referenceImage]
     }
 
     private func alignModelWithSurface(_ entity: Entity) -> (min: SIMD3<Float>, max: SIMD3<Float>) {
@@ -295,10 +284,10 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         modelPivot.scale = .one
         loadedModels.values.forEach { $0.entity.isEnabled = false }
         sporeField.setEnabled(false)
-        experienceModel.setActiveModelName("Modelos QR")
+        experienceModel.setActiveModelName("Hoja marcador")
         experienceModel.transition(
             to: .scanning,
-            message: "Apunta de nuevo a un QR para recuperar el modelo."
+            message: "Apunta de nuevo a la hoja marcador para recuperar el modelo."
         )
     }
 
@@ -351,8 +340,8 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
 
     private func attachModel(to imageAnchor: ARImageAnchor) {
         guard
-            let modelId = imageAnchor.referenceImage.name,
-            let loadedModel = activateModel(id: modelId)
+            imageAnchor.referenceImage.name != nil,
+            let loadedModel = activateModel(id: Self.defaultModelId)
         else { return }
 
         if let markerAnchor {
@@ -371,7 +360,7 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         setModelSizeMetres(0.2)
         experienceModel.transition(
             to: .placed,
-            message: "\(loadedModel.resource.displayName) detectado. Arrastra para girarlo."
+            message: "\(loadedModel.resource.displayName) colocado sobre la hoja marcador. Arrastra para girarlo."
         )
     }
 
@@ -419,10 +408,10 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
         loadedModels.values.forEach { $0.entity.isEnabled = false }
         modelPivot.removeFromParent()
         sporeField.setEnabled(false)
-        experienceModel.setActiveModelName("Modelos QR")
+        experienceModel.setActiveModelName("Hoja marcador")
         experienceModel.transition(
             to: .scanning,
-            message: "QR fuera de vista. Vuelve a apuntarlo para mostrar el modelo."
+            message: "Hoja marcador fuera de vista. Vuelve a apuntarla para mostrar el modelo."
         )
     }
 
@@ -444,7 +433,7 @@ final class ARExperienceController: UIViewController, ARSessionDelegate, UIGestu
             case .excessiveMotion:
                 detail = "Mueve el movil mas despacio para recuperar el seguimiento."
             case .insufficientFeatures:
-                detail = "Acerca el QR y mejora la iluminacion para detectarlo."
+                detail = "Acerca la hoja con las X y mejora la iluminacion para detectarla."
             case .relocalizing:
                 detail = "Recuperando la posicion de la experiencia..."
             @unknown default:

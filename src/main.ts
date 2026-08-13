@@ -27,6 +27,7 @@ import {
   type ProgressStorage,
   type ResumableView,
 } from './progress-cache';
+import { TestCubeExperience } from './test-cube-experience';
 import {
   analyzeMarkerFrame,
   mapPointFromVideoToViewport,
@@ -81,6 +82,10 @@ app.innerHTML = `
             <button class="scan-button" id="open-scan" type="button">
               <span class="scan-button-icon" aria-hidden="true"></span>
               Escaneo
+            </button>
+            <button class="test-button" id="open-test" type="button">
+              <span class="test-button-icon" aria-hidden="true"></span>
+              Prueba
             </button>
             <button class="panorama-button" id="open-panorama" type="button">
               <span class="panorama-icon" aria-hidden="true">360°</span>
@@ -206,6 +211,9 @@ app.innerHTML = `
         <span class="gesture-finger"></span>
         Arrastra con uno o dos dedos para rotar
       </div>
+      <button class="test-viewer-toggle" id="test-viewer-toggle" type="button" data-xr-control aria-pressed="false" hidden>
+        Visor
+      </button>
       <section class="model-actions" id="model-actions" data-xr-control aria-label="Acciones del modelo" hidden>
         <div class="model-actions-heading">
           <span class="model-actions-dot" aria-hidden="true"></span>
@@ -309,6 +317,7 @@ app.innerHTML = `
             Preparando la camara...
           </p>
           <div class="qr-scanner-actions">
+            <button class="camera-confirm-button" id="qr-scanner-confirm-ar" type="button" hidden>Ver en AR</button>
             <button class="camera-secondary-button" id="qr-scanner-close" type="button">Cerrar</button>
           </div>
         </div>
@@ -360,6 +369,7 @@ app.innerHTML = `
         </div>
       </div>
       <div class="panorama-hint" id="panorama-hint"><span aria-hidden="true">◎</span><span id="panorama-hint-text">Preparando sensores…</span></div>
+      <div class="panorama-alert" id="panorama-alert" role="status" aria-live="polite" hidden></div>
       <div class="panorama-vr-orientation" id="panorama-vr-orientation" role="status" aria-live="polite" aria-hidden="true">
         <span aria-hidden="true">VR</span>
         <strong>Gira el móvil</strong>
@@ -386,6 +396,7 @@ const stage = getRequiredElement<HTMLElement>('#xr-stage');
 const overlay = getRequiredElement<HTMLElement>('#xr-overlay');
 const startButton = getRequiredElement<HTMLButtonElement>('#start-ar');
 const openScanButton = getRequiredElement<HTMLButtonElement>('#open-scan');
+const openTestButton = getRequiredElement<HTMLButtonElement>('#open-test');
 const startLabel = getRequiredElement<HTMLElement>('#start-label');
 const compatibility = getRequiredElement<HTMLElement>('#compatibility');
 const cameraDialog = getRequiredElement<HTMLDialogElement>('#camera-dialog');
@@ -403,6 +414,7 @@ const experienceBadgeLabel = getRequiredElement<HTMLElement>('#experience-badge-
 const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
+const testViewerToggle = getRequiredElement<HTMLButtonElement>('#test-viewer-toggle');
 const modelActions = getRequiredElement<HTMLElement>('#model-actions');
 const modelActionsName = getRequiredElement<HTMLElement>('#model-actions-name');
 const modelActionPrimary = getRequiredElement<HTMLButtonElement>('#model-action-primary');
@@ -447,6 +459,7 @@ const panoramaLoader = getRequiredElement<HTMLElement>('#panorama-loader');
 const panoramaLoaderLabel = getRequiredElement<HTMLElement>('#panorama-loader-label');
 const panoramaHint = getRequiredElement<HTMLElement>('#panorama-hint');
 const panoramaHintText = getRequiredElement<HTMLElement>('#panorama-hint-text');
+const panoramaAlert = getRequiredElement<HTMLElement>('#panorama-alert');
 const panoramaLocation = getRequiredElement<HTMLElement>('#panorama-location');
 const panoramaSceneTitle = getRequiredElement<HTMLElement>('#panorama-scene-title');
 const panoramaCredit = getRequiredElement<HTMLAnchorElement>('#panorama-credit');
@@ -479,6 +492,7 @@ const qrScannerHint = getRequiredElement<HTMLElement>('#qr-scanner-hint');
 const qrScannerModelCanvas = getRequiredElement<HTMLCanvasElement>('#qr-scanner-model');
 const qrScannerAnalysisCanvas = getRequiredElement<HTMLCanvasElement>('#qr-scanner-analysis');
 const qrScannerStatus = getRequiredElement<HTMLElement>('#qr-scanner-status');
+const qrScannerConfirmArButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-confirm-ar');
 const qrScannerCloseButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-close');
 let arMode: ARMode = 'unavailable';
 
@@ -492,6 +506,7 @@ let activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panorama
 let resumableView: ResumableView = appProgress.view;
 let panoramaCheckpointTimer: number | undefined;
 let panoramaWakeLock: WakeLockSentinel | null = null;
+let panoramaAlertTimeout: number | undefined;
 let panoramaVrEnteredFullscreen = false;
 let panoramaGazeFrameId: number | undefined;
 let panoramaGazeTargetId: string | null = null;
@@ -500,7 +515,8 @@ let panoramaGazeTeleporting = false;
 let panoramaGazeTeleportStartedAt = 0;
 let arSessionActive = false;
 let virtualExperienceActive = false;
-let activeExperienceMode: 'ar' | 'virtual' | null = null;
+let testExperienceActive = false;
+let activeExperienceMode: 'ar' | 'virtual' | 'test' | null = null;
 let arFlowPending = false;
 let arAttemptId = 0;
 let interruptedArAttemptId = -1;
@@ -514,6 +530,7 @@ let qrScannerStableDetectionFrames = 0;
 let qrScannerPlacementLocked = false;
 let qrScannerModelPreviewSize = 256;
 let qrScannerLoadedModelId: ModelId | null = null;
+let pendingMarkerAnchoredModelId: ModelId | null = null;
 const qrScannerAnalysisContext = qrScannerAnalysisCanvas.getContext('2d', { willReadFrequently: true });
 const QR_SCANNER_CONFIRMATION_FRAMES = 6;
 const QR_SCANNER_LOST_FRAME_TOLERANCE = 8;
@@ -559,11 +576,34 @@ const panorama = new PanoramaViewer({
       : mode === 'motion-pending'
         ? 'Mueve el móvil para activar la vista'
         : 'Sensor no disponible · arrastra para mirar';
+    if (mode === 'motion' && !panoramaAlert.hidden) {
+      panoramaAlert.hidden = true;
+    }
+    if (mode === 'drag' && panorama.isStereoMode()) {
+      showPanoramaAlert('No llegan datos de movimiento. En iPhone revisa Ajustes > Safari > Movimiento y orientacion.', 6500);
+      void setPanoramaVrMode(false, false);
+    }
   },
   onViewChange: schedulePanoramaCheckpoint,
 });
 
 let panoramaSceneRequestId = 0;
+
+function showPanoramaAlert(message: string, timeout = 4200): void {
+  if (panoramaAlertTimeout !== undefined) {
+    window.clearTimeout(panoramaAlertTimeout);
+    panoramaAlertTimeout = undefined;
+  }
+  panoramaAlert.textContent = message;
+  panoramaAlert.hidden = false;
+  panoramaLiveStatus.textContent = message;
+  if (timeout > 0) {
+    panoramaAlertTimeout = window.setTimeout(() => {
+      panoramaAlert.hidden = true;
+      panoramaAlertTimeout = undefined;
+    }, timeout);
+  }
+}
 
 function setPanoramaTourOpen(open: boolean): void {
   panoramaTourPanel.hidden = !open;
@@ -860,25 +900,38 @@ async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Pro
   if (panorama.isStereoMode() === enabled) return;
 
   if (enabled) {
-    if (manageFullscreen) {
-      if (typeof panoramaView.requestFullscreen !== 'function') {
-        panoramaLiveStatus.textContent = 'Este navegador no permite abrir el modo gafas en pantalla completa.';
-        return;
-      }
+    const motionAccess = await panorama.enableMotionControls();
+    if (motionAccess !== 'granted') {
+      showPanoramaAlert(
+        motionAccess === 'unsupported'
+          ? 'Este dispositivo no ofrece sensores de movimiento para modo gafas.'
+          : 'iOS ha bloqueado el movimiento. Permite el acceso cuando Safari lo solicite.',
+        6500,
+      );
+      return;
+    }
+
+    if (manageFullscreen && typeof panoramaView.requestFullscreen === 'function') {
       try {
         if (document.fullscreenElement !== panoramaView) {
           await panoramaView.requestFullscreen();
         }
         panoramaVrEnteredFullscreen = true;
       } catch {
-        panoramaLiveStatus.textContent = 'No se pudo abrir pantalla completa. El modo gafas necesita pantalla completa para activarse.';
-        return;
+        showPanoramaAlert('No se pudo abrir pantalla completa, pero el modo gafas seguira activo.', 5200);
       }
+    } else if (manageFullscreen) {
+      showPanoramaAlert('Pantalla completa no disponible en este navegador. Gira el iPhone para usar modo gafas.', 5200);
     }
+
     await lockPanoramaLandscape();
+    if (panorama.getControlMode() === 'drag') {
+      showPanoramaAlert('No llegan datos de movimiento. En iPhone revisa Ajustes > Safari > Movimiento y orientacion.', 6500);
+      return;
+    }
     applyPanoramaVrMode(true);
     checkpoint('panorama:vr:on', 'panorama');
-    panoramaLiveStatus.textContent = 'Modo gafas VR activado en pantalla completa horizontal.';
+    panoramaLiveStatus.textContent = 'Modo gafas VR activado.';
     await requestPanoramaWakeLock();
     return;
   }
@@ -1051,21 +1104,33 @@ function applySelectedModel(modelId: ModelId): boolean {
   return true;
 }
 
-function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
+function setExperienceActivity(mode: 'ar' | 'virtual' | 'test', active: boolean): void {
   if (active) activeExperienceMode = mode;
   else if (activeExperienceMode === mode) activeExperienceMode = null;
 
-  document.body.classList.toggle('xr-active', mode === 'ar' && active);
+  document.body.classList.toggle('xr-active', (mode === 'ar' || mode === 'test') && active);
   document.body.classList.toggle('virtual-active', mode === 'virtual' && active);
+  document.body.classList.toggle('test-active', mode === 'test' && active);
 
   if (active) {
     const virtualMode = mode === 'virtual';
-    experienceBadgeLabel.textContent = virtualMode ? 'Espacio virtual' : 'Museo AR';
+    const testMode = mode === 'test';
+    experienceBadgeLabel.textContent = virtualMode
+      ? 'Espacio virtual'
+      : testMode
+        ? 'Prueba AR'
+        : 'Museo AR';
     xrOcclusion.hidden = virtualMode;
-    handsToggle.hidden = virtualMode;
+    handsToggle.hidden = virtualMode || testMode;
+    formsToggle.hidden = testMode;
+    scanQrToggle.hidden = testMode;
     xrLibrary.setAttribute(
       'aria-label',
-      virtualMode ? 'Modelos disponibles en el espacio virtual' : 'Herramientas de realidad aumentada',
+      virtualMode
+        ? 'Modelos disponibles en el espacio virtual'
+        : testMode
+          ? 'Herramientas de prueba AR'
+          : 'Herramientas de realidad aumentada',
     );
     closeButton.setAttribute(
       'aria-label',
@@ -1075,6 +1140,13 @@ function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
     resetModelControls();
     resetInteractiveControls();
     closeModelMenus();
+    testViewerToggle.hidden = true;
+    testViewerToggle.setAttribute('aria-pressed', 'false');
+    document.body.classList.remove('test-viewer-active');
+    openTestButton.disabled = false;
+    formsToggle.hidden = false;
+    scanQrToggle.hidden = false;
+    handsToggle.hidden = false;
   }
 
   closeButton.disabled = false;
@@ -1082,21 +1154,31 @@ function setExperienceActivity(mode: 'ar' | 'virtual', active: boolean): void {
 }
 
 function updateExperienceState(
-  mode: 'ar' | 'virtual',
+  mode: 'ar' | 'virtual' | 'test',
   state: ExperienceState,
   message: string,
 ): void {
   if (mode === 'virtual' && activeExperienceMode !== 'virtual') return;
+  if (mode === 'test' && activeExperienceMode !== 'test') return;
 
   xrMessage.textContent = message;
   xrGuide.dataset.state = state;
-  gestureHint.hidden = state !== 'placed';
-  modelActions.hidden = state !== 'placed';
+  const testMode = mode === 'test';
+  gestureHint.hidden = testMode || state !== 'placed';
+  modelActions.hidden = testMode || state !== 'placed';
   if (state !== 'placed') modelDiscoveryCard.hidden = true;
-  cutControl.hidden = state !== 'placed';
-  scaleControl.hidden = state !== 'placed';
-  xrLibrary.hidden = state !== 'surfacePlaced';
+  cutControl.hidden = testMode || state !== 'placed';
+  scaleControl.hidden = testMode || state !== 'placed';
+  xrLibrary.hidden = testMode || state !== 'surfacePlaced';
+  testViewerToggle.hidden = !testMode || state !== 'placed';
   if (state !== 'surfacePlaced') closeModelMenus();
+  if (mode === 'ar' && state === 'surfacePlaced' && pendingMarkerAnchoredModelId) {
+    const modelId = pendingMarkerAnchoredModelId;
+    pendingMarkerAnchoredModelId = null;
+    if (!applySelectedModel(modelId)) {
+      xrMessage.textContent = 'La hoja se ha localizado, pero no se pudo colocar el modelo 3D.';
+    }
+  }
 
   if (mode === 'ar' && state === 'starting') {
     startButton.disabled = true;
@@ -1109,6 +1191,14 @@ function updateExperienceState(
   } else if (mode === 'ar' && state === 'ready') {
     startButton.disabled = false;
     startLabel.textContent = 'Modelo AR';
+    pendingMarkerAnchoredModelId = null;
+  }
+
+  if (mode === 'ar' && state === 'error') pendingMarkerAnchoredModelId = null;
+  if (mode === 'test' && state === 'starting') {
+    openTestButton.disabled = true;
+  } else if (mode === 'test' && (state === 'ready' || state === 'error')) {
+    openTestButton.disabled = false;
   }
 
   checkpoint(`${mode}:state:${state}`, 'landing');
@@ -1149,6 +1239,31 @@ const virtualExperience = new VirtualExperience({
       active ? 'virtual:experience-started' : 'virtual:experience-ended',
       'landing',
     );
+  },
+});
+
+const testExperience = new TestCubeExperience({
+  stage,
+  overlay,
+  onStateChange: (state, message) => updateExperienceState('test', state, message),
+  onSessionActivity: (active) => {
+    testExperienceActive = active;
+    arFlowPending = false;
+    resumableView = 'landing';
+    setExperienceActivity('test', active);
+    checkpoint(active ? 'test:session-started' : 'test:session-ended', 'landing');
+  },
+  onOcclusionChange: (state) => {
+    xrOcclusion.dataset.state = state;
+    xrOcclusion.textContent = state === 'active' ? 'Oclusión real · activa' : 'Oclusión real · no disponible';
+  },
+  onViewerModeChange: (active) => {
+    document.body.classList.toggle('test-viewer-active', active);
+    testViewerToggle.setAttribute('aria-pressed', String(active));
+    testViewerToggle.textContent = active ? 'AR' : 'Visor';
+  },
+  onViewerModeUnavailable: (message) => {
+    xrMessage.textContent = message;
   },
 });
 
@@ -1340,6 +1455,7 @@ function stopQrScannerStream(): void {
   qrScannerModelCanvas.style.left = '50%';
   qrScannerModelCanvas.style.top = '50%';
   qrScannerModelCanvas.style.transform = 'translate(-50%, -50%) rotate(0deg)';
+  setQrScannerArButtonState(false);
   qrScannerModelPreview.stop();
 }
 
@@ -1358,6 +1474,30 @@ function getQrScannerModelId(): ModelId {
   return activeModelId ?? MODEL_CATALOG[0].id;
 }
 
+function setQrScannerArButtonState(visible: boolean, disabled = false): void {
+  qrScannerConfirmArButton.hidden = !visible;
+  qrScannerConfirmArButton.disabled = disabled;
+  qrScannerConfirmArButton.textContent = disabled ? 'Abriendo AR...' : 'Ver en AR';
+}
+
+function isQrScannerDetectionReadyForAr(
+  detection: MarkerDetection,
+  sourceWidth: number,
+  sourceHeight: number,
+): boolean {
+  if (sourceWidth <= 0 || sourceHeight <= 0) return false;
+
+  const centerOffsetX = Math.abs(detection.center.x - sourceWidth * 0.5) / sourceWidth;
+  const centerOffsetY = Math.abs(detection.center.y - sourceHeight * 0.5) / sourceHeight;
+  const widthCoverage = detection.width / sourceWidth;
+  const heightCoverage = detection.height / sourceHeight;
+
+  return centerOffsetX <= 0.12
+    && centerOffsetY <= 0.12
+    && widthCoverage >= 0.32
+    && heightCoverage >= 0.32;
+}
+
 function distanceBetweenPoints(first: MarkerPoint, second: MarkerPoint): number {
   return Math.hypot(first.x - second.x, first.y - second.y);
 }
@@ -1369,6 +1509,7 @@ function hideQrScannerOverlay(): void {
   qrScannerHint.hidden = false;
   qrScannerHint.textContent = 'Busca las cuatro X en negro';
   qrScannerStage.dataset.state = 'searching';
+  setQrScannerArButtonState(false);
 }
 
 function updateQrScannerOverlay(
@@ -1429,7 +1570,7 @@ function updateQrScannerOverlay(
   qrScannerHint.hidden = false;
   qrScannerHint.textContent = showModel
     ? '4 X confirmadas'
-    : 'Manten la hoja quieta para confirmar';
+    : 'Mantén la hoja quieta para confirmar';
   qrScannerStage.dataset.state = showModel ? 'locked' : 'searching';
 
   const roundedSize = Math.round(overlaySize);
@@ -1537,14 +1678,23 @@ async function startQrScannerStream(): Promise<void> {
             qrScannerDetection = smoothedTrackedDetection;
             qrScannerLostFrames = 0;
             updateQrScannerOverlay(smoothedTrackedDetection, analysisWidth, analysisHeight, true);
-            qrScannerHint.hidden = false;
-            qrScannerHint.textContent = 'Modelo anclado';
-            qrScannerStatus.textContent = `${model.name} anclado sobre la hoja.`;
+            if (isQrScannerDetectionReadyForAr(smoothedTrackedDetection, analysisWidth, analysisHeight)) {
+              qrScannerHint.hidden = false;
+              qrScannerHint.textContent = 'Hoja lista para AR';
+              qrScannerStatus.textContent = `4/4 X detectadas. Toca "Ver en AR" sin mover el móvil para colocar ${model.name}.`;
+              setQrScannerArButtonState(true);
+            } else {
+              qrScannerHint.hidden = false;
+              qrScannerHint.textContent = 'Centra la hoja';
+              qrScannerStatus.textContent = 'Mantén la hoja centrada y ocupando buena parte de la imagen para abrir AR.';
+              setQrScannerArButtonState(false);
+            }
           }
         } else {
           qrScannerLostFrames += 1;
+          setQrScannerArButtonState(false);
           if (qrScannerLostFrames > QR_SCANNER_LOST_FRAME_TOLERANCE) {
-            qrScannerStatus.textContent = 'Seguimiento perdido. Vuelve a apuntar a la hoja para recuperar el anclaje.';
+            qrScannerStatus.textContent = 'Seguimiento perdido. Vuelve a apuntar a la hoja para recuperar la detección.';
           }
         }
 
@@ -1577,11 +1727,20 @@ async function startQrScannerStream(): Promise<void> {
           qrScannerOverlayVisible = true;
           qrScannerPlacementLocked = true;
           qrScannerLostFrames = 0;
-          qrScannerHint.hidden = false;
-          qrScannerHint.textContent = 'Modelo anclado';
-          qrScannerStatus.textContent = `4/4 X detectadas. ${model.name} anclado sobre la hoja.`;
+          if (isQrScannerDetectionReadyForAr(smoothedDetection, analysisWidth, analysisHeight)) {
+            qrScannerHint.hidden = false;
+            qrScannerHint.textContent = 'Hoja lista para AR';
+            qrScannerStatus.textContent = `4/4 X detectadas. Toca "Ver en AR" sin mover el móvil para colocar ${model.name}.`;
+            setQrScannerArButtonState(true);
+          } else {
+            qrScannerHint.hidden = false;
+            qrScannerHint.textContent = 'Centra la hoja';
+            qrScannerStatus.textContent = '4/4 X detectadas. Acerca y centra la hoja para poder entrar en AR.';
+            setQrScannerArButtonState(false);
+          }
         } else {
           qrScannerOverlayVisible = false;
+          setQrScannerArButtonState(false);
           qrScannerStatus.textContent = `4/4 X localizadas. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`;
         }
       } else {
@@ -1594,6 +1753,7 @@ async function startQrScannerStream(): Promise<void> {
             ? `Solo se detectan ${detectedMarks}/4 X. Mueve la hoja hasta que entren las cuatro esquinas.`
             : 'No se detectan las X todavia. Enfoca la hoja completa y evita fondos con cruces o trazos negros.';
         } else if (!qrScannerOverlayVisible) {
+          setQrScannerArButtonState(false);
           qrScannerStatus.textContent = detectedMarks > 0
             ? `Viendo ${detectedMarks}/4 X. Ajusta la hoja hasta completar las cuatro esquinas.`
             : `Camara activa. Busca las cuatro X para colocar ${model.name}.`;
@@ -1618,6 +1778,37 @@ async function openQrScannerDialog(): Promise<void> {
     else qrScannerDialog.setAttribute('open', '');
   }
   await startQrScannerStream();
+}
+
+async function beginMarkerAnchoredArSession(): Promise<void> {
+  const modelId = getQrScannerModelId();
+  const attemptId = ++arAttemptId;
+  pendingMarkerAnchoredModelId = modelId;
+  arFlowPending = true;
+  resumableView = 'landing';
+  compatibility.textContent = '';
+  compatibility.dataset.error = 'false';
+  setQrScannerArButtonState(true, true);
+  qrScannerStatus.textContent = 'Abriendo AR sobre la hoja...';
+  qrScannerHint.hidden = false;
+  qrScannerHint.textContent = 'Mantén el móvil apuntando a la hoja';
+  checkpoint('scan:marker-ar-start-requested', 'landing');
+  closeQrScannerDialog();
+
+  try {
+    experience.enableAutoPlaceSurface();
+    await experience.start();
+    if (interruptedArAttemptId === attemptId) await experience.interrupt();
+  } catch (error: unknown) {
+    pendingMarkerAnchoredModelId = null;
+    compatibility.textContent = isCameraAccessBlockedError(error)
+      ? 'No se pudo abrir la sesiÃ³n AR. Revisa el permiso de cÃ¡mara y de seguimiento espacial del navegador.'
+      : 'No se pudo iniciar la realidad aumentada desde el escaneo.';
+    compatibility.dataset.error = 'true';
+  } finally {
+    arFlowPending = false;
+    setQrScannerArButtonState(false);
+  }
 }
 
 function requestQrScan(): void {
@@ -1687,6 +1878,38 @@ openScanButton.addEventListener('click', () => {
   requestQrScan();
 });
 
+async function beginTestSession(): Promise<void> {
+  if (arFlowPending || testExperienceActive) return;
+  if (!arAvailability?.canStart) {
+    compatibility.textContent = 'La prueba necesita WebXR AR compatible para colocar el cubo de 3 metros.';
+    compatibility.dataset.error = 'true';
+    return;
+  }
+
+  const attemptId = ++arAttemptId;
+  arFlowPending = true;
+  resumableView = 'landing';
+  checkpoint('test:start-requested', 'landing');
+  openTestButton.disabled = true;
+  compatibility.textContent = '';
+  compatibility.dataset.error = 'false';
+
+  try {
+    await testExperience.start();
+    if (interruptedArAttemptId === attemptId) await testExperience.interrupt();
+  } catch {
+    compatibility.textContent = 'No se pudo iniciar la prueba AR del cubo.';
+    compatibility.dataset.error = 'true';
+  } finally {
+    arFlowPending = false;
+    if (!testExperienceActive) openTestButton.disabled = false;
+  }
+}
+
+openTestButton.addEventListener('click', () => {
+  void beginTestSession();
+});
+
 cameraCancelButton.addEventListener('click', () => {
   closeCameraDialog();
   checkpoint('camera-dialog:cancel', 'landing');
@@ -1747,6 +1970,18 @@ closeButton.addEventListener('click', (event) => {
   event.preventDefault();
   event.stopPropagation();
   if (closeButton.disabled) return;
+
+  if (activeExperienceMode === 'test') {
+    checkpoint('test:exit-requested', 'landing');
+    closeButton.disabled = true;
+    closeButton.textContent = 'Saliendo…';
+    void testExperience.end().catch(() => {
+      closeButton.disabled = false;
+      closeButton.textContent = 'Salir';
+      xrMessage.textContent = 'No se pudo cerrar la prueba. Inténtalo de nuevo.';
+    });
+    return;
+  }
 
   if (activeExperienceMode === 'virtual') {
     checkpoint('virtual:exit-requested', 'landing');
@@ -1848,9 +2083,18 @@ handsToggle.addEventListener('click', () => {
   checkpoint('ar:hands-unavailable', 'landing');
 });
 
+testViewerToggle.addEventListener('click', () => {
+  const enable = !testExperience.isViewerModeActive();
+  void testExperience.setViewerMode(enable);
+  checkpoint(`test:viewer:${enable ? 'on' : 'off'}`, 'landing');
+});
+
 scanQrToggle.addEventListener('click', () => {
   checkpoint(`${activeExperienceMode ?? 'ar'}:scan-open`, 'landing');
   requestQrScan();
+});
+qrScannerConfirmArButton.addEventListener('click', () => {
+  void beginMarkerAnchoredArSession();
 });
 qrScannerCloseButton.addEventListener('click', () => {
   closeQrScannerDialog();
@@ -1931,6 +2175,15 @@ function interruptTransientExperience(action: string): void {
     return;
   }
 
+  if (testExperienceActive) {
+    interruptedArAttemptId = arAttemptId;
+    resumableView = 'landing';
+    closeModelMenus();
+    checkpoint(action, 'landing');
+    void testExperience.interrupt().catch(() => undefined);
+    return;
+  }
+
   if (arSessionActive || arFlowPending) {
     interruptedArAttemptId = arAttemptId;
     resumableView = 'landing';
@@ -1969,6 +2222,7 @@ window.addEventListener('pageshow', () => {
       .catch(() => undefined);
   }
   if (arSessionActive) void experience.interrupt().catch(() => undefined);
+  if (testExperienceActive) void testExperience.interrupt().catch(() => undefined);
 });
 
 if (appProgress.view === 'panorama') openPanorama(false);

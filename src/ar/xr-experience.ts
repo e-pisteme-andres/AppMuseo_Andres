@@ -31,6 +31,10 @@ interface LoadedModel {
   effect: SporeField;
 }
 
+const MARKER_SCANNING_MESSAGE = 'MantÃ©n el mÃ³vil apuntando a la hoja escaneada para localizar su superficie.';
+const MARKER_PLACEABLE_MESSAGE = 'Hoja localizada. MantÃ©n el mÃ³vil quieto un instante para anclar el modelo.';
+const MARKER_SURFACE_PLACED_MESSAGE = 'Hoja anclada. Terminando la colocaciÃ³n del modeloâ€¦';
+
 const SCANNING_MESSAGE = 'Mueve el móvil lentamente para encontrar una superficie horizontal.';
 const PLACEABLE_MESSAGE = 'Superficie detectada. Toca la pantalla para colocar la malla.';
 const SURFACE_PLACED_MESSAGE = 'Malla colocada. Elige una forma en el menú de la izquierda.';
@@ -94,6 +98,7 @@ export class XRExperience {
   private modelSizeMeters = DEFAULT_MODEL_SIZE_METERS;
   private modelLoadPromise: Promise<void> | null = null;
   private activeModelId: ModelId | null = null;
+  private autoPlaceSurface = false;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
@@ -213,6 +218,10 @@ export class XRExperience {
     this.updateSlicePlane();
   }
 
+  enableAutoPlaceSurface(): void {
+    this.autoPlaceSurface = true;
+  }
+
   playModelAction(): Promise<boolean> {
     if (this.state !== 'placed') return Promise.resolve(false);
     return this.modelInteraction.trigger();
@@ -250,7 +259,7 @@ export class XRExperience {
       this.hitTestSource = hitTestSource;
 
       this.options.onSessionActivity(true);
-      this.setState('scanning', SCANNING_MESSAGE);
+      this.setState('scanning', this.getScanningMessage());
       this.renderer.setAnimationLoop(this.renderFrame);
     } catch (error) {
       await this.endSilently();
@@ -347,7 +356,7 @@ export class XRExperience {
           this.trackingLost = false;
           this.emitMessage(
             this.state === 'surfacePlaced'
-              ? SURFACE_PLACED_MESSAGE
+              ? this.getSurfacePlacedMessage()
               : this.getPlacedMessage(),
           );
         }
@@ -389,7 +398,7 @@ export class XRExperience {
       this.reticle.visible = false;
       this.surfacePlacementRequested = false;
       this.stabilizer.reset();
-      if (this.state === 'placeable') this.setState('scanning', SCANNING_MESSAGE);
+      if (this.state === 'placeable') this.setState('scanning', this.getScanningMessage());
       return;
     }
 
@@ -401,13 +410,13 @@ export class XRExperience {
     this.reticle.material.color.set(stable ? 0x6feeff : 0xffc857);
 
     if (stable && this.state === 'scanning') {
-      this.setState('placeable', PLACEABLE_MESSAGE);
+      this.setState('placeable', this.getPlaceableMessage());
     } else if (!stable && this.state === 'placeable') {
       this.surfacePlacementRequested = false;
-      this.setState('scanning', SCANNING_MESSAGE);
+      this.setState('scanning', this.getScanningMessage());
     }
 
-    if (stable && this.state === 'placeable' && this.surfacePlacementRequested) {
+    if (stable && this.state === 'placeable' && (this.surfacePlacementRequested || this.autoPlaceSurface)) {
       this.surfacePlacementRequested = false;
       this.commitSurfacePlacement(acceptedResult, matrix);
     }
@@ -420,7 +429,8 @@ export class XRExperience {
     this.hitTestSource?.cancel();
     this.hitTestSource = null;
     this.stabilizer.reset();
-    this.setState('surfacePlaced', SURFACE_PLACED_MESSAGE);
+    this.setState('surfacePlaced', this.getSurfacePlacedMessage());
+    this.autoPlaceSurface = false;
 
     const anchorPromise = result.createAnchor?.();
     anchorPromise
@@ -556,6 +566,7 @@ export class XRExperience {
     this.modelInteraction.hide();
     this.lastFrameTime = null;
     this.anchorRoot.matrix.identity();
+    this.autoPlaceSurface = false;
     this.setSliceProgress(0);
     this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
   }
@@ -593,6 +604,18 @@ export class XRExperience {
       ? findModelDefinition(this.activeModelId).placedLabel
       : 'Modelo colocado';
     return `${placedLabel}. Arrastra para girarlo; la malla permanecerá visible.`;
+  }
+
+  private getScanningMessage(): string {
+    return this.autoPlaceSurface ? MARKER_SCANNING_MESSAGE : SCANNING_MESSAGE;
+  }
+
+  private getPlaceableMessage(): string {
+    return this.autoPlaceSurface ? MARKER_PLACEABLE_MESSAGE : PLACEABLE_MESSAGE;
+  }
+
+  private getSurfacePlacedMessage(): string {
+    return this.autoPlaceSurface ? MARKER_SURFACE_PLACED_MESSAGE : SURFACE_PLACED_MESSAGE;
   }
 
   private async endSilently(): Promise<void> {

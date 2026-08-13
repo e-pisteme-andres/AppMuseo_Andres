@@ -20,8 +20,8 @@ enum OcclusionState: String {
 @MainActor
 final class ARExperienceModel: ObservableObject {
     @Published private(set) var state: ARExperienceState = .starting
-    @Published private(set) var activeModelName = "Modelos QR"
-    @Published private(set) var message = "Preparando la camara y el seguimiento espacial..."
+    @Published private(set) var activeModelName = "Hoja marcador"
+    @Published private(set) var message = "Preparando la camara y el seguimiento visual..."
     @Published private(set) var occlusion: OcclusionState = .checking
     @Published var sliceProgress: Double = 0 {
         didSet { setSliceHandler?(Float(sliceProgress)) }

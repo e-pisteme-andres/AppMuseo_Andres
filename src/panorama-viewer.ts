@@ -16,6 +16,7 @@ import {
 import type { PanoramaHotspot } from './panorama-tour';
 
 export type PanoramaControlMode = 'motion-pending' | 'motion' | 'drag';
+export type PanoramaMotionAccess = 'granted' | 'denied' | 'unsupported';
 
 export interface PanoramaViewState {
   longitude: number;
@@ -160,6 +161,23 @@ export function getCalibratedMotionView(
   };
 }
 
+export function isTouchPanoramaMotionDevice(): boolean {
+  return navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
+}
+
+export async function requestDeviceOrientationAccess(
+  orientationEvent: DeviceOrientationConstructor | undefined,
+): Promise<PanoramaMotionAccess> {
+  if (!orientationEvent) return 'unsupported';
+  if (!orientationEvent.requestPermission) return 'granted';
+
+  try {
+    return await orientationEvent.requestPermission();
+  } catch {
+    return 'denied';
+  }
+}
+
 export class PanoramaViewer {
   private readonly container: HTMLElement;
   private imageUrl: string;
@@ -197,6 +215,7 @@ export class PanoramaViewer {
   private motionCalibration?: MotionCalibration;
   private orientationTimeoutId?: number;
   private dragControlsEnabled = false;
+  private motionControlsListening = false;
   private stereoModeEnabled = false;
 
   constructor({
@@ -229,6 +248,10 @@ export class PanoramaViewer {
 
   isStereoMode(): boolean {
     return this.stereoModeEnabled;
+  }
+
+  getControlMode(): PanoramaControlMode {
+    return this.controlMode;
   }
 
   setStereoMode(enabled: boolean): void {
@@ -413,6 +436,7 @@ export class PanoramaViewer {
     this.motionCalibration = undefined;
     this.orientationTimeoutId = undefined;
     this.dragControlsEnabled = false;
+    this.motionControlsListening = false;
     this.pointers.clear();
     this.activePointer = undefined;
     this.pinchStartDistance = undefined;
@@ -443,32 +467,47 @@ export class PanoramaViewer {
     }
   };
 
-  private async prepareControls(): Promise<void> {
-    const isTouchDevice = navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
-    if (!isTouchDevice || !('DeviceOrientationEvent' in window)) {
+  async enableMotionControls(): Promise<PanoramaMotionAccess> {
+    if (this.controlMode === 'motion') return 'granted';
+    if (!isTouchPanoramaMotionDevice()) {
       this.setControlMode('drag');
-      return;
+      return 'unsupported';
     }
 
     this.setControlMode('motion-pending');
-    try {
-      const orientationEvent = window.DeviceOrientationEvent as DeviceOrientationConstructor;
-      if (orientationEvent.requestPermission) {
-        const permission = await orientationEvent.requestPermission();
-        if (permission !== 'granted') {
-          this.setControlMode('drag');
-          return;
-        }
-      }
+    const access = await requestDeviceOrientationAccess(
+      'DeviceOrientationEvent' in window
+        ? window.DeviceOrientationEvent as DeviceOrientationConstructor
+        : undefined,
+    );
+    if (access !== 'granted') {
+      this.setControlMode('drag');
+      return access;
+    }
+
+    this.startDeviceOrientationListening();
+    return 'granted';
+  }
+
+  private async prepareControls(): Promise<void> {
+    await this.enableMotionControls();
+  }
+
+  private startDeviceOrientationListening(): void {
+    if (!this.motionControlsListening) {
+      this.motionControlsListening = true;
       window.addEventListener('deviceorientation', this.handleDeviceOrientation, true);
+    }
+
+    if (this.orientationTimeoutId !== undefined) window.clearTimeout(this.orientationTimeoutId);
+    if (this.controlMode !== 'motion') {
       this.orientationTimeoutId = window.setTimeout(() => {
         if (this.controlMode !== 'motion') {
           window.removeEventListener('deviceorientation', this.handleDeviceOrientation, true);
+          this.motionControlsListening = false;
           this.setControlMode('drag');
         }
       }, 2500);
-    } catch {
-      this.setControlMode('drag');
     }
   }
 

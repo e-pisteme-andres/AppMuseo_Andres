@@ -35,6 +35,7 @@
 		A1000000000000000000001C /* qr-totem.png in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* qr-totem.png */; };
 		A1000000000000000000001D /* qr-cosmic-flower.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* qr-cosmic-flower.png */; };
 		A1000000000000000000001F /* qr-empty-house.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* qr-empty-house.png */; };
+		A10000000000000000000023 /* x-corner-marker-sheet.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* x-corner-marker-sheet.png */; };
 		A10000000000000000000011 /* ARMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* ARMathTests.swift */; };
 		A10000000000000000000012 /* SurfaceStabilizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* SurfaceStabilizerTests.swift */; };
 		A10000000000000000000013 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* XCTest.framework */; };
@@ -85,6 +86,7 @@
 		A2000000000000000000001F /* qr-totem.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-totem.png; sourceTree = SOURCE_ROOT; };
 		A20000000000000000000020 /* qr-cosmic-flower.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-cosmic-flower.png; sourceTree = SOURCE_ROOT; };
 		A20000000000000000000022 /* qr-empty-house.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/qr/qr-empty-house.png; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000023 /* x-corner-marker-sheet.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../public/markers/x-corner-marker-sheet.png; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -164,6 +166,7 @@
 				A2000000000000000000001F /* qr-totem.png */,
 				A20000000000000000000020 /* qr-cosmic-flower.png */,
 				A20000000000000000000022 /* qr-empty-house.png */,
+				A20000000000000000000023 /* x-corner-marker-sheet.png */,
 				A20000000000000000000010 /* paranal-360.jpg */,
 			);
 			name = "Shared Resources";
@@ -281,6 +284,7 @@
 				A1000000000000000000001C /* qr-totem.png in Resources */,
 				A1000000000000000000001D /* qr-cosmic-flower.png in Resources */,
 				A1000000000000000000001F /* qr-empty-house.png in Resources */,
+				A10000000000000000000023 /* x-corner-marker-sheet.png in Resources */,
 				A1000000000000000000000F /* paranal-360.jpg in Resources */,
 				A10000000000000000000010 /* PrivacyInfo.xcprivacy in Resources */,
 			);

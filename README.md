@@ -28,6 +28,9 @@ Una vez colocado, el deslizador **Corte vertical** permite seccionar el modelo d
 El control vertical **Tamaño** escala el modelo uniformemente entre 1 cm y 1 m.
 Cada pieza incorpora partículas con color y movimiento propios que responden a su rotación, escala y corte.
 
+La app nativa de iOS usa un marcador impreso distinto: `public/markers/x-corner-marker-sheet.png`.
+La hoja contiene cuatro `X` negras en las esquinas y sirve como referencia para colocar el modelo sobre el papel.
+
 ## Interacciones de los modelos
 
 Cada modelo dispone de una acción exclusiva —liberar esporas, cargar energía,

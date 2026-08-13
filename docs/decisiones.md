@@ -186,3 +186,57 @@ estable frente a exploración.
 **Qué reabriría la decisión:** que `dev` se fusione en `main`, que se cree una
 rama de release explícita o que producción necesite congelar una versión
 auditada distinta.
+
+## 2026-08-11 - Hoja marcador con cuatro `X` para el anclaje iOS
+
+**QuÃ© se probÃ³:** sustituir la detecciÃ³n por QR de la app nativa iOS por una
+hoja marcador con cuatro `X` negras en las esquinas, empaquetada como imagen de
+referencia ARKit.
+
+**QuÃ© se eligiÃ³:** usar una sola hoja A4 imprimible
+`public/markers/x-corner-marker-sheet.png` para colocar el modelo 3D sobre el
+papel.
+
+**QuÃ© se descartÃ³:** mantener la dependencia de un QR distinto por modelo en el
+flujo nativo actual.
+
+**Por quÃ©:** para la siguiente fase del proyecto importa mÃ¡s disponer de una
+referencia fÃ­sica simple y dibujable que de la selecciÃ³n automÃ¡tica del modelo.
+El cambio simplifica la preparaciÃ³n de sala y acerca la experiencia al uso de
+puntos de referencia manuales.
+
+**QuÃ© reabrirÃ­a la decisiÃ³n:** necesidad de reconocer marcas dibujadas a mano
+sin plantilla fija, selecciÃ³n de varios modelos desde el mismo marcador o
+pruebas de campo que muestren poca robustez con solo cuatro `X`.
+
+## 2026-08-11 - Escaneo web por cuatro `X` como alternativa impresa
+
+**Que se probo:** reemplazar el flujo web de lectura QR por una deteccion
+propia de cuatro `X` negras en las esquinas de una hoja, usando analisis de
+luminancia, componentes conectados, comprobacion de diagonales, conteo por
+cuadrantes, confirmacion en varios frames y superposicion del modelo 3D sobre
+la imagen de camara en `src/main.ts` y `src/marker-scan.ts`.
+
+**Que se eligio:** dejar la exploracion integrada en `dev` como spike tecnico,
+sin declararla todavia solucion validada para sala ni respuesta a `P-13`.
+
+**Que se descarto:** seguir dependiendo de `BarcodeDetector` y QR para este
+flujo concreto; tambien se probaron heuristicas mas laxas para marcas dibujadas
+a mano (`c19a53d`) y despues una confirmacion mas estricta de las cuatro `X`
+(`c958856`). El commit final del dia (`2331761`) no revierte el detector ni la
+superposicion: solo deshace el bloqueo del modelo tras la primera confirmacion
+que se habia introducido en `786168f`.
+
+**Por que:** la hipotesis de trabajo era que una hoja A4 con cuatro `X` de alto
+contraste podia servir como referencia impresa cuando la RA no ancla bien a una
+superficie o cuando interesara un fallback fisico sencillo. En el repositorio no
+hemos encontrado una fuente externa ni otra instruccion documentada para abrir
+esta linea; por lo que deja escrito el codigo y la secuencia de commits, su
+origen documentado es una hipotesis tecnica local, alineada con la linea de
+marcador impreso abierta en iOS ese mismo dia.
+
+**Que reabriria la decision:** pruebas reales que muestren deteccion estable en
+penumbra, impresion domestica y fondo no controlado; o una necesidad operativa
+clara de usar marcador impreso si `P-13` falla en baja luz. Si aparecen falsos
+positivos, jitter o perdida frecuente de seguimiento, esta linea debe volver a
+cuestionarse antes de proponerse como alternativa de sala.

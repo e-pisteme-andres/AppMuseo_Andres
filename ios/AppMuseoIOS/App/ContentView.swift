@@ -63,11 +63,11 @@ struct ContentView: View {
                     .font(.caption2.weight(.black))
                     .tracking(1.8)
                     .foregroundStyle(AppPalette.mint)
-                Text("Una seta.\nEn tu espacio.")
+                Text("Una seta.\nSobre tu hoja.")
                     .font(.system(size: 49, weight: .black, design: .rounded))
                     .minimumScaleFactor(0.72)
                     .foregroundStyle(.white)
-                Text("Coloca una seta tridimensional de 20 cm sobre una mesa o el suelo y obsérvala desde cualquier ángulo.")
+                Text("Apunta a una hoja blanca con cuatro X negras en las esquinas y coloca una seta tridimensional de 20 cm sobre ese papel.")
                     .font(.body)
                     .foregroundStyle(.white.opacity(0.68))
                     .lineSpacing(4)
@@ -87,13 +87,13 @@ struct ContentView: View {
             )
             InstructionRow(
                 number: "02",
-                title: "Busca una superficie",
-                detail: "Mueve el móvil lentamente sobre una mesa o el suelo."
+                title: "Enfoca la hoja marcador",
+                detail: "Usa una hoja blanca con cuatro X negras en las esquinas."
             )
             InstructionRow(
                 number: "03",
-                title: "Malla y forma",
-                detail: "Fija la malla y elige la seta desde el menú lateral."
+                title: "Ajusta el modelo",
+                detail: "Cuando la detecte, la seta aparecerá sobre el papel y podrás girarla."
             )
         }
     }
@@ -103,7 +103,7 @@ struct ContentView: View {
             Button {
                 showAR = true
             } label: {
-                Label("Ver seta en AR", systemImage: "viewfinder")
+                Label("Ver seta sobre la hoja", systemImage: "viewfinder")
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 58)
             }
@@ -124,7 +124,7 @@ struct ContentView: View {
         HStack {
             Text("ARKit · iPhone y iPad")
             Spacer()
-            Text("Seta · 20 cm")
+            Text("Hoja A4 · cuatro X")
         }
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.white.opacity(0.42))

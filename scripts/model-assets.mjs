@@ -43,6 +43,13 @@ export const IOS_MODEL_ASSETS = [
   },
 ];
 
+export const IOS_REFERENCE_MARKER_ASSET = {
+  id: 'x-corner-marker-sheet',
+  relativePath: 'markers/x-corner-marker-sheet.png',
+  fileName: 'x-corner-marker-sheet.png',
+  physicalWidthMetres: 0.21,
+};
+
 export function getModelQrTargetUrl(baseUrl, modelId) {
   const url = new URL(baseUrl);
   url.searchParams.set('model', modelId);

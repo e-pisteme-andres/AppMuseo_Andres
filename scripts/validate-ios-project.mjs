@@ -5,7 +5,7 @@ import {
   statSync,
 } from 'node:fs';
 import { basename, extname, resolve } from 'node:path';
-import { IOS_MODEL_ASSETS } from './model-assets.mjs';
+import { IOS_MODEL_ASSETS, IOS_REFERENCE_MARKER_ASSET } from './model-assets.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const iosRoot = resolve(root, 'ios');
@@ -17,6 +17,7 @@ const iconPath = resolve(
 const infoPlistPath = resolve(iosRoot, 'AppMuseoIOS/Resources/Info.plist');
 const privacyManifestPath = resolve(iosRoot, 'AppMuseoIOS/Resources/PrivacyInfo.xcprivacy');
 const manifestPath = resolve(root, 'public/manifest.webmanifest');
+const markerPath = resolve(root, 'public', IOS_REFERENCE_MARKER_ASSET.relativePath);
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -62,6 +63,13 @@ function validatePNG() {
       `El QR ${model.qrFile} no es un PNG valido.`,
     );
   }
+
+  invariant(existsSync(markerPath), `Falta public/${IOS_REFERENCE_MARKER_ASSET.relativePath}.`);
+  const markerBytes = readFileSync(markerPath);
+  invariant(
+    markerBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+    'La plantilla de la hoja marcador no es un PNG valido.',
+  );
 }
 
 function validateXcodeProject() {

@@ -6,6 +6,7 @@ import {
   getSphericalPosition,
   getStereoEyeViewports,
   getViewFromCameraQuaternion,
+  requestDeviceOrientationAccess,
   setDeviceQuaternion,
 } from './panorama-viewer';
 
@@ -81,6 +82,24 @@ describe('distancia angular panoramica', () => {
 });
 
 describe('vista de movimiento panoramica', () => {
+  it('solicita permiso explicito de orientacion en iOS cuando existe la API', async () => {
+    await expect(requestDeviceOrientationAccess({
+      requestPermission: async () => 'granted',
+    } as unknown as typeof DeviceOrientationEvent & {
+      requestPermission: () => Promise<'granted'>;
+    })).resolves.toBe('granted');
+
+    await expect(requestDeviceOrientationAccess({
+      requestPermission: async () => 'denied',
+    } as unknown as typeof DeviceOrientationEvent & {
+      requestPermission: () => Promise<'denied'>;
+    })).resolves.toBe('denied');
+  });
+
+  it('degrada cuando no existe DeviceOrientationEvent', async () => {
+    await expect(requestDeviceOrientationAccess(undefined)).resolves.toBe('unsupported');
+  });
+
   it('extrae longitud y latitud desde la orientacion absoluta de la camara', () => {
     const targetDirection = getSphericalPosition(32, 18, 1).normalize();
     const cameraQuaternion = new Quaternion().setFromUnitVectors(

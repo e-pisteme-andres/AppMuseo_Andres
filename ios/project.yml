@@ -58,6 +58,9 @@ targets:
       - path: ../public/qr/qr-empty-house.png
         buildPhase: resources
         group: Shared Resources
+      - path: ../public/markers/x-corner-marker-sheet.png
+        buildPhase: resources
+        group: Shared Resources
       - path: ../public/panoramas/paranal-360.jpg
         buildPhase: resources
         group: Shared Resources
