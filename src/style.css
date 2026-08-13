@@ -245,10 +245,10 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 footer a { color: #8be6c1; text-decoration: none; }
 
 .xr-stage { position: fixed; inset: 0; z-index: 5; visibility: hidden; }
-.xr-canvas, .virtual-canvas { position: absolute; inset: 0; display: none; width: 100%; height: 100%; }
+.xr-canvas, .virtual-canvas, .test-viewer-canvas { position: absolute; inset: 0; display: none; width: 100%; height: 100%; }
 .xr-overlay { display: none; position: fixed; inset: 0; z-index: 10; padding: max(18px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom)); touch-action: none; user-select: none; }
 .xr-topbar { display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
-.xr-badge, .xr-occlusion, .close-button, .xr-guide, .gesture-hint, .test-viewer-toggle, .xr-cut-control, .xr-scale-control, .xr-library, .xr-model-panel, .model-actions, .model-discovery-card { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.xr-badge, .xr-occlusion, .close-button, .xr-guide, .gesture-hint, .test-viewer-toggle, .test-vr-orientation, .xr-cut-control, .xr-scale-control, .xr-library, .xr-model-panel, .model-actions, .model-discovery-card { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .xr-status-stack { display: grid; justify-items: start; gap: 6px; }
 .xr-badge { display: flex; align-items: center; gap: 8px; padding: 10px 13px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(4,14,11,.62); font-size: .75rem; font-weight: 700; }
 .xr-occlusion { padding: 5px 9px; border: 1px solid rgba(255,255,255,.13); border-radius: 999px; background: rgba(4,14,11,.62); color: #a9bbb4; font-size: .58rem; font-weight: 700; letter-spacing: .025em; }
@@ -282,6 +282,47 @@ footer a { color: #8be6c1; text-decoration: none; }
 }
 .test-viewer-toggle[hidden] { display: none; }
 .test-viewer-toggle[aria-pressed="true"] { color: #f7fffb; background: rgba(4,14,11,.74); }
+.test-vr-orientation {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: none;
+  place-items: center;
+  gap: 10px;
+  padding: 28px;
+  color: #f4fbf8;
+  background: rgba(3, 10, 8, .96);
+  text-align: center;
+  pointer-events: auto;
+}
+.test-vr-orientation.is-visible { display: grid; }
+.test-vr-orientation > span {
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 46px;
+  border: 2px solid #9ef6d1;
+  border-radius: 50%;
+  color: #9ef6d1;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.test-vr-orientation strong,
+.test-vr-orientation small { display: block; }
+.test-vr-orientation strong { margin-top: 6px; font-size: clamp(1.55rem, 8vw, 2.6rem); letter-spacing: 0; }
+.test-vr-orientation small { max-width: 280px; color: #a8beb5; font-size: .86rem; line-height: 1.45; }
+.test-vr-exit {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(158,246,209,.68);
+  border-radius: 999px;
+  color: #062318;
+  background: #9ef6d1;
+  font-weight: 850;
+  cursor: pointer;
+}
+.test-vr-exit:hover,
+.test-vr-exit:focus-visible { border-color: #f7fffb; background: #f7fffb; }
 .xr-cut-control { position: absolute; z-index: 3; left: 50%; bottom: max(112px, calc(env(safe-area-inset-bottom) + 102px)); width: min(340px, calc(100% - 36px)); padding: 13px 16px 11px; border: 1px solid rgba(255,255,255,.17); border-radius: 17px; background: rgba(4,14,11,.74); box-shadow: 0 16px 38px rgba(0,0,0,.24); transform: translateX(-50%); pointer-events: auto; }
 .xr-cut-control[hidden] { display: none; }
 .xr-cut-control label, .xr-cut-direction { display: flex; align-items: center; justify-content: space-between; }
@@ -465,6 +506,12 @@ body.xr-active .app-shell { background: transparent; }
 body.xr-active .xr-stage { visibility: visible; }
 body.xr-active .xr-canvas { display: block; }
 body.xr-active .xr-overlay { display: block; }
+body.test-viewer-active { overflow: hidden; }
+body.test-viewer-active .landing { visibility: hidden; }
+body.test-viewer-active .app-shell { background: #030806; }
+body.test-viewer-active .xr-stage { visibility: visible; }
+body.test-viewer-active .test-viewer-canvas { display: block; }
+body.test-viewer-active .xr-overlay { display: block; }
 body.test-viewer-active .xr-overlay::after {
   content: "";
   position: fixed;
@@ -478,7 +525,8 @@ body.test-viewer-active .xr-overlay::after {
   pointer-events: none;
 }
 body.test-viewer-active .xr-guide,
-body.test-viewer-active .xr-occlusion {
+body.test-viewer-active .xr-occlusion,
+body.test-viewer-active .xr-library {
   display: none;
 }
 body.virtual-active { overflow: hidden; }

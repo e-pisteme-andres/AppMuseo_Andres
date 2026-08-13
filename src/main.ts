@@ -28,6 +28,7 @@ import {
   type ResumableView,
 } from './progress-cache';
 import { TestCubeExperience } from './test-cube-experience';
+import { TestCubeViewer } from './test-cube-viewer';
 import {
   analyzeMarkerFrame,
   mapPointFromVideoToViewport,
@@ -214,6 +215,12 @@ app.innerHTML = `
       <button class="test-viewer-toggle" id="test-viewer-toggle" type="button" data-xr-control aria-pressed="false" hidden>
         Visor
       </button>
+      <div class="test-vr-orientation" id="test-vr-orientation" role="status" aria-live="polite" aria-hidden="true">
+        <span aria-hidden="true">VR</span>
+        <strong>Gira el móvil</strong>
+        <small>El visor tipo gafas funciona en horizontal.</small>
+        <button class="test-vr-exit" id="test-vr-exit" type="button">Salir de visor</button>
+      </div>
       <section class="model-actions" id="model-actions" data-xr-control aria-label="Acciones del modelo" hidden>
         <div class="model-actions-heading">
           <span class="model-actions-dot" aria-hidden="true"></span>
@@ -415,6 +422,8 @@ const xrMessage = getRequiredElement<HTMLElement>('#xr-message');
 const xrGuide = getRequiredElement<HTMLElement>('#xr-guide');
 const gestureHint = getRequiredElement<HTMLElement>('#gesture-hint');
 const testViewerToggle = getRequiredElement<HTMLButtonElement>('#test-viewer-toggle');
+const testVrOrientation = getRequiredElement<HTMLElement>('#test-vr-orientation');
+const testVrExitButton = getRequiredElement<HTMLButtonElement>('#test-vr-exit');
 const modelActions = getRequiredElement<HTMLElement>('#model-actions');
 const modelActionsName = getRequiredElement<HTMLElement>('#model-actions-name');
 const modelActionPrimary = getRequiredElement<HTMLButtonElement>('#model-action-primary');
@@ -515,8 +524,9 @@ let panoramaGazeTeleporting = false;
 let panoramaGazeTeleportStartedAt = 0;
 let arSessionActive = false;
 let virtualExperienceActive = false;
+let testViewerActive = false;
 let testExperienceActive = false;
-let activeExperienceMode: 'ar' | 'virtual' | 'test' | null = null;
+let activeExperienceMode: 'ar' | 'virtual' | 'test' | 'testViewer' | null = null;
 let arFlowPending = false;
 let arAttemptId = 0;
 let interruptedArAttemptId = -1;
@@ -1104,37 +1114,48 @@ function applySelectedModel(modelId: ModelId): boolean {
   return true;
 }
 
-function setExperienceActivity(mode: 'ar' | 'virtual' | 'test', active: boolean): void {
+function setExperienceActivity(mode: 'ar' | 'virtual' | 'test' | 'testViewer', active: boolean): void {
   if (active) activeExperienceMode = mode;
   else if (activeExperienceMode === mode) activeExperienceMode = null;
 
   document.body.classList.toggle('xr-active', (mode === 'ar' || mode === 'test') && active);
   document.body.classList.toggle('virtual-active', mode === 'virtual' && active);
   document.body.classList.toggle('test-active', mode === 'test' && active);
+  document.body.classList.toggle('test-viewer-active', mode === 'testViewer' && active);
 
   if (active) {
     const virtualMode = mode === 'virtual';
     const testMode = mode === 'test';
+    const testViewerMode = mode === 'testViewer';
     experienceBadgeLabel.textContent = virtualMode
       ? 'Espacio virtual'
-      : testMode
+      : testViewerMode
+        ? 'Visor cubo'
+        : testMode
         ? 'Prueba AR'
         : 'Museo AR';
-    xrOcclusion.hidden = virtualMode;
-    handsToggle.hidden = virtualMode || testMode;
-    formsToggle.hidden = testMode;
-    scanQrToggle.hidden = testMode;
+    xrOcclusion.hidden = virtualMode || testViewerMode;
+    handsToggle.hidden = virtualMode || testMode || testViewerMode;
+    formsToggle.hidden = testMode || testViewerMode;
+    scanQrToggle.hidden = testMode || testViewerMode;
+    testViewerToggle.hidden = true;
     xrLibrary.setAttribute(
       'aria-label',
       virtualMode
         ? 'Modelos disponibles en el espacio virtual'
-        : testMode
+        : testViewerMode
+          ? 'Controles del visor del cubo'
+          : testMode
           ? 'Herramientas de prueba AR'
           : 'Herramientas de realidad aumentada',
     );
     closeButton.setAttribute(
       'aria-label',
-      virtualMode ? 'Cerrar espacio virtual' : 'Cerrar realidad aumentada',
+      virtualMode
+        ? 'Cerrar espacio virtual'
+        : testViewerMode
+          ? 'Cerrar visor del cubo'
+          : 'Cerrar realidad aumentada',
     );
   } else {
     resetModelControls();
@@ -1142,7 +1163,9 @@ function setExperienceActivity(mode: 'ar' | 'virtual' | 'test', active: boolean)
     closeModelMenus();
     testViewerToggle.hidden = true;
     testViewerToggle.setAttribute('aria-pressed', 'false');
-    document.body.classList.remove('test-viewer-active');
+    testViewerToggle.disabled = false;
+    testVrOrientation.setAttribute('aria-hidden', 'true');
+    testVrOrientation.classList.remove('is-visible');
     openTestButton.disabled = false;
     formsToggle.hidden = false;
     scanQrToggle.hidden = false;
@@ -1154,12 +1177,13 @@ function setExperienceActivity(mode: 'ar' | 'virtual' | 'test', active: boolean)
 }
 
 function updateExperienceState(
-  mode: 'ar' | 'virtual' | 'test',
+  mode: 'ar' | 'virtual' | 'test' | 'testViewer',
   state: ExperienceState,
   message: string,
 ): void {
   if (mode === 'virtual' && activeExperienceMode !== 'virtual') return;
   if (mode === 'test' && activeExperienceMode !== 'test') return;
+  if (mode === 'testViewer' && activeExperienceMode !== 'testViewer') return;
 
   xrMessage.textContent = message;
   xrGuide.dataset.state = state;
@@ -1257,13 +1281,23 @@ const testExperience = new TestCubeExperience({
     xrOcclusion.dataset.state = state;
     xrOcclusion.textContent = state === 'active' ? 'Oclusión real · activa' : 'Oclusión real · no disponible';
   },
-  onViewerModeChange: (active) => {
-    document.body.classList.toggle('test-viewer-active', active);
-    testViewerToggle.setAttribute('aria-pressed', String(active));
-    testViewerToggle.textContent = active ? 'AR' : 'Visor';
+});
+
+const testCubeViewer = new TestCubeViewer({
+  stage,
+  fullscreenElement: document.documentElement,
+  onActivityChange: (active) => {
+    testViewerActive = active;
+    resumableView = 'landing';
+    setExperienceActivity('testViewer', active);
+    checkpoint(active ? 'test-viewer:started' : 'test-viewer:ended', 'landing');
   },
-  onViewerModeUnavailable: (message) => {
+  onMessage: (message) => {
     xrMessage.textContent = message;
+  },
+  onOrientationBlockChange: (blocked) => {
+    testVrOrientation.classList.toggle('is-visible', blocked);
+    testVrOrientation.setAttribute('aria-hidden', String(!blocked));
   },
 });
 
@@ -1971,6 +2005,18 @@ closeButton.addEventListener('click', (event) => {
   event.stopPropagation();
   if (closeButton.disabled) return;
 
+  if (activeExperienceMode === 'testViewer') {
+    checkpoint('test-viewer:exit-requested', 'landing');
+    closeButton.disabled = true;
+    closeButton.textContent = 'Saliendo…';
+    void testCubeViewer.end().catch(() => {
+      closeButton.disabled = false;
+      closeButton.textContent = 'Salir';
+      xrMessage.textContent = 'No se pudo cerrar el visor. Inténtalo de nuevo.';
+    });
+    return;
+  }
+
   if (activeExperienceMode === 'test') {
     checkpoint('test:exit-requested', 'landing');
     closeButton.disabled = true;
@@ -2083,10 +2129,33 @@ handsToggle.addEventListener('click', () => {
   checkpoint('ar:hands-unavailable', 'landing');
 });
 
+async function openTestCubeViewer(): Promise<void> {
+  if (!testExperience.canOpenViewer() || testViewerActive) return;
+  checkpoint('test:viewer-open-requested', 'landing');
+  testViewerToggle.disabled = true;
+  xrMessage.textContent = 'Preparando visor tipo gafas…';
+
+  const prepared = await testCubeViewer.prepareFromUserGesture();
+  if (!prepared) {
+    testViewerToggle.disabled = false;
+    return;
+  }
+
+  try {
+    await testExperience.interrupt();
+    testCubeViewer.start();
+  } catch {
+    testViewerToggle.disabled = false;
+    xrMessage.textContent = 'No se pudo cambiar de AR al visor. Inténtalo de nuevo.';
+  }
+}
+
 testViewerToggle.addEventListener('click', () => {
-  const enable = !testExperience.isViewerModeActive();
-  void testExperience.setViewerMode(enable);
-  checkpoint(`test:viewer:${enable ? 'on' : 'off'}`, 'landing');
+  void openTestCubeViewer();
+});
+
+testVrExitButton.addEventListener('click', () => {
+  void testCubeViewer.end();
 });
 
 scanQrToggle.addEventListener('click', () => {
@@ -2163,10 +2232,20 @@ document.addEventListener('keydown', (event) => {
   } else if (event.key === 'Escape' && virtualExperienceActive) {
     checkpoint('virtual:escape', 'landing');
     virtualExperience.end();
+  } else if (event.key === 'Escape' && testViewerActive) {
+    checkpoint('test-viewer:escape', 'landing');
+    void testCubeViewer.end();
   }
 });
 
 function interruptTransientExperience(action: string): void {
+  if (testViewerActive) {
+    resumableView = 'landing';
+    checkpoint(action, 'landing');
+    void testCubeViewer.end().catch(() => undefined);
+    return;
+  }
+
   if (virtualExperienceActive) {
     resumableView = 'landing';
     closeModelMenus();

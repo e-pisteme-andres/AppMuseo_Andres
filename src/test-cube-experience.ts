@@ -11,10 +11,8 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
-  Quaternion,
   RingGeometry,
   Scene,
-  StereoCamera,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -22,11 +20,6 @@ import { DEPTH_SENSING_OPTIONS, getOcclusionState, type OcclusionState } from '.
 import { shouldInterruptArSession } from './ar/xr-experience';
 import { isHorizontalSurface, SurfaceStabilizer } from './ar/surface';
 import type { ExperienceState } from './ar/state';
-import {
-  requestDeviceOrientationAccess,
-  setDeviceQuaternion,
-  type PanoramaMotionAccess,
-} from './panorama-viewer';
 
 interface TestCubeExperienceOptions {
   stage: HTMLElement;
@@ -34,26 +27,16 @@ interface TestCubeExperienceOptions {
   onStateChange: (state: ExperienceState, message: string) => void;
   onSessionActivity: (active: boolean) => void;
   onOcclusionChange: (state: OcclusionState) => void;
-  onViewerModeChange: (active: boolean) => void;
-  onViewerModeUnavailable: (message: string) => void;
 }
-
-type DeviceOrientationConstructor = typeof DeviceOrientationEvent & {
-  requestPermission?: () => Promise<'granted' | 'denied'>;
-};
 
 const CUBE_SIZE_METERS = 3;
 const RETICLE_READY_COLOR = 0x6feeff;
 const RETICLE_SCANNING_COLOR = 0xffc857;
-const screenForward = new Vector3(0, 0, -1);
-const deviceQuaternion = new Quaternion();
-const deviceLookTarget = new Vector3();
 
 export class TestCubeExperience {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(64, 1, 0.01, 80);
-  private readonly stereoCamera = new StereoCamera();
   private readonly anchorRoot = new Group();
   private readonly cubeRoot = new Group();
   private readonly reticle: Mesh<RingGeometry, MeshStandardMaterial>;
@@ -67,9 +50,6 @@ export class TestCubeExperience {
   private hitTestSource: XRHitTestSource | null = null;
   private anchor: XRAnchor | null = null;
   private placementRequested = false;
-  private viewerModeActive = false;
-  private motionControlsActive = false;
-  private latestDeviceOrientation: { alpha: number; beta: number; gamma: number } | null = null;
   private ending: Promise<void> | null = null;
 
   constructor(options: TestCubeExperienceOptions) {
@@ -208,31 +188,8 @@ export class TestCubeExperience {
     }
   }
 
-  async setViewerMode(enabled: boolean): Promise<void> {
-    if (!this.session || this.state !== 'placed') return;
-    if (!enabled) {
-      this.disableViewerMode();
-      return;
-    }
-
-    const motionAccess = await this.enableMotionControls();
-    if (motionAccess !== 'granted') {
-      this.options.onViewerModeUnavailable(
-        motionAccess === 'unsupported'
-          ? 'Este movil no ofrece sensores de movimiento para el visor.'
-          : 'No se pudo activar el movimiento del visor. Permite el acceso a sensores.',
-      );
-      return;
-    }
-
-    this.viewerModeActive = true;
-    this.options.onViewerModeChange(true);
-    this.onResize();
-    this.setState('placed', 'Visor tipo gafas activo. Coloca el movil en horizontal dentro del soporte.');
-  }
-
-  isViewerModeActive(): boolean {
-    return this.viewerModeActive;
+  canOpenViewer(): boolean {
+    return Boolean(this.session) && this.state === 'placed';
   }
 
   private createCubeMesh(): Group {
@@ -282,8 +239,7 @@ export class TestCubeExperience {
       if (pose) this.anchorRoot.matrix.fromArray(pose.transform.matrix);
     }
 
-    if (this.viewerModeActive) this.updateViewerCamera();
-    this.renderScene();
+    this.renderer.render(this.scene, this.camera);
   };
 
   private updateSurface(frame: XRFrame): void {
@@ -343,71 +299,6 @@ export class TestCubeExperience {
       .catch(() => undefined);
   }
 
-  private renderScene(): void {
-    if (!this.viewerModeActive) {
-      this.renderer.setScissorTest(false);
-      this.renderer.render(this.scene, this.camera);
-      return;
-    }
-
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const leftWidth = Math.floor(width / 2);
-    this.camera.updateMatrixWorld();
-    this.stereoCamera.update(this.camera);
-    this.renderer.setScissorTest(true);
-    this.renderEye(0, 0, leftWidth, height, this.stereoCamera.cameraL);
-    this.renderEye(leftWidth, 0, width - leftWidth, height, this.stereoCamera.cameraR);
-    this.renderer.setScissorTest(false);
-    this.renderer.setViewport(0, 0, width, height);
-    this.renderer.setScissor(0, 0, width, height);
-  }
-
-  private renderEye(x: number, y: number, width: number, height: number, camera: PerspectiveCamera): void {
-    this.renderer.setViewport(x, y, width, height);
-    this.renderer.setScissor(x, y, width, height);
-    this.renderer.render(this.scene, camera);
-  }
-
-  private async enableMotionControls(): Promise<PanoramaMotionAccess> {
-    const access = await requestDeviceOrientationAccess(
-      'DeviceOrientationEvent' in window
-        ? window.DeviceOrientationEvent as DeviceOrientationConstructor
-        : undefined,
-    );
-    if (access !== 'granted') return access;
-    window.addEventListener('deviceorientation', this.onDeviceOrientation, true);
-    this.motionControlsActive = true;
-    return 'granted';
-  }
-
-  private updateViewerCamera(): void {
-    if (!this.latestDeviceOrientation) return;
-    const { alpha, beta, gamma } = this.latestDeviceOrientation;
-    const screenOrientation = (screen.orientation?.angle ?? (window as Window & { orientation?: number }).orientation ?? 0) * Math.PI / 180;
-    setDeviceQuaternion(
-      deviceQuaternion,
-      alpha * Math.PI / 180,
-      beta * Math.PI / 180,
-      gamma * Math.PI / 180,
-      screenOrientation,
-    );
-    deviceLookTarget.copy(screenForward).applyQuaternion(deviceQuaternion).add(this.camera.position);
-    this.camera.lookAt(deviceLookTarget);
-  }
-
-  private disableViewerMode(): void {
-    this.viewerModeActive = false;
-    this.options.onViewerModeChange(false);
-    this.onResize();
-    this.setState('placed', 'Cubo de 3 x 3 x 3 metros colocado. Puedes volver a activar el visor.');
-  }
-
-  private readonly onDeviceOrientation = (event: DeviceOrientationEvent): void => {
-    if (event.alpha === null || event.beta === null || event.gamma === null) return;
-    this.latestDeviceOrientation = { alpha: event.alpha, beta: event.beta, gamma: event.gamma };
-  };
-
   private readonly onPointerUp = (event: PointerEvent): void => {
     if ((event.target as Element).closest('[data-xr-control]')) return;
     if (this.state === 'placeable') this.placementRequested = true;
@@ -437,21 +328,11 @@ export class TestCubeExperience {
     this.session = null;
     this.ending = null;
     this.referenceSpace = null;
-    this.disableMotionControls();
-    this.viewerModeActive = false;
-    this.options.onViewerModeChange(false);
     this.reticle.visible = false;
     this.cubeRoot.visible = false;
     this.anchorRoot.matrix.identity();
     this.placementRequested = false;
     this.stabilizer.reset();
-  }
-
-  private disableMotionControls(): void {
-    if (!this.motionControlsActive) return;
-    window.removeEventListener('deviceorientation', this.onDeviceOrientation, true);
-    this.motionControlsActive = false;
-    this.latestDeviceOrientation = null;
   }
 
   private async endSilently(): Promise<void> {
@@ -478,7 +359,7 @@ export class TestCubeExperience {
   private readonly onResize = (): void => {
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
-    this.camera.aspect = (this.viewerModeActive ? width / 2 : width) / height;
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
   };
