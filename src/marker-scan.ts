@@ -17,6 +17,19 @@ export interface MarkerFrameAnalysis {
   quadrantCount: number;
 }
 
+export type MarkerPlacementIssue = 'too-small' | 'too-large' | 'off-center' | 'skewed';
+
+export interface MarkerPlacementAssessment {
+  ready: boolean;
+  issue: MarkerPlacementIssue | null;
+  centerOffsetX: number;
+  centerOffsetY: number;
+  widthCoverage: number;
+  heightCoverage: number;
+  edgeBalance: number;
+  diagonalBalance: number;
+}
+
 interface CandidateComponent {
   center: MarkerPoint;
   area: number;
@@ -31,6 +44,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function distance(a: MarkerPoint, b: MarkerPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function ratioBetween(first: number, second: number): number {
+  return Math.max(first, second) / Math.max(1, Math.min(first, second));
 }
 
 function polygonArea(points: readonly MarkerPoint[]): number {
@@ -330,8 +347,8 @@ export function analyzeMarkerFrame(imageData: ImageData): MarkerFrameAnalysis {
           const quadrilateralAspectRatio = boundsWidth / boundsHeight;
 
           if (averageWidth < imageData.width * 0.12 || averageHeight < imageData.height * 0.12) continue;
-          if (Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth)) > 1.9) continue;
-          if (Math.max(leftHeight, rightHeight) / Math.max(1, Math.min(leftHeight, rightHeight)) > 1.9) continue;
+          if (ratioBetween(topWidth, bottomWidth) > 1.9) continue;
+          if (ratioBetween(leftHeight, rightHeight) > 1.9) continue;
           if (diagonalRatio > 1.6) continue;
           if (areaRatio > 2.2 || widthRatio > 2 || heightRatio > 2) continue;
           if (quadrilateralAspectRatio < 0.45 || quadrilateralAspectRatio > 2.2) continue;
@@ -372,6 +389,73 @@ export function analyzeMarkerFrame(imageData: ImageData): MarkerFrameAnalysis {
 
 export function detectMarker(imageData: ImageData): MarkerDetection | null {
   return analyzeMarkerFrame(imageData).detection;
+}
+
+export function assessMarkerPlacement(
+  detection: MarkerDetection,
+  sourceWidth: number,
+  sourceHeight: number,
+): MarkerPlacementAssessment {
+  const centerOffsetX = sourceWidth > 0
+    ? Math.abs(detection.center.x - sourceWidth * 0.5) / sourceWidth
+    : 1;
+  const centerOffsetY = sourceHeight > 0
+    ? Math.abs(detection.center.y - sourceHeight * 0.5) / sourceHeight
+    : 1;
+  const widthCoverage = sourceWidth > 0 ? detection.width / sourceWidth : 0;
+  const heightCoverage = sourceHeight > 0 ? detection.height / sourceHeight : 0;
+  const [topLeft, topRight, bottomRight, bottomLeft] = detection.corners;
+  const topWidth = distance(topLeft, topRight);
+  const bottomWidth = distance(bottomLeft, bottomRight);
+  const leftHeight = distance(topLeft, bottomLeft);
+  const rightHeight = distance(topRight, bottomRight);
+  const edgeBalance = Math.max(
+    ratioBetween(topWidth, bottomWidth),
+    ratioBetween(leftHeight, rightHeight),
+  );
+  const diagonalBalance = ratioBetween(
+    distance(topLeft, bottomRight),
+    distance(topRight, bottomLeft),
+  );
+
+  let issue: MarkerPlacementIssue | null = null;
+  if (widthCoverage < 0.28 || heightCoverage < 0.28) issue = 'too-small';
+  else if (widthCoverage > 0.88 || heightCoverage > 0.88) issue = 'too-large';
+  else if (centerOffsetX > 0.14 || centerOffsetY > 0.14) issue = 'off-center';
+  else if (edgeBalance > 1.55 || diagonalBalance > 1.42) issue = 'skewed';
+
+  return {
+    ready: issue === null,
+    issue,
+    centerOffsetX,
+    centerOffsetY,
+    widthCoverage,
+    heightCoverage,
+    edgeBalance,
+    diagonalBalance,
+  };
+}
+
+export function isMarkerDetectionStable(
+  previous: MarkerDetection | null,
+  next: MarkerDetection,
+  tolerance = 0.1,
+): boolean {
+  if (!previous) return true;
+
+  const referenceSize = Math.max(1, previous.width, previous.height, next.width, next.height);
+  const centerDelta = distance(previous.center, next.center) / referenceSize;
+  const cornerDelta = next.corners.reduce(
+    (total, corner, index) => total + distance(previous.corners[index], corner),
+    0,
+  ) / (next.corners.length * referenceSize);
+  const widthDelta = Math.abs(next.width - previous.width) / Math.max(1, previous.width);
+  const heightDelta = Math.abs(next.height - previous.height) / Math.max(1, previous.height);
+
+  return centerDelta <= tolerance
+    && cornerDelta <= tolerance * 1.35
+    && widthDelta <= tolerance * 1.8
+    && heightDelta <= tolerance * 1.8;
 }
 
 export function trackMarker(

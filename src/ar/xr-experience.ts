@@ -99,6 +99,7 @@ export class XRExperience {
   private modelLoadPromise: Promise<void> | null = null;
   private activeModelId: ModelId | null = null;
   private autoPlaceSurface = false;
+  private requireWorldAnchor = false;
 
   constructor(options: XRExperienceOptions) {
     this.options = options;
@@ -220,6 +221,7 @@ export class XRExperience {
 
   enableAutoPlaceSurface(): void {
     this.autoPlaceSurface = true;
+    this.requireWorldAnchor = true;
   }
 
   playModelAction(): Promise<boolean> {
@@ -235,9 +237,14 @@ export class XRExperience {
       const xr = navigator.xr;
       if (!xr) throw new DOMException('WebXR no está disponible.', 'NotSupportedError');
 
+      const requiredFeatures: string[] = ['hit-test', 'dom-overlay'];
+      const optionalFeatures: string[] = ['local-floor', 'depth-sensing'];
+      if (this.requireWorldAnchor) requiredFeatures.push('anchors');
+      else optionalFeatures.push('anchors');
+
       const session = await xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test', 'dom-overlay'],
-        optionalFeatures: ['anchors', 'local-floor', 'depth-sensing'],
+        requiredFeatures,
+        optionalFeatures,
         depthSensing: DEPTH_SENSING_OPTIONS,
         domOverlay: { root: this.options.overlay },
       });
@@ -266,7 +273,9 @@ export class XRExperience {
       const message =
         isCameraAccessBlockedError(error)
           ? 'La cámara está desactivada o bloqueada. Sigue los pasos indicados para activarla.'
-          : 'No se pudo iniciar la realidad aumentada. Actualiza el navegador y los servicios AR del dispositivo.';
+          : this.requireWorldAnchor
+            ? 'Este dispositivo o navegador no puede crear un anclaje AR estable desde la hoja escaneada.'
+            : 'No se pudo iniciar la realidad aumentada. Actualiza el navegador y los servicios AR del dispositivo.';
       this.setState('error', message);
       throw error;
     }
@@ -433,9 +442,16 @@ export class XRExperience {
     this.autoPlaceSurface = false;
 
     const anchorPromise = result.createAnchor?.();
+    if (!anchorPromise && this.requireWorldAnchor) {
+      this.setState('error', 'La realidad aumentada no pudo fijar un anclaje estable en la hoja.');
+      return;
+    }
     anchorPromise
       ?.then((anchor) => this.retainAnchor(anchor))
       .catch(() => {
+        if (this.requireWorldAnchor) {
+          this.setState('error', 'La realidad aumentada perdio el anclaje de la hoja al colocarlo.');
+        }
         // La pose local congelada continúa siendo un fallback válido.
       });
   }
@@ -567,6 +583,7 @@ export class XRExperience {
     this.lastFrameTime = null;
     this.anchorRoot.matrix.identity();
     this.autoPlaceSurface = false;
+    this.requireWorldAnchor = false;
     this.setSliceProgress(0);
     this.setModelSizeMeters(DEFAULT_MODEL_SIZE_METERS);
   }

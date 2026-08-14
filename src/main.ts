@@ -33,10 +33,13 @@ import { TestCubeExperience } from './test-cube-experience';
 import { TestCubeViewer } from './test-cube-viewer';
 import {
   analyzeMarkerFrame,
+  assessMarkerPlacement,
+  isMarkerDetectionStable,
   mapPointFromVideoToViewport,
   smoothMarkerDetection,
   trackMarker,
   type MarkerDetection,
+  type MarkerPlacementAssessment,
   type MarkerPoint,
 } from './marker-scan';
 
@@ -1516,26 +1519,65 @@ function setQrScannerArButtonState(visible: boolean, disabled = false): void {
   qrScannerConfirmArButton.textContent = disabled ? 'Abriendo AR...' : 'Ver en AR';
 }
 
-function isQrScannerDetectionReadyForAr(
+function distanceBetweenPoints(first: MarkerPoint, second: MarkerPoint): number {
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function getQrScannerReadinessCopy(
+  assessment: MarkerPlacementAssessment,
+  modelName: string,
+): { hint: string; status: string; canStartAr: boolean } {
+  if (assessment.ready) {
+    return {
+      hint: 'Hoja lista para AR',
+      status: `4/4 X detectadas. Toca "Ver en AR" sin mover el movil para colocar ${modelName}.`,
+      canStartAr: true,
+    };
+  }
+
+  if (assessment.issue === 'too-small') {
+    return {
+      hint: 'Acerca la hoja',
+      status: '4/4 X detectadas. Acerca la hoja hasta que ocupe mas imagen.',
+      canStartAr: false,
+    };
+  }
+
+  if (assessment.issue === 'too-large') {
+    return {
+      hint: 'Aleja un poco',
+      status: '4/4 X detectadas. Aleja la hoja para que entren bien las cuatro esquinas.',
+      canStartAr: false,
+    };
+  }
+
+  if (assessment.issue === 'skewed') {
+    return {
+      hint: 'Endereza la hoja',
+      status: '4/4 X detectadas. Pon el movil mas paralelo a la hoja para reducir la perspectiva.',
+      canStartAr: false,
+    };
+  }
+
+  return {
+    hint: 'Centra la hoja',
+    status: '4/4 X detectadas. Centra la hoja en la pantalla antes de abrir AR.',
+    canStartAr: false,
+  };
+}
+
+function applyQrScannerReadiness(
   detection: MarkerDetection,
   sourceWidth: number,
   sourceHeight: number,
-): boolean {
-  if (sourceWidth <= 0 || sourceHeight <= 0) return false;
-
-  const centerOffsetX = Math.abs(detection.center.x - sourceWidth * 0.5) / sourceWidth;
-  const centerOffsetY = Math.abs(detection.center.y - sourceHeight * 0.5) / sourceHeight;
-  const widthCoverage = detection.width / sourceWidth;
-  const heightCoverage = detection.height / sourceHeight;
-
-  return centerOffsetX <= 0.12
-    && centerOffsetY <= 0.12
-    && widthCoverage >= 0.32
-    && heightCoverage >= 0.32;
-}
-
-function distanceBetweenPoints(first: MarkerPoint, second: MarkerPoint): number {
-  return Math.hypot(first.x - second.x, first.y - second.y);
+  modelName: string,
+): void {
+  const assessment = assessMarkerPlacement(detection, sourceWidth, sourceHeight);
+  const copy = getQrScannerReadinessCopy(assessment, modelName);
+  qrScannerHint.hidden = false;
+  qrScannerHint.textContent = copy.hint;
+  qrScannerStatus.textContent = copy.status;
+  setQrScannerArButtonState(copy.canStartAr);
 }
 
 function hideQrScannerOverlay(): void {
@@ -1714,22 +1756,16 @@ async function startQrScannerStream(): Promise<void> {
             qrScannerDetection = smoothedTrackedDetection;
             qrScannerLostFrames = 0;
             updateQrScannerOverlay(smoothedTrackedDetection, analysisWidth, analysisHeight, true);
-            if (isQrScannerDetectionReadyForAr(smoothedTrackedDetection, analysisWidth, analysisHeight)) {
-              qrScannerHint.hidden = false;
-              qrScannerHint.textContent = 'Hoja lista para AR';
-              qrScannerStatus.textContent = `4/4 X detectadas. Toca "Ver en AR" sin mover el móvil para colocar ${model.name}.`;
-              setQrScannerArButtonState(true);
-            } else {
-              qrScannerHint.hidden = false;
-              qrScannerHint.textContent = 'Centra la hoja';
-              qrScannerStatus.textContent = 'Mantén la hoja centrada y ocupando buena parte de la imagen para abrir AR.';
-              setQrScannerArButtonState(false);
-            }
+            applyQrScannerReadiness(smoothedTrackedDetection, analysisWidth, analysisHeight, model.name);
           }
         } else {
           qrScannerLostFrames += 1;
           setQrScannerArButtonState(false);
           if (qrScannerLostFrames > QR_SCANNER_LOST_FRAME_TOLERANCE) {
+            qrScannerPlacementLocked = false;
+            qrScannerDetection = null;
+            qrScannerStableDetectionFrames = 0;
+            hideQrScannerOverlay();
             qrScannerStatus.textContent = 'Seguimiento perdido. Vuelve a apuntar a la hoja para recuperar la detección.';
           }
         }
@@ -1747,6 +1783,7 @@ async function startQrScannerStream(): Promise<void> {
       );
 
       if (nextDetection) {
+        const detectionIsStable = isMarkerDetectionStable(qrScannerDetection, nextDetection);
         const smoothedDetection = smoothMarkerDetection(qrScannerDetection, nextDetection);
         if (!smoothedDetection) {
           scheduleQrScannerFrame(detectFrame);
@@ -1754,7 +1791,9 @@ async function startQrScannerStream(): Promise<void> {
         }
         qrScannerDetection = smoothedDetection;
         qrScannerLostFrames = 0;
-        qrScannerStableDetectionFrames += 1;
+        qrScannerStableDetectionFrames = detectionIsStable
+          ? qrScannerStableDetectionFrames + 1
+          : 1;
         const confirmed = qrScannerStableDetectionFrames >= QR_SCANNER_CONFIRMATION_FRAMES;
         updateQrScannerOverlay(smoothedDetection, analysisWidth, analysisHeight, confirmed);
 
@@ -1763,21 +1802,13 @@ async function startQrScannerStream(): Promise<void> {
           qrScannerOverlayVisible = true;
           qrScannerPlacementLocked = true;
           qrScannerLostFrames = 0;
-          if (isQrScannerDetectionReadyForAr(smoothedDetection, analysisWidth, analysisHeight)) {
-            qrScannerHint.hidden = false;
-            qrScannerHint.textContent = 'Hoja lista para AR';
-            qrScannerStatus.textContent = `4/4 X detectadas. Toca "Ver en AR" sin mover el móvil para colocar ${model.name}.`;
-            setQrScannerArButtonState(true);
-          } else {
-            qrScannerHint.hidden = false;
-            qrScannerHint.textContent = 'Centra la hoja';
-            qrScannerStatus.textContent = '4/4 X detectadas. Acerca y centra la hoja para poder entrar en AR.';
-            setQrScannerArButtonState(false);
-          }
+          applyQrScannerReadiness(smoothedDetection, analysisWidth, analysisHeight, model.name);
         } else {
           qrScannerOverlayVisible = false;
           setQrScannerArButtonState(false);
-          qrScannerStatus.textContent = `4/4 X localizadas. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`;
+          qrScannerStatus.textContent = detectionIsStable
+            ? `4/4 X localizadas. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`
+            : '4/4 X localizadas. Manten la hoja quieta para confirmar.';
         }
       } else {
         qrScannerStableDetectionFrames = 0;
