@@ -406,3 +406,79 @@ la explicacion principal pasa a ser apertura de sesion, luz o anclaje.
 **Que reabriria la decision:** que la medicion fisica con cinta muestre un
 tamaño distinto de `30 cm` en el cuerpo, que la pieza resulte incomoda en sala o
 que coordinacion regenere el modelo con otra escala declarada.
+
+## 2026-08-17 - Migracion del escaneo por `X` a ArUco en la rama `dev`
+
+**Que se probo:** la linea de escaneo web que venia de cuatro `X` negras en las
+esquinas se sustituyo por deteccion ArUco sobre `OpenCV.js`, manteniendo el
+flujo de boton `Escaneo` y superposicion del modelo 3D sobre la hoja. El
+recorrido real de cambios en esta migracion queda reflejado en los commits
+`61a7c3d`, `6f0669c`, `f1f2e57`, `6e1dbd5` y `1ba5433`.
+
+**Que se eligio:** dejar el flujo ArUco como estado actual de `dev`, con estas
+propiedades:
+
+- el boton `Escaneo` abre un modal propio y no entra directamente en AR;
+- antes de abrir la camara se hace una comprobacion previa de compatibilidad;
+- el detector se carga en cliente mediante `ensureMarkerDetectorReady()` en
+  `src/marker-scan.ts`;
+- la deteccion usa el diccionario `DICT_4X4_50`;
+- la app ya no depende de un patron fijo `0, 1, 2, 3`;
+- la app acepta cualquier grupo de `4` marcadores ArUco distintos, uno en cada
+  esquina de la hoja;
+- el ejemplo publicado para la seta roja usa los IDs `7`, `12`, `31` y `23`;
+- la plantilla publicada es estatica (`public/markers/aruco-board.html` y
+  `public/markers/aruco-board.svg`) y ya no depende de generar los marcadores en
+  tiempo real dentro de la propia pagina.
+
+**Que se descarto:** varias decisiones intermedias se abandonaron durante la
+exploracion:
+
+- mantener el escaneo por cuatro `X` como camino principal en web;
+- dejar que el HTML de la plantilla dibujara los ArUco descargando `OpenCV.js`
+  en tiempo real;
+- restringir el detector a los IDs fijos `0`, `1`, `2` y `3`;
+- abrir la camara de forma inmediata sin avisar antes al usuario si su
+  navegador podia usar realmente la funcion.
+
+**Por que:** la experiencia con `X` era fragil y costaba separar falsos
+positivos de confirmaciones reales. ArUco ofrece una referencia visual mas
+estable, mas conocida y mejor alineada con un flujo de "marcador impreso". Al
+mismo tiempo, el cambio exigia dos ajustes practicos que tambien se han dejado
+integrados: una hoja de ejemplo fiable para probar la seta y una comprobacion
+previa para no pedir camara a ciegas cuando el navegador no puede cargar el
+detector.
+
+**Que quedo implementado exactamente:** el estado actual de la rama `dev`
+incluye estas piezas concretas:
+
+1. `src/marker-scan.ts` carga `OpenCV.js` en navegador y expone
+   `ensureMarkerDetectorReady()`, `analyzeMarkerFrame()`, `trackMarker()` y el
+   resto del flujo de seguimiento.
+2. `src/main.ts` integra el modal de escaneo ArUco, la apertura de camara, la
+   confirmacion de cuatro esquinas, la previsualizacion del modelo y el salto a
+   AR.
+3. `public/markers/aruco-board.html` y `public/markers/aruco-board.svg` sirven
+   como hoja de ejemplo imprimible para la seta roja.
+4. `README.md` ya explica la regla de uso: `4` marcadores ArUco distintos del
+   diccionario `4x4_50`, uno en cada esquina, con margen blanco y hoja completa
+   visible al iniciar el escaneo.
+5. El precheck de compatibilidad del escaneo comprueba contexto seguro,
+   disponibilidad de `getUserMedia`, estado del permiso de camara y carga del
+   detector antes de mostrar `Iniciar escaneo`.
+
+**Consecuencias:** el flujo es mas honesto y mas controlable para pruebas en
+movil, pero sigue teniendo compromisos tecnicos claros:
+
+- depende de poder cargar `OpenCV.js` en el navegador;
+- necesita camara, contexto seguro y una hoja completa visible;
+- sigue siendo una exploracion publicada en `dev`, no una solucion cerrada de
+  sala;
+- la plantilla de ejemplo vale para la seta roja, pero la logica ya esta
+  preparada para reutilizar otros grupos de cuatro IDs del mismo diccionario.
+
+**Que reabriria la decision:** mover `OpenCV.js` al propio proyecto para no
+depender de red, cambiar de diccionario ArUco si algun movil concreto detecta
+mejor otra familia, o volver a cuestionar el flujo si en pruebas reales sigue
+habiendo jitter, perdida frecuente de seguimiento o problemas de carga en
+navegadores concretos.
