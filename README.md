@@ -31,6 +31,36 @@ Cada pieza incorpora partículas con color y movimiento propios que responden a 
 La app nativa de iOS usa un marcador impreso distinto: `public/markers/x-corner-marker-sheet.png`.
 La hoja contiene cuatro `X` negras en las esquinas y sirve como referencia para colocar el modelo sobre el papel.
 
+## Marcadores ArUco
+
+La rama de prueba web con escaneo usa marcadores ArUco del diccionario `DICT_4X4_50`.
+La regla importante es esta:
+
+- no hace falta un dibujo fijo concreto;
+- hace falta una hoja con `4` marcadores ArUco distintos;
+- debe haber `1` marcador en cada esquina de la hoja;
+- al escanear, la app toma esas cuatro esquinas como base para colocar el modelo 3D.
+
+Esto significa que puedes cambiar los IDs siempre que mantengas el mismo esquema de uso:
+
+1. Elige `4` IDs distintos del diccionario `4x4_50`.
+2. Coloca un marcador en cada esquina de la hoja.
+3. Deja margen blanco alrededor de cada marcador.
+4. Enseña la hoja completa a la cámara al iniciar el escaneo.
+5. Cuando la app confirme las cuatro esquinas, abre AR sin mover bruscamente el móvil.
+
+Ejemplo actual para la seta roja:
+
+- superior izquierda: `7`
+- superior derecha: `12`
+- inferior izquierda: `31`
+- inferior derecha: `23`
+
+La hoja de ejemplo publicada para probar la seta está en:
+
+- `public/markers/aruco-board.html`
+- `public/markers/aruco-board.svg`
+
 ## Interacciones de los modelos
 
 Cada modelo dispone de una acción exclusiva —liberar esporas, cargar energía,

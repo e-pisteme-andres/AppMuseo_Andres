@@ -90,8 +90,8 @@ interface DetectedArucoMarker {
 }
 
 const OPENCV_SCRIPT_URL = 'https://docs.opencv.org/4.x/opencv.js';
-const ARUCO_DICTIONARY_NAME = 'DICT_4X4_50';
-export const ARUCO_MARKER_IDS = [0, 1, 2, 3] as const;
+export const ARUCO_DICTIONARY_NAME = 'DICT_4X4_50';
+export const ARUCO_MARKER_EXAMPLE_IDS = [7, 12, 23, 31] as const;
 export const ARUCO_MARKER_DOWNLOAD_PATH = 'markers/aruco-board.html';
 
 let openCvReadyPromise: Promise<OpenCvLike> | null = null;
@@ -397,16 +397,81 @@ function countQuadrants(markers: readonly DetectedArucoMarker[]): number {
   return Number(topLeft) + Number(topRight) + Number(bottomRight) + Number(bottomLeft);
 }
 
-function composeBoardDetection(markers: readonly DetectedArucoMarker[]): MarkerDetection | null {
-  const markerById = new Map(markers.map((marker) => [marker.id, marker]));
-  const topLeftMarker = markerById.get(ARUCO_MARKER_IDS[0]);
-  const topRightMarker = markerById.get(ARUCO_MARKER_IDS[1]);
-  const bottomRightMarker = markerById.get(ARUCO_MARKER_IDS[2]);
-  const bottomLeftMarker = markerById.get(ARUCO_MARKER_IDS[3]);
+function getMarkerDistanceFromPoint(marker: DetectedArucoMarker, point: MarkerPoint): number {
+  return distance(marker.center, point);
+}
+
+function chooseMostPeripheralMarker(
+  current: DetectedArucoMarker | null,
+  candidate: DetectedArucoMarker,
+  centroid: MarkerPoint,
+): DetectedArucoMarker {
+  if (!current) return candidate;
+  return getMarkerDistanceFromPoint(candidate, centroid) >= getMarkerDistanceFromPoint(current, centroid)
+    ? candidate
+    : current;
+}
+
+function selectQuadrantMarkers(markers: readonly DetectedArucoMarker[]): {
+  topLeft: DetectedArucoMarker;
+  topRight: DetectedArucoMarker;
+  bottomRight: DetectedArucoMarker;
+  bottomLeft: DetectedArucoMarker;
+} | null {
+  if (markers.length < 4) return null;
+
+  const centroid = markers.reduce(
+    (accumulator, marker) => ({
+      x: accumulator.x + marker.center.x,
+      y: accumulator.y + marker.center.y,
+    }),
+    { x: 0, y: 0 },
+  );
+  centroid.x /= markers.length;
+  centroid.y /= markers.length;
+
+  let topLeftMarker: DetectedArucoMarker | null = null;
+  let topRightMarker: DetectedArucoMarker | null = null;
+  let bottomRightMarker: DetectedArucoMarker | null = null;
+  let bottomLeftMarker: DetectedArucoMarker | null = null;
+
+  for (const marker of markers) {
+    const isLeft = marker.center.x <= centroid.x;
+    const isTop = marker.center.y <= centroid.y;
+
+    if (isLeft && isTop) {
+      topLeftMarker = chooseMostPeripheralMarker(topLeftMarker, marker, centroid);
+    } else if (!isLeft && isTop) {
+      topRightMarker = chooseMostPeripheralMarker(topRightMarker, marker, centroid);
+    } else if (!isLeft && !isTop) {
+      bottomRightMarker = chooseMostPeripheralMarker(bottomRightMarker, marker, centroid);
+    } else {
+      bottomLeftMarker = chooseMostPeripheralMarker(bottomLeftMarker, marker, centroid);
+    }
+  }
 
   if (!topLeftMarker || !topRightMarker || !bottomRightMarker || !bottomLeftMarker) {
     return null;
   }
+
+  return {
+    topLeft: topLeftMarker,
+    topRight: topRightMarker,
+    bottomRight: bottomRightMarker,
+    bottomLeft: bottomLeftMarker,
+  };
+}
+
+function composeBoardDetection(markers: readonly DetectedArucoMarker[]): MarkerDetection | null {
+  const quadrantMarkers = selectQuadrantMarkers(markers);
+  if (!quadrantMarkers) return null;
+
+  const {
+    topLeft: topLeftMarker,
+    topRight: topRightMarker,
+    bottomRight: bottomRightMarker,
+    bottomLeft: bottomLeftMarker,
+  } = quadrantMarkers;
 
   const corners: [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint] = [
     topLeftMarker.corners[0],
@@ -456,8 +521,7 @@ export function analyzeMarkerFrame(imageData: ImageData): MarkerFrameAnalysis {
 
   try {
     runArucoDetection(cv, image, dictionary, parameters, corners, ids, rejected);
-    const detectedMarkers = extractDetectedMarkers(corners, ids)
-      .filter((marker) => ARUCO_MARKER_IDS.includes(marker.id as (typeof ARUCO_MARKER_IDS)[number]));
+    const detectedMarkers = extractDetectedMarkers(corners, ids);
 
     return {
       detection: composeBoardDetection(detectedMarkers),

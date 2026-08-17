@@ -32,7 +32,9 @@ import {
 import { TestCubeExperience } from './test-cube-experience';
 import { TestCubeViewer } from './test-cube-viewer';
 import {
+  ARUCO_DICTIONARY_NAME,
   ARUCO_MARKER_DOWNLOAD_PATH,
+  ARUCO_MARKER_EXAMPLE_IDS,
   analyzeMarkerFrame,
   assessMarkerPlacement,
   ensureMarkerDetectorReady,
@@ -308,10 +310,10 @@ app.innerHTML = `
             </div>
           </div>
           <p class="qr-scanner-description" id="qr-scanner-description">
-            Apunta la camara a una hoja con cuatro marcadores ArUco, uno en cada esquina. Cuando localicemos los cuatro marcadores, el modelo 3D aparecera sobre la hoja.
+            Apunta la camara a una hoja con cuatro marcadores ArUco del diccionario ${ARUCO_DICTIONARY_NAME}, uno en cada esquina. Cuando localicemos las cuatro esquinas, el modelo 3D aparecera sobre la hoja.
           </p>
           <p class="qr-scanner-description">
-            <a href="${import.meta.env.BASE_URL}${ARUCO_MARKER_DOWNLOAD_PATH}" target="_blank" rel="noreferrer">Abrir plantilla ArUco para imprimir</a>
+            <a href="${import.meta.env.BASE_URL}${ARUCO_MARKER_DOWNLOAD_PATH}" target="_blank" rel="noreferrer">Abrir ejemplo para la seta (${ARUCO_MARKER_EXAMPLE_IDS.join(', ')})</a>
           </p>
           <div class="qr-scanner-stage" id="qr-scanner-stage">
             <video id="qr-scanner-video" class="qr-scanner-video" playsinline muted autoplay></video>
