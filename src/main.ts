@@ -1702,16 +1702,8 @@ async function startQrScannerStream(): Promise<void> {
 
   const modelId = getQrScannerModelId();
   const model = findModelDefinition(modelId);
-  qrScannerStatus.textContent = 'Cargando detector ArUco...';
-
-  try {
-    await ensureMarkerDetectorReady();
-  } catch {
-    qrScannerStatus.textContent = 'No se pudo cargar el detector ArUco en este navegador.';
-    return;
-  }
-
   qrScannerStatus.textContent = 'Solicitando acceso a la camara...';
+  const detectorReadyPromise = ensureMarkerDetectorReady();
 
   try {
     qrScannerStream = await navigator.mediaDevices.getUserMedia({
@@ -1731,7 +1723,7 @@ async function startQrScannerStream(): Promise<void> {
     return;
   }
 
-  qrScannerStatus.textContent = `Camara activa. Busca los cuatro marcadores ArUco para colocar ${model.name}.`;
+  qrScannerStatus.textContent = 'Camara activa. Cargando detector ArUco...';
   qrScannerHint.textContent = 'Busca los cuatro marcadores ArUco';
   qrScannerStage.dataset.state = 'searching';
   hideQrScannerOverlay();
@@ -1741,6 +1733,15 @@ async function startQrScannerStream(): Promise<void> {
     return;
   }
   qrScannerModelPreview.start();
+
+  try {
+    await detectorReadyPromise;
+  } catch {
+    qrScannerStatus.textContent = 'La camara esta activa, pero no se pudo cargar el detector ArUco en este navegador.';
+    return;
+  }
+
+  qrScannerStatus.textContent = `Camara activa. Busca los cuatro marcadores ArUco para colocar ${model.name}.`;
 
   const detectFrame = (): void => {
     if (!qrScannerStream) return;
