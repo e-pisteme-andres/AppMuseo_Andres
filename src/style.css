@@ -434,6 +434,7 @@ footer a { color: #8be6c1; text-decoration: none; }
   border-color: rgba(111, 238, 186, .4);
   box-shadow: inset 0 0 0 1px rgba(111, 238, 186, .18);
 }
+.qr-scanner-stage[hidden] { display: none; }
 .qr-scanner-video { display: block; width: 100%; height: 300px; object-fit: cover; }
 .qr-scanner-overlay,
 .qr-scanner-model,

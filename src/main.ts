@@ -315,7 +315,14 @@ app.innerHTML = `
           <p class="qr-scanner-description">
             <a href="${import.meta.env.BASE_URL}${ARUCO_MARKER_DOWNLOAD_PATH}" target="_blank" rel="noreferrer">Abrir ejemplo para la seta (${ARUCO_MARKER_EXAMPLE_IDS.join(', ')})</a>
           </p>
-          <div class="qr-scanner-stage" id="qr-scanner-stage">
+          <div class="camera-check" id="qr-scanner-check" data-state="checking" role="status" aria-live="polite">
+            <span class="camera-check-indicator" aria-hidden="true"></span>
+            <div>
+              <strong id="qr-scanner-check-title">Comprobando el escaneo ArUco…</strong>
+              <span id="qr-scanner-check-detail">Vamos a revisar la camara, el navegador y el detector antes de abrir la funcion.</span>
+            </div>
+          </div>
+          <div class="qr-scanner-stage" id="qr-scanner-stage" hidden>
             <video id="qr-scanner-video" class="qr-scanner-video" playsinline muted autoplay></video>
             <svg id="qr-scanner-overlay" class="qr-scanner-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
               <polygon id="qr-scanner-polygon" class="qr-scanner-polygon" points="0,0 0,0 0,0 0,0"></polygon>
@@ -333,9 +340,10 @@ app.innerHTML = `
           </div>
           <canvas id="qr-scanner-analysis" hidden></canvas>
           <p class="qr-scanner-status" id="qr-scanner-status" role="status" aria-live="polite">
-            Preparando la camara...
+            Comprobando si este dispositivo puede usar el escaneo...
           </p>
           <div class="qr-scanner-actions">
+            <button class="camera-confirm-button" id="qr-scanner-start" type="button" hidden>Iniciar escaneo</button>
             <button class="camera-confirm-button" id="qr-scanner-confirm-ar" type="button" hidden>Ver en AR</button>
             <button class="camera-secondary-button" id="qr-scanner-close" type="button">Cerrar</button>
           </div>
@@ -506,6 +514,9 @@ const panoramaGazeLabels = [...panoramaGazeTeleport.querySelectorAll<HTMLElement
 const panoramaLiveStatus = getRequiredElement<HTMLElement>('#panorama-live-status');
 const iosARLink = getRequiredElement<HTMLAnchorElement>('#ios-ar-link');
 const qrScannerDialog = getRequiredElement<HTMLDialogElement>('#qr-scanner-dialog');
+const qrScannerCheck = getRequiredElement<HTMLElement>('#qr-scanner-check');
+const qrScannerCheckTitle = getRequiredElement<HTMLElement>('#qr-scanner-check-title');
+const qrScannerCheckDetail = getRequiredElement<HTMLElement>('#qr-scanner-check-detail');
 const qrScannerStage = getRequiredElement<HTMLElement>('#qr-scanner-stage');
 const qrScannerVideo = getRequiredElement<HTMLVideoElement>('#qr-scanner-video');
 const qrScannerPolygon = getRequiredElement<SVGPolygonElement>('#qr-scanner-polygon');
@@ -513,6 +524,7 @@ const qrScannerHint = getRequiredElement<HTMLElement>('#qr-scanner-hint');
 const qrScannerModelCanvas = getRequiredElement<HTMLCanvasElement>('#qr-scanner-model');
 const qrScannerAnalysisCanvas = getRequiredElement<HTMLCanvasElement>('#qr-scanner-analysis');
 const qrScannerStatus = getRequiredElement<HTMLElement>('#qr-scanner-status');
+const qrScannerStartButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-start');
 const qrScannerConfirmArButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-confirm-ar');
 const qrScannerCloseButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-close');
 let arMode: ARMode = 'unavailable';
@@ -1501,8 +1513,109 @@ function stopQrScannerStream(): void {
   qrScannerModelCanvas.style.left = '50%';
   qrScannerModelCanvas.style.top = '50%';
   qrScannerModelCanvas.style.transform = 'translate(-50%, -50%) rotate(0deg)';
+  qrScannerStage.hidden = true;
   setQrScannerArButtonState(false);
+  qrScannerStartButton.hidden = true;
+  qrScannerStartButton.disabled = false;
   qrScannerModelPreview.stop();
+}
+
+function setQrScannerCheck(
+  state: 'checking' | 'available' | 'unknown' | 'blocked' | 'unavailable',
+  title: string,
+  detail: string,
+): void {
+  qrScannerCheck.dataset.state = state;
+  qrScannerCheckTitle.textContent = title;
+  qrScannerCheckDetail.textContent = detail;
+}
+
+async function refreshQrScannerPreflight(): Promise<void> {
+  stopQrScannerStream();
+  qrScannerStatus.textContent = 'Comprobando si este dispositivo puede usar el escaneo...';
+  qrScannerHint.hidden = false;
+  qrScannerHint.textContent = 'Comprobando compatibilidad';
+  setQrScannerCheck(
+    'checking',
+    'Comprobando el escaneo ArUco…',
+    'Vamos a revisar la camara, el navegador y el detector antes de abrir la funcion.',
+  );
+
+  if (!qrScannerAnalysisContext) {
+    setQrScannerCheck(
+      'unavailable',
+      'Escaneo no disponible',
+      'Este dispositivo no permite preparar el analisis visual necesario para detectar marcadores.',
+    );
+    qrScannerStatus.textContent = 'Este dispositivo no puede preparar el analisis visual del escaneo.';
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    setQrScannerCheck(
+      'unavailable',
+      'Hace falta una conexion segura',
+      'La camara y el detector solo se pueden abrir desde una pagina HTTPS o desde un entorno seguro equivalente.',
+    );
+    qrScannerStatus.textContent = 'El escaneo necesita una conexion segura para abrir la camara.';
+    return;
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setQrScannerCheck(
+      'unavailable',
+      'Este navegador no puede abrir la camara',
+      'Falta la API necesaria para pedir acceso a la camara desde esta pagina.',
+    );
+    qrScannerStatus.textContent = 'Este navegador no admite el acceso necesario a la camara.';
+    return;
+  }
+
+  const permissions = await inspectArPermissions(navigator.permissions);
+  if (permissions?.effective === 'denied') {
+    setQrScannerCheck(
+      'blocked',
+      'La camara esta bloqueada',
+      'Antes de usar el escaneo debes permitir la camara para este navegador o para este sitio.',
+    );
+    qrScannerStatus.textContent = 'La camara esta bloqueada. Activa el permiso y vuelve a intentarlo.';
+    return;
+  }
+
+  try {
+    await ensureMarkerDetectorReady();
+  } catch {
+    setQrScannerCheck(
+      'unavailable',
+      'No se pudo cargar el detector ArUco',
+      'El navegador pudo abrir la funcion, pero no pudo cargar el detector necesario para reconocer los marcadores.',
+    );
+    qrScannerStatus.textContent = 'Este navegador no ha podido cargar el detector ArUco.';
+    return;
+  }
+
+  if (permissions?.effective === 'granted') {
+    setQrScannerCheck(
+      'available',
+      'Escaneo disponible',
+      'La camara ya esta permitida y el detector ArUco esta listo. Puedes iniciar el escaneo cuando quieras.',
+    );
+  } else if (permissions?.effective === 'prompt') {
+    setQrScannerCheck(
+      'available',
+      'Puedes usar el escaneo',
+      'El detector ArUco esta listo. Al continuar, el navegador te pedira permiso para abrir la camara.',
+    );
+  } else {
+    setQrScannerCheck(
+      'unknown',
+      'Parece disponible',
+      'El detector ArUco esta listo. Este navegador no deja consultar el permiso por adelantado, asi que podria pedir la camara al continuar.',
+    );
+  }
+
+  qrScannerStartButton.hidden = false;
+  qrScannerStatus.textContent = 'Todo listo. Pulsa "Iniciar escaneo" para abrir la camara.';
 }
 
 function closeQrScannerDialog(): void {
@@ -1693,11 +1806,20 @@ function scheduleQrScannerFrame(callback: () => void): void {
 }
 
 async function startQrScannerStream(): Promise<void> {
+  qrScannerStartButton.hidden = true;
+  qrScannerStartButton.disabled = true;
+  qrScannerStage.hidden = false;
   if (!qrScannerAnalysisContext) {
+    qrScannerStage.hidden = true;
+    qrScannerStartButton.hidden = false;
+    qrScannerStartButton.disabled = false;
     qrScannerStatus.textContent = 'No se pudo preparar el analisis visual en este dispositivo.';
     return;
   }
   if (!navigator.mediaDevices?.getUserMedia) {
+    qrScannerStage.hidden = true;
+    qrScannerStartButton.hidden = false;
+    qrScannerStartButton.disabled = false;
     qrScannerStatus.textContent = 'Este navegador no permite abrir la camara desde esta pagina.';
     return;
   }
@@ -1721,6 +1843,14 @@ async function startQrScannerStream(): Promise<void> {
     qrScannerVideo.muted = true;
     await qrScannerVideo.play();
   } catch {
+    setQrScannerCheck(
+      'blocked',
+      'No se pudo abrir la camara',
+      'El navegador no concedio acceso a la camara. Revisa el permiso y vuelve a pulsar "Iniciar escaneo".',
+    );
+    qrScannerStage.hidden = true;
+    qrScannerStartButton.hidden = false;
+    qrScannerStartButton.disabled = false;
     qrScannerStatus.textContent = 'No se pudo abrir la camara. Revisa el permiso del navegador y vuelve a intentarlo.';
     return;
   }
@@ -1739,9 +1869,23 @@ async function startQrScannerStream(): Promise<void> {
   try {
     await detectorReadyPromise;
   } catch {
+    setQrScannerCheck(
+      'unavailable',
+      'No se pudo cargar el detector ArUco',
+      'La camara esta activa, pero el detector no ha podido iniciarse en este navegador.',
+    );
+    qrScannerStartButton.hidden = false;
+    qrScannerStartButton.disabled = false;
+    qrScannerStage.hidden = true;
     qrScannerStatus.textContent = 'La camara esta activa, pero no se pudo cargar el detector ArUco en este navegador.';
     return;
   }
+
+  setQrScannerCheck(
+    'available',
+    'Escaneo en curso',
+    'La camara y el detector ArUco estan activos. Ahora busca la hoja completa para confirmar las cuatro esquinas.',
+  );
 
   qrScannerStatus.textContent = `Camara activa. Busca los cuatro marcadores ArUco para colocar ${model.name}.`;
 
@@ -1856,12 +2000,12 @@ async function startQrScannerStream(): Promise<void> {
 async function openQrScannerDialog(): Promise<void> {
   stopQrScannerStream();
   overlay.style.display = 'block';
-  qrScannerStatus.textContent = 'Preparando la camara...';
+  qrScannerStatus.textContent = 'Comprobando si este dispositivo puede usar el escaneo...';
   if (!qrScannerDialog.open) {
     if (typeof qrScannerDialog.showModal === 'function') qrScannerDialog.showModal();
     else qrScannerDialog.setAttribute('open', '');
   }
-  await startQrScannerStream();
+  await refreshQrScannerPreflight();
 }
 
 async function beginMarkerAnchoredArSession(): Promise<void> {
@@ -2214,6 +2358,9 @@ scanQrToggle.addEventListener('click', () => {
 });
 qrScannerConfirmArButton.addEventListener('click', () => {
   void beginMarkerAnchoredArSession();
+});
+qrScannerStartButton.addEventListener('click', () => {
+  void startQrScannerStream();
 });
 qrScannerCloseButton.addEventListener('click', () => {
   closeQrScannerDialog();
