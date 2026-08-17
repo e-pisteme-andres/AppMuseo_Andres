@@ -32,8 +32,10 @@ import {
 import { TestCubeExperience } from './test-cube-experience';
 import { TestCubeViewer } from './test-cube-viewer';
 import {
+  ARUCO_MARKER_DOWNLOAD_PATH,
   analyzeMarkerFrame,
   assessMarkerPlacement,
+  ensureMarkerDetectorReady,
   isMarkerDetectionStable,
   mapPointFromVideoToViewport,
   smoothMarkerDetection,
@@ -275,7 +277,7 @@ app.innerHTML = `
           </button>
           <button class="xr-tool-button" id="scan-qr-toggle" type="button">
             <span class="xr-tool-icon xr-scan-icon" aria-hidden="true"></span>
-            <span>Escaneo<br>X</span>
+            <span>Escaneo<br>ArUco</span>
           </button>
           <button class="xr-tool-button" id="hands-toggle" type="button" aria-disabled="true">
             <span class="xr-tool-icon xr-hand-icon" aria-hidden="true">✋</span>
@@ -302,11 +304,14 @@ app.innerHTML = `
             <span class="qr-scanner-icon" aria-hidden="true"></span>
             <div>
               <p class="qr-scanner-kicker">Escaneo guiado</p>
-              <h2 id="qr-scanner-title">Buscar 4 marcas X</h2>
+              <h2 id="qr-scanner-title">Buscar 4 marcadores ArUco</h2>
             </div>
           </div>
           <p class="qr-scanner-description" id="qr-scanner-description">
-            Apunta la camara a una hoja con una X negra en cada esquina. Cuando localicemos las cuatro marcas, el modelo 3D aparecera sobre la hoja.
+            Apunta la camara a una hoja con cuatro marcadores ArUco, uno en cada esquina. Cuando localicemos los cuatro marcadores, el modelo 3D aparecera sobre la hoja.
+          </p>
+          <p class="qr-scanner-description">
+            <a href="${import.meta.env.BASE_URL}${ARUCO_MARKER_DOWNLOAD_PATH}" target="_blank" rel="noreferrer">Abrir plantilla ArUco para imprimir</a>
           </p>
           <div class="qr-scanner-stage" id="qr-scanner-stage">
             <video id="qr-scanner-video" class="qr-scanner-video" playsinline muted autoplay></video>
@@ -321,7 +326,7 @@ app.innerHTML = `
               <span class="qr-scanner-corner corner-bottom-left"></span>
             </div>
             <div class="qr-scanner-hint" id="qr-scanner-hint" aria-hidden="true">
-              Busca las cuatro X en negro
+              Busca los cuatro marcadores ArUco
             </div>
           </div>
           <canvas id="qr-scanner-analysis" hidden></canvas>
@@ -1488,7 +1493,7 @@ function stopQrScannerStream(): void {
   qrScannerPlacementLocked = false;
   qrScannerStage.dataset.state = 'searching';
   qrScannerHint.hidden = false;
-  qrScannerHint.textContent = 'Busca las cuatro X en negro';
+  qrScannerHint.textContent = 'Busca los cuatro marcadores ArUco';
   qrScannerPolygon.setAttribute('points', '0,0 0,0 0,0 0,0');
   qrScannerModelCanvas.style.opacity = '0';
   qrScannerModelCanvas.style.left = '50%';
@@ -1530,7 +1535,7 @@ function getQrScannerReadinessCopy(
   if (assessment.ready) {
     return {
       hint: 'Hoja lista para AR',
-      status: `4/4 X detectadas. Toca "Ver en AR" sin mover el movil para colocar ${modelName}.`,
+      status: `4/4 marcadores ArUco detectados. Toca "Ver en AR" sin mover el movil para colocar ${modelName}.`,
       canStartAr: true,
     };
   }
@@ -1538,7 +1543,7 @@ function getQrScannerReadinessCopy(
   if (assessment.issue === 'too-small') {
     return {
       hint: 'Acerca la hoja',
-      status: '4/4 X detectadas. Acerca la hoja hasta que ocupe mas imagen.',
+      status: '4/4 marcadores ArUco detectados. Acerca la hoja hasta que ocupe mas imagen.',
       canStartAr: false,
     };
   }
@@ -1546,7 +1551,7 @@ function getQrScannerReadinessCopy(
   if (assessment.issue === 'too-large') {
     return {
       hint: 'Aleja un poco',
-      status: '4/4 X detectadas. Aleja la hoja para que entren bien las cuatro esquinas.',
+      status: '4/4 marcadores ArUco detectados. Aleja la hoja para que entren bien las cuatro esquinas.',
       canStartAr: false,
     };
   }
@@ -1554,14 +1559,14 @@ function getQrScannerReadinessCopy(
   if (assessment.issue === 'skewed') {
     return {
       hint: 'Endereza la hoja',
-      status: '4/4 X detectadas. Pon el movil mas paralelo a la hoja para reducir la perspectiva.',
+      status: '4/4 marcadores ArUco detectados. Pon el movil mas paralelo a la hoja para reducir la perspectiva.',
       canStartAr: false,
     };
   }
 
   return {
     hint: 'Centra la hoja',
-    status: '4/4 X detectadas. Centra la hoja en la pantalla antes de abrir AR.',
+    status: '4/4 marcadores ArUco detectados. Centra la hoja en la pantalla antes de abrir AR.',
     canStartAr: false,
   };
 }
@@ -1585,7 +1590,7 @@ function hideQrScannerOverlay(): void {
   qrScannerPolygon.setAttribute('points', '0,0 0,0 0,0 0,0');
   qrScannerModelCanvas.style.opacity = '0';
   qrScannerHint.hidden = false;
-  qrScannerHint.textContent = 'Busca las cuatro X en negro';
+  qrScannerHint.textContent = 'Busca los cuatro marcadores ArUco';
   qrScannerStage.dataset.state = 'searching';
   setQrScannerArButtonState(false);
 }
@@ -1647,7 +1652,7 @@ function updateQrScannerOverlay(
   qrScannerModelCanvas.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
   qrScannerHint.hidden = false;
   qrScannerHint.textContent = showModel
-    ? '4 X confirmadas'
+    ? '4 ArUco confirmados'
     : 'Mantén la hoja quieta para confirmar';
   qrScannerStage.dataset.state = showModel ? 'locked' : 'searching';
 
@@ -1686,17 +1691,26 @@ function scheduleQrScannerFrame(callback: () => void): void {
 }
 
 async function startQrScannerStream(): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    qrScannerStatus.textContent = 'Este navegador no permite abrir la camara desde esta pagina.';
-    return;
-  }
   if (!qrScannerAnalysisContext) {
     qrScannerStatus.textContent = 'No se pudo preparar el analisis visual en este dispositivo.';
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    qrScannerStatus.textContent = 'Este navegador no permite abrir la camara desde esta pagina.';
     return;
   }
 
   const modelId = getQrScannerModelId();
   const model = findModelDefinition(modelId);
+  qrScannerStatus.textContent = 'Cargando detector ArUco...';
+
+  try {
+    await ensureMarkerDetectorReady();
+  } catch {
+    qrScannerStatus.textContent = 'No se pudo cargar el detector ArUco en este navegador.';
+    return;
+  }
+
   qrScannerStatus.textContent = 'Solicitando acceso a la camara...';
 
   try {
@@ -1717,8 +1731,8 @@ async function startQrScannerStream(): Promise<void> {
     return;
   }
 
-  qrScannerStatus.textContent = `Camara activa. Busca las cuatro X para colocar ${model.name}.`;
-  qrScannerHint.textContent = 'Busca las cuatro X en negro';
+  qrScannerStatus.textContent = `Camara activa. Busca los cuatro marcadores ArUco para colocar ${model.name}.`;
+  qrScannerHint.textContent = 'Busca los cuatro marcadores ArUco';
   qrScannerStage.dataset.state = 'searching';
   hideQrScannerOverlay();
 
@@ -1807,8 +1821,8 @@ async function startQrScannerStream(): Promise<void> {
           qrScannerOverlayVisible = false;
           setQrScannerArButtonState(false);
           qrScannerStatus.textContent = detectionIsStable
-            ? `4/4 X localizadas. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`
-            : '4/4 X localizadas. Manten la hoja quieta para confirmar.';
+            ? `4/4 marcadores ArUco localizados. Confirmando (${qrScannerStableDetectionFrames}/${QR_SCANNER_CONFIRMATION_FRAMES})...`
+            : '4/4 marcadores ArUco localizados. Manten la hoja quieta para confirmar.';
         }
       } else {
         qrScannerStableDetectionFrames = 0;
@@ -1817,13 +1831,13 @@ async function startQrScannerStream(): Promise<void> {
           qrScannerDetection = null;
           hideQrScannerOverlay();
           qrScannerStatus.textContent = detectedMarks > 0
-            ? `Solo se detectan ${detectedMarks}/4 X. Mueve la hoja hasta que entren las cuatro esquinas.`
-            : 'No se detectan las X todavia. Enfoca la hoja completa y evita fondos con cruces o trazos negros.';
+            ? `Solo se detectan ${detectedMarks}/4 marcadores ArUco. Mueve la hoja hasta que entren las cuatro esquinas.`
+            : 'No se detectan los marcadores ArUco todavia. Enfoca la hoja completa y evita reflejos fuertes.';
         } else if (!qrScannerOverlayVisible) {
           setQrScannerArButtonState(false);
           qrScannerStatus.textContent = detectedMarks > 0
-            ? `Viendo ${detectedMarks}/4 X. Ajusta la hoja hasta completar las cuatro esquinas.`
-            : `Camara activa. Busca las cuatro X para colocar ${model.name}.`;
+            ? `Viendo ${detectedMarks}/4 marcadores ArUco. Ajusta la hoja hasta completar las cuatro esquinas.`
+            : `Camara activa. Busca los cuatro marcadores ArUco para colocar ${model.name}.`;
         }
       }
     } catch {

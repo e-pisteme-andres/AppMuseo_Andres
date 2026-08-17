@@ -30,13 +30,72 @@ export interface MarkerPlacementAssessment {
   diagonalBalance: number;
 }
 
-interface CandidateComponent {
-  center: MarkerPoint;
-  area: number;
-  width: number;
-  height: number;
-  score: number;
+interface OpenCvLike {
+  Mat: new (...args: unknown[]) => OpenCvMat;
+  MatVector: new (...args: unknown[]) => OpenCvMatVector;
+  matFromImageData: (imageData: ImageData) => OpenCvMat;
+  DICT_4X4_50?: number;
+  getPredefinedDictionary?: (dictionaryId: number) => unknown;
+  detectMarkers?: (
+    image: OpenCvMat,
+    dictionary: unknown,
+    corners: OpenCvMatVector,
+    ids: OpenCvMat,
+    parameters?: unknown,
+    rejected?: OpenCvMatVector,
+  ) => void;
+  DetectorParameters?: new (...args: unknown[]) => { delete?(): void };
+  ArucoDetector?: new (...args: unknown[]) => {
+    detectMarkers(
+      image: OpenCvMat,
+      corners: OpenCvMatVector,
+      ids: OpenCvMat,
+      rejected?: OpenCvMatVector,
+    ): void;
+    delete?(): void;
+  };
+  aruco?: {
+    getPredefinedDictionary?: (dictionaryId: number) => unknown;
+    detectMarkers?: (
+      image: OpenCvMat,
+      dictionary: unknown,
+      corners: OpenCvMatVector,
+      ids: OpenCvMat,
+      parameters?: unknown,
+      rejected?: OpenCvMatVector,
+    ) => void;
+  };
+  delete?(instance: unknown): void;
 }
+
+interface OpenCvMat {
+  data32F?: Float32Array;
+  data32S?: Int32Array;
+  data64F?: Float64Array;
+  rows?: number;
+  cols?: number;
+  delete?(): void;
+}
+
+interface OpenCvMatVector {
+  size(): number;
+  get(index: number): OpenCvMat;
+  delete?(): void;
+}
+
+interface DetectedArucoMarker {
+  id: number;
+  corners: [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint];
+  center: MarkerPoint;
+}
+
+const OPENCV_SCRIPT_URL = 'https://docs.opencv.org/4.x/opencv.js';
+const ARUCO_DICTIONARY_NAME = 'DICT_4X4_50';
+export const ARUCO_MARKER_IDS = [0, 1, 2, 3] as const;
+export const ARUCO_MARKER_DOWNLOAD_PATH = 'markers/aruco-board.html';
+
+let openCvReadyPromise: Promise<OpenCvLike> | null = null;
+let openCvReadyInstance: OpenCvLike | null = null;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -48,16 +107,6 @@ function distance(a: MarkerPoint, b: MarkerPoint): number {
 
 function ratioBetween(first: number, second: number): number {
   return Math.max(first, second) / Math.max(1, Math.min(first, second));
-}
-
-function polygonArea(points: readonly MarkerPoint[]): number {
-  let total = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index];
-    const next = points[(index + 1) % points.length];
-    total += point.x * next.y - next.x * point.y;
-  }
-  return Math.abs(total) * 0.5;
 }
 
 function getBounds(points: readonly MarkerPoint[]): {
@@ -102,180 +151,243 @@ function cropImageData(
   return cropped;
 }
 
-function orderQuadrants(points: readonly MarkerPoint[]): [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint] | null {
-  const centroid = points.reduce(
-    (accumulator, point) => ({ x: accumulator.x + point.x, y: accumulator.y + point.y }),
-    { x: 0, y: 0 },
-  );
-  centroid.x /= points.length;
-  centroid.y /= points.length;
-
-  let topLeft: MarkerPoint | null = null;
-  let topRight: MarkerPoint | null = null;
-  let bottomRight: MarkerPoint | null = null;
-  let bottomLeft: MarkerPoint | null = null;
-
-  for (const point of points) {
-    if (point.x <= centroid.x && point.y <= centroid.y) {
-      if (topLeft) return null;
-      topLeft = point;
-    } else if (point.x > centroid.x && point.y <= centroid.y) {
-      if (topRight) return null;
-      topRight = point;
-    } else if (point.x > centroid.x && point.y > centroid.y) {
-      if (bottomRight) return null;
-      bottomRight = point;
-    } else {
-      if (bottomLeft) return null;
-      bottomLeft = point;
-    }
-  }
-
-  if (!topLeft || !topRight || !bottomRight || !bottomLeft) return null;
-  return [topLeft, topRight, bottomRight, bottomLeft];
+function getWindowScope(): (Window & typeof globalThis) | null {
+  return typeof window === 'undefined' ? null : window;
 }
 
-function collectCandidates(imageData: ImageData): CandidateComponent[] {
-  const { width, height, data } = imageData;
-  const pixelCount = width * height;
-  const luminance = new Uint8Array(pixelCount);
-  let totalLuminance = 0;
+function hasArucoSupport(candidate: unknown): candidate is OpenCvLike {
+  const cv = candidate as Partial<OpenCvLike> | undefined;
+  const hasDictionary = typeof cv?.getPredefinedDictionary === 'function'
+    || typeof cv?.aruco?.getPredefinedDictionary === 'function';
+  const hasDetection = typeof cv?.detectMarkers === 'function'
+    || typeof cv?.aruco?.detectMarkers === 'function'
+    || typeof cv?.ArucoDetector === 'function';
+  return Boolean(cv?.Mat && cv?.MatVector && cv?.matFromImageData && hasDictionary && hasDetection);
+}
 
-  for (let index = 0; index < pixelCount; index += 1) {
-    const offset = index * 4;
-    const value = Math.round(
-      data[offset] * 0.299
-      + data[offset + 1] * 0.587
-      + data[offset + 2] * 0.114,
-    );
-    luminance[index] = value;
-    totalLuminance += value;
+async function resolveOpenCvCandidate(candidate: unknown): Promise<OpenCvLike> {
+  const resolved = typeof (candidate as PromiseLike<unknown>)?.then === 'function'
+    ? await (candidate as Promise<unknown>)
+    : candidate;
+
+  if (!hasArucoSupport(resolved)) {
+    throw new Error('La carga de OpenCV no incluye soporte ArUco en este navegador.');
   }
 
-  const threshold = clamp(totalLuminance / pixelCount * 0.82, 55, 175);
-  const darkMask = new Uint8Array(pixelCount);
-  for (let index = 0; index < pixelCount; index += 1) {
-    darkMask[index] = luminance[index] <= threshold ? 1 : 0;
-  }
+  openCvReadyInstance = resolved;
+  return resolved;
+}
 
-  const visited = new Uint8Array(pixelCount);
-  const queue = new Int32Array(pixelCount);
-  const candidates: CandidateComponent[] = [];
-  const minArea = pixelCount * 0.00018;
-  const maxArea = pixelCount * 0.12;
+async function waitForOpenCv(scope: Window & typeof globalThis): Promise<OpenCvLike> {
+  const timeoutAt = Date.now() + 20000;
 
-  for (let startIndex = 0; startIndex < pixelCount; startIndex += 1) {
-    if (darkMask[startIndex] === 0 || visited[startIndex] === 1) continue;
-
-    let queueStart = 0;
-    let queueEnd = 0;
-    queue[queueEnd] = startIndex;
-    queueEnd += 1;
-    visited[startIndex] = 1;
-
-    let area = 0;
-    let sumX = 0;
-    let sumY = 0;
-    let minX = width;
-    let minY = height;
-    let maxX = 0;
-    let maxY = 0;
-    let mainDiagonalHits = 0;
-    let antiDiagonalHits = 0;
-
-    while (queueStart < queueEnd) {
-      const index = queue[queueStart];
-      queueStart += 1;
-      const x = index % width;
-      const y = Math.floor(index / width);
-
-      area += 1;
-      sumX += x;
-      sumY += y;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-
-      const neighbors = [
-        x > 0 ? index - 1 : -1,
-        x < width - 1 ? index + 1 : -1,
-        y > 0 ? index - width : -1,
-        y < height - 1 ? index + width : -1,
-        x > 0 && y > 0 ? index - width - 1 : -1,
-        x < width - 1 && y > 0 ? index - width + 1 : -1,
-        x > 0 && y < height - 1 ? index + width - 1 : -1,
-        x < width - 1 && y < height - 1 ? index + width + 1 : -1,
-      ];
-
-      for (const neighbor of neighbors) {
-        if (neighbor < 0 || visited[neighbor] === 1 || darkMask[neighbor] === 0) continue;
-        visited[neighbor] = 1;
-        queue[queueEnd] = neighbor;
-        queueEnd += 1;
+  while (Date.now() < timeoutAt) {
+    const candidate = (scope as Window & { cv?: unknown }).cv;
+    if (candidate) {
+      try {
+        return await resolveOpenCvCandidate(candidate);
+      } catch {
+        // Seguimos esperando a que termine la inicializacion completa.
       }
     }
-
-    if (area < minArea || area > maxArea) continue;
-
-    const componentWidth = maxX - minX + 1;
-    const componentHeight = maxY - minY + 1;
-    if (componentWidth < 6 || componentHeight < 6) continue;
-
-    const aspectRatio = componentWidth / componentHeight;
-    if (aspectRatio < 0.45 || aspectRatio > 2.2) continue;
-
-    const fillRatio = area / (componentWidth * componentHeight);
-    if (fillRatio < 0.05 || fillRatio > 0.58) continue;
-
-    for (let queueIndex = 0; queueIndex < queueEnd; queueIndex += 1) {
-      const index = queue[queueIndex];
-      const x = index % width;
-      const y = Math.floor(index / width);
-      const normalizedX = (x - minX) / Math.max(1, componentWidth - 1);
-      const normalizedY = (y - minY) / Math.max(1, componentHeight - 1);
-      if (Math.abs(normalizedX - normalizedY) <= 0.3) mainDiagonalHits += 1;
-      if (Math.abs((1 - normalizedX) - normalizedY) <= 0.3) antiDiagonalHits += 1;
-    }
-
-    const mainRatio = mainDiagonalHits / area;
-    const antiRatio = antiDiagonalHits / area;
-    if (mainRatio < 0.18 || antiRatio < 0.18) continue;
-
-    const score = area * (mainRatio + antiRatio);
-    candidates.push({
-      center: { x: sumX / area, y: sumY / area },
-      area,
-      width: componentWidth,
-      height: componentHeight,
-      score,
-    });
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 60));
   }
 
-  return candidates.sort((first, second) => second.score - first.score).slice(0, 12);
+  throw new Error('OpenCV.js no termino de cargar a tiempo.');
 }
 
-function countQuadrants(candidates: readonly CandidateComponent[]): number {
-  if (candidates.length === 0) return 0;
+async function loadOpenCv(): Promise<OpenCvLike> {
+  if (openCvReadyInstance) return openCvReadyInstance;
+  if (openCvReadyPromise) return openCvReadyPromise;
 
-  const relevantCandidates = candidates.slice(0, 6);
-  const centroid = relevantCandidates.reduce(
-    (accumulator, candidate) => ({
-      x: accumulator.x + candidate.center.x,
-      y: accumulator.y + candidate.center.y,
+  openCvReadyPromise = (async () => {
+    const scope = getWindowScope();
+    if (!scope || typeof document === 'undefined') {
+      throw new Error('La deteccion ArUco solo esta disponible en el navegador.');
+    }
+
+    const existingCandidate = (scope as Window & { cv?: unknown }).cv;
+    if (existingCandidate) return waitForOpenCv(scope);
+
+    const selector = 'script[data-opencv-aruco-loader="true"]';
+    let script = document.querySelector<HTMLScriptElement>(selector);
+    if (!script) {
+      script = document.createElement('script');
+      script.src = OPENCV_SCRIPT_URL;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.dataset.opencvArucoLoader = 'true';
+      document.head.append(script);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const onLoad = (): void => {
+        cleanup();
+        resolve();
+      };
+      const onError = (): void => {
+        cleanup();
+        reject(new Error('No se pudo descargar OpenCV.js para el detector ArUco.'));
+      };
+      const cleanup = (): void => {
+        script?.removeEventListener('load', onLoad);
+        script?.removeEventListener('error', onError);
+      };
+
+      script?.addEventListener('load', onLoad, { once: true });
+      script?.addEventListener('error', onError, { once: true });
+
+      if ((scope as Window & { cv?: unknown }).cv) {
+        cleanup();
+        resolve();
+      }
+    });
+
+    return waitForOpenCv(scope);
+  })();
+
+  try {
+    return await openCvReadyPromise;
+  } catch (error) {
+    openCvReadyPromise = null;
+    throw error;
+  }
+}
+
+export async function ensureMarkerDetectorReady(): Promise<void> {
+  await loadOpenCv();
+}
+
+function getDictionary(cv: OpenCvLike): unknown {
+  const dictionaryId = cv.DICT_4X4_50;
+  if (typeof dictionaryId !== 'number') {
+    throw new Error(`OpenCV.js no expone ${ARUCO_DICTIONARY_NAME}.`);
+  }
+
+  const fromRoot = cv.getPredefinedDictionary?.(dictionaryId);
+  if (fromRoot) return fromRoot;
+
+  const fromNamespace = cv.aruco?.getPredefinedDictionary?.(dictionaryId);
+  if (fromNamespace) return fromNamespace;
+
+  throw new Error('OpenCV.js no permite obtener el diccionario ArUco configurado.');
+}
+
+function createDetectorParameters(cv: OpenCvLike): { delete?(): void } | null {
+  if (typeof cv.DetectorParameters === 'function') {
+    return new cv.DetectorParameters();
+  }
+  return null;
+}
+
+function runArucoDetection(
+  cv: OpenCvLike,
+  image: OpenCvMat,
+  dictionary: unknown,
+  parameters: { delete?(): void } | null,
+  corners: OpenCvMatVector,
+  ids: OpenCvMat,
+  rejected: OpenCvMatVector,
+): void {
+  if (typeof cv.detectMarkers === 'function') {
+    cv.detectMarkers(image, dictionary, corners, ids, parameters ?? undefined, rejected);
+    return;
+  }
+
+  if (typeof cv.aruco?.detectMarkers === 'function') {
+    cv.aruco.detectMarkers(image, dictionary, corners, ids, parameters ?? undefined, rejected);
+    return;
+  }
+
+  if (typeof cv.ArucoDetector === 'function') {
+    const detector = parameters
+      ? new cv.ArucoDetector(dictionary, parameters)
+      : new cv.ArucoDetector(dictionary);
+    try {
+      detector.detectMarkers(image, corners, ids, rejected);
+    } finally {
+      detector.delete?.();
+    }
+    return;
+  }
+
+  throw new Error('No se encontro una API de deteccion ArUco compatible en OpenCV.js.');
+}
+
+function readMarkerIds(ids: OpenCvMat): number[] {
+  if (ids.data32S) return Array.from(ids.data32S);
+  if (ids.data32F) return Array.from(ids.data32F).map((value) => Math.round(value));
+  if (ids.data64F) return Array.from(ids.data64F).map((value) => Math.round(value));
+  return [];
+}
+
+function readCornerPoints(cornerMat: OpenCvMat): [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint] | null {
+  const raw = cornerMat.data32F
+    ? Array.from(cornerMat.data32F)
+    : cornerMat.data64F
+      ? Array.from(cornerMat.data64F)
+      : [];
+
+  if (raw.length < 8) return null;
+
+  return [
+    { x: raw[0], y: raw[1] },
+    { x: raw[2], y: raw[3] },
+    { x: raw[4], y: raw[5] },
+    { x: raw[6], y: raw[7] },
+  ];
+}
+
+function createDetectedMarker(id: number, corners: [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint]): DetectedArucoMarker {
+  const [topLeft, topRight, bottomRight, bottomLeft] = corners;
+  return {
+    id,
+    corners,
+    center: {
+      x: (topLeft.x + topRight.x + bottomRight.x + bottomLeft.x) * 0.25,
+      y: (topLeft.y + topRight.y + bottomRight.y + bottomLeft.y) * 0.25,
+    },
+  };
+}
+
+function extractDetectedMarkers(corners: OpenCvMatVector, ids: OpenCvMat): DetectedArucoMarker[] {
+  const markerIds = readMarkerIds(ids);
+  const markers: DetectedArucoMarker[] = [];
+
+  for (let index = 0; index < Math.min(markerIds.length, corners.size()); index += 1) {
+    const cornerMat = corners.get(index);
+    try {
+      const markerCorners = readCornerPoints(cornerMat);
+      if (!markerCorners) continue;
+      markers.push(createDetectedMarker(markerIds[index], markerCorners));
+    } finally {
+      cornerMat.delete?.();
+    }
+  }
+
+  return markers;
+}
+
+function countQuadrants(markers: readonly DetectedArucoMarker[]): number {
+  if (markers.length === 0) return 0;
+
+  const centroid = markers.reduce(
+    (accumulator, marker) => ({
+      x: accumulator.x + marker.center.x,
+      y: accumulator.y + marker.center.y,
     }),
     { x: 0, y: 0 },
   );
-  centroid.x /= relevantCandidates.length;
-  centroid.y /= relevantCandidates.length;
+  centroid.x /= markers.length;
+  centroid.y /= markers.length;
 
   let topLeft = false;
   let topRight = false;
   let bottomRight = false;
   let bottomLeft = false;
 
-  for (const candidate of relevantCandidates) {
-    const { x, y } = candidate.center;
+  for (const marker of markers) {
+    const { x, y } = marker.center;
     if (x <= centroid.x && y <= centroid.y) topLeft = true;
     else if (x > centroid.x && y <= centroid.y) topRight = true;
     else if (x > centroid.x && y > centroid.y) bottomRight = true;
@@ -285,106 +397,87 @@ function countQuadrants(candidates: readonly CandidateComponent[]): number {
   return Number(topLeft) + Number(topRight) + Number(bottomRight) + Number(bottomLeft);
 }
 
+function composeBoardDetection(markers: readonly DetectedArucoMarker[]): MarkerDetection | null {
+  const markerById = new Map(markers.map((marker) => [marker.id, marker]));
+  const topLeftMarker = markerById.get(ARUCO_MARKER_IDS[0]);
+  const topRightMarker = markerById.get(ARUCO_MARKER_IDS[1]);
+  const bottomRightMarker = markerById.get(ARUCO_MARKER_IDS[2]);
+  const bottomLeftMarker = markerById.get(ARUCO_MARKER_IDS[3]);
+
+  if (!topLeftMarker || !topRightMarker || !bottomRightMarker || !bottomLeftMarker) {
+    return null;
+  }
+
+  const corners: [MarkerPoint, MarkerPoint, MarkerPoint, MarkerPoint] = [
+    topLeftMarker.corners[0],
+    topRightMarker.corners[1],
+    bottomRightMarker.corners[2],
+    bottomLeftMarker.corners[3],
+  ];
+
+  const [topLeft, topRight, bottomRight, bottomLeft] = corners;
+  const width = (
+    distance(topLeft, topRight)
+    + distance(bottomLeft, bottomRight)
+  ) * 0.5;
+  const height = (
+    distance(topLeft, bottomLeft)
+    + distance(topRight, bottomRight)
+  ) * 0.5;
+
+  return {
+    corners,
+    center: {
+      x: (topLeft.x + topRight.x + bottomRight.x + bottomLeft.x) * 0.25,
+      y: (topLeft.y + topRight.y + bottomRight.y + bottomLeft.y) * 0.25,
+    },
+    width,
+    height,
+    score: markers.length,
+  };
+}
+
 export function analyzeMarkerFrame(imageData: ImageData): MarkerFrameAnalysis {
-  const candidates = collectCandidates(imageData);
-  const candidateCount = Math.min(4, candidates.length);
-  const quadrantCount = countQuadrants(candidates);
-  if (candidates.length < 4) {
+  if (!openCvReadyInstance) {
     return {
       detection: null,
-      candidateCount,
-      quadrantCount,
+      candidateCount: 0,
+      quadrantCount: 0,
     };
   }
 
-  let bestDetection: MarkerDetection | null = null;
+  const cv = openCvReadyInstance;
+  const image = cv.matFromImageData(imageData);
+  const corners = new cv.MatVector();
+  const ids = new cv.Mat();
+  const rejected = new cv.MatVector();
+  const dictionary = getDictionary(cv);
+  const parameters = createDetectorParameters(cv);
 
-  for (let first = 0; first < candidates.length - 3; first += 1) {
-    for (let second = first + 1; second < candidates.length - 2; second += 1) {
-      for (let third = second + 1; third < candidates.length - 1; third += 1) {
-        for (let fourth = third + 1; fourth < candidates.length; fourth += 1) {
-          const corners = orderQuadrants([
-            candidates[first].center,
-            candidates[second].center,
-            candidates[third].center,
-            candidates[fourth].center,
-          ]);
-          if (!corners) continue;
+  try {
+    runArucoDetection(cv, image, dictionary, parameters, corners, ids, rejected);
+    const detectedMarkers = extractDetectedMarkers(corners, ids)
+      .filter((marker) => ARUCO_MARKER_IDS.includes(marker.id as (typeof ARUCO_MARKER_IDS)[number]));
 
-          const [topLeft, topRight, bottomRight, bottomLeft] = corners;
-          const selectedCandidates = [
-            candidates[first],
-            candidates[second],
-            candidates[third],
-            candidates[fourth],
-          ];
-          const topWidth = distance(topLeft, topRight);
-          const bottomWidth = distance(bottomLeft, bottomRight);
-          const leftHeight = distance(topLeft, bottomLeft);
-          const rightHeight = distance(topRight, bottomRight);
-          const averageWidth = (topWidth + bottomWidth) * 0.5;
-          const averageHeight = (leftHeight + rightHeight) * 0.5;
-          const areaValues = selectedCandidates.map((candidate) => candidate.area);
-          const widthValues = selectedCandidates.map((candidate) => candidate.width);
-          const heightValues = selectedCandidates.map((candidate) => candidate.height);
-          const areaRatio = Math.max(...areaValues) / Math.max(1, Math.min(...areaValues));
-          const widthRatio = Math.max(...widthValues) / Math.max(1, Math.min(...widthValues));
-          const heightRatio = Math.max(...heightValues) / Math.max(1, Math.min(...heightValues));
-          const diagonalRatio = Math.max(
-            distance(topLeft, bottomRight),
-            distance(topRight, bottomLeft),
-          ) / Math.max(
-            1,
-            Math.min(
-              distance(topLeft, bottomRight),
-              distance(topRight, bottomLeft),
-            ),
-          );
-          const bounds = getBounds(corners);
-          const boundsWidth = Math.max(1, bounds.maxX - bounds.minX);
-          const boundsHeight = Math.max(1, bounds.maxY - bounds.minY);
-          const boundsArea = boundsWidth * boundsHeight;
-          const quadrilateralAspectRatio = boundsWidth / boundsHeight;
-
-          if (averageWidth < imageData.width * 0.12 || averageHeight < imageData.height * 0.12) continue;
-          if (ratioBetween(topWidth, bottomWidth) > 1.9) continue;
-          if (ratioBetween(leftHeight, rightHeight) > 1.9) continue;
-          if (diagonalRatio > 1.6) continue;
-          if (areaRatio > 2.2 || widthRatio > 2 || heightRatio > 2) continue;
-          if (quadrilateralAspectRatio < 0.45 || quadrilateralAspectRatio > 2.2) continue;
-
-          const shapeArea = polygonArea(corners);
-          if (shapeArea < imageData.width * imageData.height * 0.018) continue;
-          if (shapeArea / boundsArea < 0.46) continue;
-
-          const score = selectedCandidates[0].score
-            + selectedCandidates[1].score
-            + selectedCandidates[2].score
-            + selectedCandidates[3].score
-            + shapeArea * 0.02;
-
-          if (!bestDetection || score > bestDetection.score) {
-            bestDetection = {
-              corners,
-              center: {
-                x: (topLeft.x + topRight.x + bottomRight.x + bottomLeft.x) * 0.25,
-                y: (topLeft.y + topRight.y + bottomRight.y + bottomLeft.y) * 0.25,
-              },
-              width: averageWidth,
-              height: averageHeight,
-              score,
-            };
-          }
-        }
-      }
-    }
+    return {
+      detection: composeBoardDetection(detectedMarkers),
+      candidateCount: Math.min(4, detectedMarkers.length),
+      quadrantCount: countQuadrants(detectedMarkers),
+    };
+  } catch {
+    return {
+      detection: null,
+      candidateCount: 0,
+      quadrantCount: 0,
+    };
+  } finally {
+    parameters?.delete?.();
+    rejected.delete?.();
+    ids.delete?.();
+    corners.delete?.();
+    image.delete?.();
+    (dictionary as { delete?(): void }).delete?.();
   }
-
-  return {
-    detection: bestDetection,
-    candidateCount,
-    quadrantCount,
-  };
 }
 
 export function detectMarker(imageData: ImageData): MarkerDetection | null {
