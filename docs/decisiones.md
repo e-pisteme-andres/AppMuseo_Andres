@@ -482,3 +482,29 @@ depender de red, cambiar de diccionario ArUco si algun movil concreto detecta
 mejor otra familia, o volver a cuestionar el flujo si en pruebas reales sigue
 habiendo jitter, perdida frecuente de seguimiento o problemas de carga en
 navegadores concretos.
+
+## 2026-08-18 - El modo mirada no forma parte del modulo 360 entregado
+
+**Que se probo:** el visor 360 conserva rastros del experimento estereoscopico
+con objetivos de mirada en `src/panorama-viewer.ts`, mientras que el modulo
+empaquetado para integracion en `src/panorama-module.ts` expone hotspots
+tactiles como interaccion base.
+
+**Que se eligio:** tratar el modo mirada como una linea de prototipo asociada al
+visor estereo y no como comportamiento implicito del modulo 360 entregado.
+
+**Que se descarto:** describir la integracion actual como si ya ofreciera
+activacion por mirada en uso normal, o sustituir los puntos tactiles por una
+mirada sin temporizacion visible.
+
+**Por que:** el estado actual del codigo separa ambos caminos. En el visor,
+`setGazeNavigationTargets()` y los marcadores 3D solo se muestran en modo
+estereo, mientras que los hotspots HTML del modulo son los que resuelven la
+navegacion ordinaria. Si se mezclan ambos sin condicion explicita, la lectura
+pasaria a depender de hacia donde apunta el movil, incluso fuera del contexto
+de sensores para el que se probo la idea.
+
+**Que reabriria la decision:** una nueva iteracion de integracion que necesite
+modo manos libres o visor estereoscopico. Si se retoma, deberia hacerse con un
+retardo visible de permanencia, por ejemplo un aro de progreso, y ligado al
+modo por sensores en lugar de al modo general tactil.
