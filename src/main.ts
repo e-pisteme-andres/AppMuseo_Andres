@@ -12,7 +12,11 @@ import { playModelSound } from './ar/model-sound';
 import { selectARMode, supportsAppleQuickLook, type ARMode } from './ar/platform';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
-import { getPanoramaAngularDistance, PanoramaViewer } from './panorama-viewer';
+import {
+  getPanoramaAngularDistance,
+  PanoramaViewer,
+  type PanoramaVrDevicePosture,
+} from './panorama-viewer';
 import {
   createPanoramaTour,
   findPanoramaScene,
@@ -417,8 +421,8 @@ app.innerHTML = `
       <div class="panorama-alert" id="panorama-alert" role="status" aria-live="polite" hidden></div>
       <div class="panorama-vr-orientation" id="panorama-vr-orientation" role="status" aria-live="polite" aria-hidden="true">
         <span aria-hidden="true">VR</span>
-        <strong>Gira el móvil</strong>
-        <small>El modo gafas se mantiene bloqueado en horizontal.</small>
+        <strong id="panorama-vr-orientation-title">Gira el móvil</strong>
+        <small id="panorama-vr-orientation-detail">El modo gafas se mantiene bloqueado en horizontal.</small>
         <button class="panorama-vr-exit" id="panorama-vr-exit" type="button">Salir de VR</button>
       </div>
       <div class="panorama-gaze-teleport" id="panorama-gaze-teleport" aria-hidden="true">
@@ -526,6 +530,8 @@ const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-res
 const panoramaVrButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-mode');
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
 const panoramaVrOrientation = getRequiredElement<HTMLElement>('#panorama-vr-orientation');
+const panoramaVrOrientationTitle = getRequiredElement<HTMLElement>('#panorama-vr-orientation-title');
+const panoramaVrOrientationDetail = getRequiredElement<HTMLElement>('#panorama-vr-orientation-detail');
 const panoramaVrExitButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-exit');
 const panoramaGazeTeleport = getRequiredElement<HTMLElement>('#panorama-gaze-teleport');
 const panoramaGazeLabels = [...panoramaGazeTeleport.querySelectorAll<HTMLElement>('.panorama-gaze-label')];
@@ -637,6 +643,7 @@ const panorama = new PanoramaViewer({
     }
   },
   onViewChange: schedulePanoramaCheckpoint,
+  onVrPostureChange: updatePanoramaVrOrientationState,
 });
 
 let panoramaSceneRequestId = 0;
@@ -769,7 +776,7 @@ function setPanoramaGazeUi(
   target: PanoramaNavigationHotspot | null,
   progress: number,
 ): void {
-  const active = panorama.isStereoMode();
+  const active = panorama.isStereoMode() && !isPanoramaVrPostureBlocked();
   panoramaGazeTeleport.setAttribute('aria-hidden', String(!active));
   panoramaGazeTeleport.classList.toggle('has-target', Boolean(target));
   panoramaGazeTeleport.style.setProperty('--gaze-progress', String(Math.max(0, Math.min(1, progress))));
@@ -808,7 +815,7 @@ function getPanoramaGazeTarget(): PanoramaNavigationHotspot | null {
 
 function renderPanoramaGazeTargets(activeTarget: PanoramaNavigationHotspot | null): void {
   const active = panorama.isStereoMode()
-    && !panoramaView.classList.contains('is-vr-portrait-blocked');
+    && !isPanoramaVrPostureBlocked();
   panorama.setGazeNavigationTargets(active ? activePanoramaScene.hotspots : [], activeTarget?.id ?? null);
 }
 
@@ -841,7 +848,7 @@ function startPanoramaGazeLoop(): void {
       return;
     }
 
-    const gazePaused = panoramaView.classList.contains('is-vr-portrait-blocked')
+    const gazePaused = isPanoramaVrPostureBlocked()
       || panoramaView.classList.contains('is-changing-scene');
     const target = gazePaused ? null : getPanoramaGazeTarget();
     renderPanoramaGazeTargets(target);
@@ -927,8 +934,49 @@ function updatePanoramaVrButton(enabled: boolean): void {
   panoramaVrButton.textContent = enabled ? '2D' : 'VR';
 }
 
+function isPanoramaVrPostureBlocked(): boolean {
+  return panoramaView.classList.contains('is-vr-posture-blocked');
+}
+
+function getPanoramaVrPostureCopy(posture: PanoramaVrDevicePosture): { title: string; detail: string } {
+  switch (posture) {
+    case 'portrait':
+      return {
+        title: 'Gira el móvil',
+        detail: 'Ponlo en horizontal, como si fueras a grabar una panorámica.',
+      };
+    case 'flat':
+      return {
+        title: 'Levanta el móvil',
+        detail: 'Sujétalo vertical delante de ti, no plano sobre una mesa.',
+      };
+    case 'tilted':
+      return {
+        title: 'Endereza el móvil',
+        detail: 'Mantén la pantalla de frente y el teléfono en horizontal.',
+      };
+    case 'unknown':
+      return {
+        title: 'Preparando sensores',
+        detail: 'Mantén el móvil horizontal y levantado mientras llega la orientación.',
+      };
+    case 'ready':
+      return {
+        title: '',
+        detail: '',
+      };
+  }
+}
+
 function updatePanoramaVrOrientationState(): void {
-  const blocked = panorama.isStereoMode() && window.matchMedia('(orientation: portrait)').matches;
+  const posture = window.matchMedia('(orientation: portrait)').matches
+    ? 'portrait'
+    : panorama.getVrPosture();
+  const blocked = panorama.isStereoMode() && posture !== 'ready';
+  const copy = getPanoramaVrPostureCopy(posture);
+  panoramaVrOrientationTitle.textContent = copy.title;
+  panoramaVrOrientationDetail.textContent = copy.detail;
+  panoramaView.classList.toggle('is-vr-posture-blocked', blocked);
   panoramaView.classList.toggle('is-vr-portrait-blocked', blocked);
   panoramaVrOrientation.setAttribute('aria-hidden', String(!blocked));
   if (blocked) resetPanoramaGazeTarget();

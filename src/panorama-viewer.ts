@@ -17,11 +17,18 @@ import type { PanoramaHotspot } from './panorama-types';
 
 export type PanoramaControlMode = 'motion-pending' | 'motion' | 'drag';
 export type PanoramaMotionAccess = 'granted' | 'denied' | 'unsupported';
+export type PanoramaVrDevicePosture = 'ready' | 'portrait' | 'flat' | 'tilted' | 'unknown';
 
 export interface PanoramaViewState {
   longitude: number;
   latitude: number;
   fov: number;
+}
+
+export interface PanoramaDeviceOrientation {
+  alpha: number;
+  beta: number;
+  gamma: number;
 }
 
 interface PanoramaViewerOptions {
@@ -30,6 +37,7 @@ interface PanoramaViewerOptions {
   onLoadingChange?: (loading: boolean) => void;
   onControlModeChange?: (mode: PanoramaControlMode) => void;
   onViewChange?: (view: PanoramaViewState) => void;
+  onVrPostureChange?: (posture: PanoramaVrDevicePosture) => void;
   initialView?: PanoramaViewState;
   canvasAriaLabel?: string;
   hotspotsAriaLabel?: string;
@@ -113,6 +121,25 @@ export function getStereoEyeViewports(width: number, height: number): StereoEyeV
     left: { x: leftX, y: lensTop, width: lensWidth, height: lensHeight },
     right: { x: rightX, y: lensTop, width: lensWidth, height: lensHeight },
   };
+}
+
+export function getPanoramaVrDevicePosture(
+  orientation: PanoramaDeviceOrientation | undefined,
+  screenOrientationDegrees: number,
+  isLandscapeViewport: boolean,
+): PanoramaVrDevicePosture {
+  const normalizedScreenAngle = ((screenOrientationDegrees % 360) + 360) % 360;
+  const isLandscapeScreen = isLandscapeViewport
+    || normalizedScreenAngle === 90
+    || normalizedScreenAngle === 270;
+  if (!isLandscapeScreen) return 'portrait';
+  if (!orientation) return 'unknown';
+
+  const sideTilt = Math.abs(orientation.gamma);
+  const forwardTilt = Math.abs(orientation.beta);
+  if (sideTilt < 38 && forwardTilt < 38) return 'flat';
+  if (sideTilt < 48 || forwardTilt > 70) return 'tilted';
+  return 'ready';
 }
 
 export function getPanoramaAngularDistance(
@@ -201,6 +228,7 @@ export class PanoramaViewer {
   private readonly onLoadingChange?: (loading: boolean) => void;
   private readonly onControlModeChange?: (mode: PanoramaControlMode) => void;
   private readonly onViewChange?: (view: PanoramaViewState) => void;
+  private readonly onVrPostureChange?: (posture: PanoramaVrDevicePosture) => void;
   private readonly canvasAriaLabel: string;
   private readonly hotspotsAriaLabel: string;
   private renderer?: WebGLRenderer;
@@ -229,13 +257,14 @@ export class PanoramaViewer {
   private pinchStartDistance?: number;
   private pinchStartFov?: number;
   private controlMode: PanoramaControlMode = 'drag';
-  private deviceOrientation?: { alpha: number; beta: number; gamma: number };
+  private deviceOrientation?: PanoramaDeviceOrientation;
   private readonly deviceQuaternion = new Quaternion();
   private motionCalibration?: MotionCalibration;
   private orientationTimeoutId?: number;
   private dragControlsEnabled = false;
   private motionControlsListening = false;
   private stereoModeEnabled = false;
+  private vrPosture: PanoramaVrDevicePosture = 'unknown';
 
   constructor({
     container,
@@ -243,6 +272,7 @@ export class PanoramaViewer {
     onLoadingChange,
     onControlModeChange,
     onViewChange,
+    onVrPostureChange,
     initialView,
     canvasAriaLabel,
     hotspotsAriaLabel,
@@ -252,6 +282,7 @@ export class PanoramaViewer {
     this.onLoadingChange = onLoadingChange;
     this.onControlModeChange = onControlModeChange;
     this.onViewChange = onViewChange;
+    this.onVrPostureChange = onVrPostureChange;
     this.canvasAriaLabel = canvasAriaLabel ?? 'Panorama interactivo';
     this.hotspotsAriaLabel = hotspotsAriaLabel ?? 'Puntos de interés de la panorámica';
     if (initialView) {
@@ -277,11 +308,16 @@ export class PanoramaViewer {
     return this.controlMode;
   }
 
+  getVrPosture(): PanoramaVrDevicePosture {
+    return this.vrPosture;
+  }
+
   setStereoMode(enabled: boolean): void {
     if (this.stereoModeEnabled === enabled) return;
     this.stereoModeEnabled = enabled;
     this.container.classList.toggle('is-vr-mode', enabled);
     this.hotspotLayer?.classList.toggle('is-suppressed', enabled);
+    this.updateVrPosture();
     this.updateGazeTargetVisibility();
     this.resize();
   }
@@ -457,6 +493,7 @@ export class PanoramaViewer {
     this.stereoModeEnabled = false;
     this.container.classList.remove('is-vr-mode');
     this.deviceOrientation = undefined;
+    this.setVrPosture('unknown');
     this.motionCalibration = undefined;
     this.orientationTimeoutId = undefined;
     this.dragControlsEnabled = false;
@@ -538,6 +575,7 @@ export class PanoramaViewer {
   private readonly handleDeviceOrientation = (event: DeviceOrientationEvent): void => {
     if (event.alpha === null || event.beta === null || event.gamma === null) return;
     this.deviceOrientation = { alpha: event.alpha, beta: event.beta, gamma: event.gamma };
+    this.updateVrPosture();
     if (this.controlMode !== 'motion') {
       if (this.orientationTimeoutId !== undefined) window.clearTimeout(this.orientationTimeoutId);
       this.motionCalibration = undefined;
@@ -626,6 +664,7 @@ export class PanoramaViewer {
     if (this.frameId !== undefined) return;
     const render = (): void => {
       if (!this.renderer || !this.scene || !this.camera) return;
+      this.updateVrPosture();
       if (this.controlMode === 'motion' && this.deviceOrientation) {
         const { alpha, beta, gamma } = this.deviceOrientation;
         const screenOrientation = (screen.orientation?.angle ?? (window as Window & { orientation?: number }).orientation ?? 0) * Math.PI / 180;
@@ -696,6 +735,14 @@ export class PanoramaViewer {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     if (!width || !height) return;
+
+    if (this.vrPosture !== 'ready') {
+      this.renderer.setScissorTest(false);
+      this.renderer.setViewport(0, 0, width, height);
+      this.renderer.setScissor(0, 0, width, height);
+      this.renderer.clear(true, true, true);
+      return;
+    }
 
     const viewports = getStereoEyeViewports(width, height);
     this.camera.updateMatrixWorld();
@@ -834,6 +881,29 @@ export class PanoramaViewer {
       element.style.left = `${(projectedHotspotPosition.x * 0.5 + 0.5) * 100}%`;
       element.style.top = `${(-projectedHotspotPosition.y * 0.5 + 0.5) * 100}%`;
     });
+  }
+
+  private updateVrPosture(): void {
+    if (!this.stereoModeEnabled) {
+      this.setVrPosture('unknown');
+      return;
+    }
+
+    const screenOrientationDegrees = screen.orientation?.angle
+      ?? (window as Window & { orientation?: number }).orientation
+      ?? 0;
+    const isLandscapeViewport = window.matchMedia('(orientation: landscape)').matches;
+    this.setVrPosture(getPanoramaVrDevicePosture(
+      this.deviceOrientation,
+      screenOrientationDegrees,
+      isLandscapeViewport,
+    ));
+  }
+
+  private setVrPosture(posture: PanoramaVrDevicePosture): void {
+    if (this.vrPosture === posture) return;
+    this.vrPosture = posture;
+    this.onVrPostureChange?.(posture);
   }
 
   private updateGazeTargetVisibility(): void {

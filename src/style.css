@@ -988,12 +988,19 @@ body.panorama-active .panorama-view { display: block; }
 .panorama-view.is-vr-mode .panorama-gaze-label {
   display: none;
 }
+.panorama-view.is-vr-posture-blocked .panorama-canvas {
+  opacity: 0;
+}
+.panorama-view.is-vr-posture-blocked .panorama-vr-orientation,
 .panorama-view.is-vr-portrait-blocked .panorama-vr-orientation {
   display: grid;
 }
+.panorama-view.is-vr-posture-blocked .panorama-gaze-teleport,
 .panorama-view.is-vr-portrait-blocked .panorama-gaze-teleport {
   display: none;
 }
+.panorama-view.is-vr-posture-blocked .panorama-mobile-tools,
+.panorama-view.is-vr-posture-blocked .panorama-topbar,
 .panorama-view.is-vr-portrait-blocked .panorama-mobile-tools,
 .panorama-view.is-vr-portrait-blocked .panorama-topbar {
   pointer-events: none;

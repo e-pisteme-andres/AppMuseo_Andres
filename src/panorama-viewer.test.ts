@@ -3,6 +3,7 @@ import { Quaternion, Vector3 } from 'three';
 import {
   getCalibratedMotionView,
   getPanoramaAngularDistance,
+  getPanoramaVrDevicePosture,
   getSphericalPosition,
   getStereoEyeViewports,
   getViewFromCameraQuaternion,
@@ -78,6 +79,42 @@ describe('distancia angular panoramica', () => {
     );
 
     expect(distance).toBeCloseTo(2);
+  });
+
+  it('bloquea VR si la pantalla sigue en vertical', () => {
+    expect(getPanoramaVrDevicePosture(
+      { alpha: 0, beta: 0, gamma: 86 },
+      0,
+      false,
+    )).toBe('portrait');
+  });
+
+  it('bloquea VR cuando el movil esta plano', () => {
+    expect(getPanoramaVrDevicePosture(
+      { alpha: 0, beta: 4, gamma: 5 },
+      90,
+      true,
+    )).toBe('flat');
+  });
+
+  it('bloquea VR cuando el movil esta demasiado inclinado', () => {
+    expect(getPanoramaVrDevicePosture(
+      { alpha: 0, beta: 78, gamma: 82 },
+      90,
+      true,
+    )).toBe('tilted');
+  });
+
+  it('espera sensores antes de mostrar la imagen VR', () => {
+    expect(getPanoramaVrDevicePosture(undefined, 90, true)).toBe('unknown');
+  });
+
+  it('permite VR solo con pantalla horizontal y movil levantado', () => {
+    expect(getPanoramaVrDevicePosture(
+      { alpha: 0, beta: 8, gamma: -84 },
+      270,
+      false,
+    )).toBe('ready');
   });
 });
 
