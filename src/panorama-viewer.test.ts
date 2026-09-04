@@ -45,11 +45,11 @@ describe('posición de puntos panorámicos', () => {
 });
 
 describe('modo estereo panoramico', () => {
-  it('divide la pantalla en dos ojos sin perder pixeles impares', () => {
-    const viewports = getStereoEyeViewports(101, 50);
+  it('centra dos lentes VR sobre fondo negro', () => {
+    const viewports = getStereoEyeViewports(1000, 500);
 
-    expect(viewports.left).toEqual({ x: 0, y: 0, width: 50, height: 50 });
-    expect(viewports.right).toEqual({ x: 50, y: 0, width: 51, height: 50 });
+    expect(viewports.left).toEqual({ x: 80, y: 30, width: 390, height: 410 });
+    expect(viewports.right).toEqual({ x: 530, y: 30, width: 390, height: 410 });
   });
 
   it('normaliza medidas negativas para evitar viewports invalidos', () => {

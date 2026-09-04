@@ -556,6 +556,7 @@ body.virtual-active .xr-overlay { display: block; }
   color: #fff;
   background: #050b09;
 }
+.panorama-vr-clip { position: absolute; width: 0; height: 0; overflow: hidden; }
 .panorama-stage, .panorama-canvas, .panorama-hotspots {
   position: absolute;
   inset: 0;
@@ -565,13 +566,13 @@ body.virtual-active .xr-overlay { display: block; }
 .panorama-stage.is-vr-mode::before {
   content: "";
   position: absolute;
-  z-index: 3;
+  z-index: 6;
   left: 50%;
-  top: 0;
+  top: 62%;
   bottom: 0;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(255,255,255,.45), transparent);
-  transform: translateX(-.5px);
+  width: 2px;
+  background: rgba(255, 255, 255, .74);
+  transform: translateX(-1px);
   pointer-events: none;
 }
 .panorama-canvas {
@@ -937,11 +938,20 @@ body.virtual-active .xr-overlay { display: block; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 body.panorama-active { overflow: hidden; }
 body.panorama-active .panorama-view { display: block; }
+.panorama-view.is-vr-mode { background: #000; }
+.panorama-view.is-vr-mode .panorama-stage { background: #000; }
+.panorama-view.is-vr-mode .panorama-canvas {
+  cursor: none;
+  clip-path: url("#panorama-vr-lens-clip");
+  -webkit-clip-path: url("#panorama-vr-lens-clip");
+}
 .panorama-view.is-vr-mode .panorama-shade,
 .panorama-view.is-vr-mode .panorama-hint,
 .panorama-view.is-vr-mode .panorama-credit,
 .panorama-view.is-vr-mode .panorama-tour-panel,
-.panorama-view.is-vr-mode .panorama-info-card {
+.panorama-view.is-vr-mode .panorama-info-card,
+.panorama-view.is-vr-mode .panorama-topbar,
+.panorama-view.is-vr-mode .panorama-mobile-tools {
   display: none;
 }
 .panorama-view.is-vr-mode .panorama-title {
@@ -950,6 +960,33 @@ body.panorama-active .panorama-view { display: block; }
 }
 .panorama-view.is-vr-mode .panorama-gaze-teleport {
   display: grid;
+  grid-template-columns: 8fr 39fr 6fr 39fr 8fr;
+}
+.panorama-view.is-vr-mode .panorama-gaze-eye:first-child {
+  grid-column: 2;
+}
+.panorama-view.is-vr-mode .panorama-gaze-eye:last-child {
+  grid-column: 4;
+}
+.panorama-view.is-vr-mode .panorama-gaze-reticle {
+  width: 30px;
+  height: 30px;
+  background:
+    conic-gradient(#9ef6d1 calc(var(--gaze-progress) * 1turn), rgba(255,255,255,.24) 0),
+    rgba(4,14,11,.28);
+  box-shadow: 0 0 18px rgba(0,0,0,.36);
+}
+.panorama-view.is-vr-mode .panorama-gaze-reticle::before {
+  width: 20px;
+  height: 20px;
+  background: rgba(4,14,11,.72);
+}
+.panorama-view.is-vr-mode .panorama-gaze-reticle::after {
+  width: 7px;
+  height: 7px;
+}
+.panorama-view.is-vr-mode .panorama-gaze-label {
+  display: none;
 }
 .panorama-view.is-vr-portrait-blocked .panorama-vr-orientation {
   display: grid;

@@ -81,6 +81,10 @@ const hotspotDirection = new Vector3();
 const minimumLatitude = -82;
 const maximumLatitude = 82;
 const panoramaTextureLoadTimeoutMs = 12000;
+const stereoLensX = 0.08;
+const stereoLensY = 0.06;
+const stereoLensWidth = 0.39;
+const stereoLensHeight = 0.82;
 
 function clampLatitude(latitude: number): number {
   return Math.max(minimumLatitude, Math.min(maximumLatitude, latitude));
@@ -93,10 +97,21 @@ function normalizeLongitude(longitude: number): number {
 export function getStereoEyeViewports(width: number, height: number): StereoEyeViewports {
   const safeWidth = Math.max(0, Math.floor(width));
   const safeHeight = Math.max(0, Math.floor(height));
-  const leftWidth = Math.floor(safeWidth / 2);
+  if (!safeWidth || !safeHeight) {
+    return {
+      left: { x: 0, y: 0, width: 0, height: 0 },
+      right: { x: 0, y: 0, width: 0, height: 0 },
+    };
+  }
+
+  const lensWidth = Math.max(1, Math.floor(safeWidth * stereoLensWidth));
+  const lensHeight = Math.max(1, Math.floor(safeHeight * stereoLensHeight));
+  const lensTop = Math.floor(safeHeight * stereoLensY);
+  const leftX = Math.floor(safeWidth * stereoLensX);
+  const rightX = safeWidth - leftX - lensWidth;
   return {
-    left: { x: 0, y: 0, width: leftWidth, height: safeHeight },
-    right: { x: leftWidth, y: 0, width: safeWidth - leftWidth, height: safeHeight },
+    left: { x: leftX, y: lensTop, width: lensWidth, height: lensHeight },
+    right: { x: rightX, y: lensTop, width: lensWidth, height: lensHeight },
   };
 }
 
@@ -372,6 +387,7 @@ export class PanoramaViewer {
     const camera = new PerspectiveCamera(this.fieldOfView, 1, 0.1, 1100);
     const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 1);
     renderer.domElement.className = 'panorama-canvas';
     renderer.domElement.setAttribute('aria-label', this.canvasAriaLabel);
     this.container.append(renderer.domElement);
@@ -600,7 +616,8 @@ export class PanoramaViewer {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     if (!width || !height) return;
-    this.camera.aspect = (this.stereoModeEnabled ? width / 2 : width) / height;
+    const viewports = getStereoEyeViewports(width, height);
+    this.camera.aspect = this.stereoModeEnabled ? viewports.left.width / viewports.left.height : width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
   }
@@ -683,6 +700,8 @@ export class PanoramaViewer {
     const viewports = getStereoEyeViewports(width, height);
     this.camera.updateMatrixWorld();
     this.stereoCamera.update(this.camera);
+    this.renderer.setScissorTest(false);
+    this.renderer.clear(true, true, true);
     this.renderer.setScissorTest(true);
     this.renderStereoEye(viewports.left, this.stereoCamera.cameraL);
     this.renderStereoEye(viewports.right, this.stereoCamera.cameraR);

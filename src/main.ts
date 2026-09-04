@@ -363,6 +363,13 @@ app.innerHTML = `
     </div>
 
     <section id="panorama-view" class="panorama-view" aria-label="Recorrido panorámico de Paranal" aria-hidden="true">
+      <svg class="panorama-vr-clip" width="0" height="0" aria-hidden="true" focusable="false">
+        <defs>
+          <clipPath id="panorama-vr-lens-clip" clipPathUnits="objectBoundingBox">
+            <path d="M .08 .09 C .17 .05 .38 .05 .47 .1 C .5 .34 .5 .62 .47 .86 C .37 .92 .18 .92 .1 .86 C .06 .62 .06 .34 .08 .09 Z M .53 .1 C .62 .05 .83 .05 .92 .09 C .94 .34 .94 .62 .9 .86 C .82 .92 .63 .92 .53 .86 C .5 .62 .5 .34 .53 .1 Z"></path>
+          </clipPath>
+        </defs>
+      </svg>
       <div id="panorama-stage" class="panorama-stage"></div>
       <div class="panorama-shade"></div>
       <div class="panorama-topbar">
