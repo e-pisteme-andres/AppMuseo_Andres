@@ -935,7 +935,7 @@ function updatePanoramaVrButton(enabled: boolean): void {
 }
 
 function isPanoramaVrPostureBlocked(): boolean {
-  return panoramaView.classList.contains('is-vr-posture-blocked');
+  return panorama.isStereoMode() && !panorama.isVrPlacementConfirmed();
 }
 
 function getPanoramaVrPostureCopy(posture: PanoramaVrDevicePosture): { title: string; detail: string } {
@@ -972,7 +972,14 @@ function updatePanoramaVrOrientationState(): void {
   const posture = window.matchMedia('(orientation: portrait)').matches
     ? 'portrait'
     : panorama.getVrPosture();
-  const blocked = panorama.isStereoMode() && posture !== 'ready';
+
+  if (panorama.isStereoMode() && !panorama.isVrPlacementConfirmed() && posture === 'ready') {
+    panorama.resetView(activePanoramaScene.initialView);
+    panorama.confirmVrPlacement();
+    panoramaLiveStatus.textContent = 'Vista VR recolocada.';
+  }
+
+  const blocked = isPanoramaVrPostureBlocked();
   const copy = getPanoramaVrPostureCopy(posture);
   panoramaVrOrientationTitle.textContent = copy.title;
   panoramaVrOrientationDetail.textContent = copy.detail;

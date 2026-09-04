@@ -264,6 +264,7 @@ export class PanoramaViewer {
   private dragControlsEnabled = false;
   private motionControlsListening = false;
   private stereoModeEnabled = false;
+  private vrPlacementConfirmed = false;
   private vrPosture: PanoramaVrDevicePosture = 'unknown';
 
   constructor({
@@ -312,9 +313,19 @@ export class PanoramaViewer {
     return this.vrPosture;
   }
 
+  isVrPlacementConfirmed(): boolean {
+    return this.vrPlacementConfirmed;
+  }
+
+  confirmVrPlacement(): void {
+    this.vrPlacementConfirmed = true;
+    this.updateGazeTargetVisibility();
+  }
+
   setStereoMode(enabled: boolean): void {
     if (this.stereoModeEnabled === enabled) return;
     this.stereoModeEnabled = enabled;
+    this.vrPlacementConfirmed = false;
     this.container.classList.toggle('is-vr-mode', enabled);
     this.hotspotLayer?.classList.toggle('is-suppressed', enabled);
     this.updateVrPosture();
@@ -365,7 +376,7 @@ export class PanoramaViewer {
       const isActive = activeHotspotId === hotspot.id;
       marker.mesh.position.copy(getSphericalPosition(hotspot.longitude, hotspot.latitude, 476));
       marker.mesh.scale.setScalar(isActive ? 1.55 : 1);
-      marker.mesh.visible = this.stereoModeEnabled;
+      marker.mesh.visible = this.stereoModeEnabled && this.vrPlacementConfirmed;
       marker.material.color.setHex(isActive ? 0x9ef6d1 : 0xffc857);
     });
   }
@@ -491,6 +502,7 @@ export class PanoramaViewer {
     this.hotspotLayer = undefined;
     this.hotspotElements.clear();
     this.stereoModeEnabled = false;
+    this.vrPlacementConfirmed = false;
     this.container.classList.remove('is-vr-mode');
     this.deviceOrientation = undefined;
     this.setVrPosture('unknown');
@@ -736,7 +748,7 @@ export class PanoramaViewer {
     const height = this.container.clientHeight;
     if (!width || !height) return;
 
-    if (this.vrPosture !== 'ready') {
+    if (!this.vrPlacementConfirmed) {
       this.renderer.setScissorTest(false);
       this.renderer.setViewport(0, 0, width, height);
       this.renderer.setScissor(0, 0, width, height);
@@ -908,7 +920,7 @@ export class PanoramaViewer {
 
   private updateGazeTargetVisibility(): void {
     this.gazeTargetMarkers.forEach((marker) => {
-      marker.mesh.visible = this.stereoModeEnabled;
+      marker.mesh.visible = this.stereoModeEnabled && this.vrPlacementConfirmed;
     });
   }
 }
