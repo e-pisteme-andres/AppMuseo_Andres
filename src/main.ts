@@ -420,10 +420,21 @@ app.innerHTML = `
       <div class="panorama-hint" id="panorama-hint"><span aria-hidden="true">◎</span><span id="panorama-hint-text">Preparando sensores…</span></div>
       <div class="panorama-alert" id="panorama-alert" role="status" aria-live="polite" hidden></div>
       <div class="panorama-vr-orientation" id="panorama-vr-orientation" role="status" aria-live="polite" aria-hidden="true">
-        <span aria-hidden="true">VR</span>
+        <div class="panorama-vr-guide" aria-hidden="true">
+          <div class="panorama-vr-phone">
+            <span></span>
+          </div>
+          <div class="panorama-vr-hands">
+            <span></span>
+            <span></span>
+          </div>
+        </div>
         <strong id="panorama-vr-orientation-title">Gira el móvil</strong>
         <small id="panorama-vr-orientation-detail">El modo gafas se mantiene bloqueado en horizontal.</small>
-        <button class="panorama-vr-exit" id="panorama-vr-exit" type="button">Salir de VR</button>
+        <div class="panorama-vr-actions">
+          <button class="panorama-vr-ready" id="panorama-vr-ready" type="button">OK</button>
+          <button class="panorama-vr-exit" id="panorama-vr-exit" type="button">Salir</button>
+        </div>
       </div>
       <div class="panorama-gaze-teleport" id="panorama-gaze-teleport" aria-hidden="true">
         <div class="panorama-gaze-eye">
@@ -532,6 +543,7 @@ const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panoram
 const panoramaVrOrientation = getRequiredElement<HTMLElement>('#panorama-vr-orientation');
 const panoramaVrOrientationTitle = getRequiredElement<HTMLElement>('#panorama-vr-orientation-title');
 const panoramaVrOrientationDetail = getRequiredElement<HTMLElement>('#panorama-vr-orientation-detail');
+const panoramaVrReadyButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-ready');
 const panoramaVrExitButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-exit');
 const panoramaGazeTeleport = getRequiredElement<HTMLElement>('#panorama-gaze-teleport');
 const panoramaGazeLabels = [...panoramaGazeTeleport.querySelectorAll<HTMLElement>('.panorama-gaze-label')];
@@ -943,27 +955,27 @@ function getPanoramaVrPostureCopy(posture: PanoramaVrDevicePosture): { title: st
     case 'portrait':
       return {
         title: 'Gira el móvil',
-        detail: 'Ponlo en horizontal, como si fueras a grabar una panorámica.',
+        detail: 'Ponlo en horizontal y levántalo delante de ti. Pulsa OK cuando esté colocado.',
       };
     case 'flat':
       return {
         title: 'Levanta el móvil',
-        detail: 'Sujétalo vertical delante de ti, no plano sobre una mesa.',
+        detail: 'Sujétalo como para grabar una panorámica, no plano sobre una mesa. Luego pulsa OK.',
       };
     case 'tilted':
       return {
         title: 'Endereza el móvil',
-        detail: 'Mantén la pantalla de frente y el teléfono en horizontal.',
+        detail: 'Mantén la pantalla de frente y el teléfono en horizontal. Pulsa OK para recolocar.',
       };
     case 'unknown':
       return {
-        title: 'Preparando sensores',
-        detail: 'Mantén el móvil horizontal y levantado mientras llega la orientación.',
+        title: 'Coloca el móvil',
+        detail: 'Ponlo en horizontal, levantado y de frente. Pulsa OK cuando estés listo.',
       };
     case 'ready':
       return {
-        title: '',
-        detail: '',
+        title: 'Listo',
+        detail: 'Pulsa OK para recolocar la vista 360 en esta posición.',
       };
   }
 }
@@ -973,12 +985,6 @@ function updatePanoramaVrOrientationState(): void {
     ? 'portrait'
     : panorama.getVrPosture();
 
-  if (panorama.isStereoMode() && !panorama.isVrPlacementConfirmed() && posture === 'ready') {
-    panorama.resetView(activePanoramaScene.initialView);
-    panorama.confirmVrPlacement();
-    panoramaLiveStatus.textContent = 'Vista VR recolocada.';
-  }
-
   const blocked = isPanoramaVrPostureBlocked();
   const copy = getPanoramaVrPostureCopy(posture);
   panoramaVrOrientationTitle.textContent = copy.title;
@@ -987,6 +993,14 @@ function updatePanoramaVrOrientationState(): void {
   panoramaView.classList.toggle('is-vr-portrait-blocked', blocked);
   panoramaVrOrientation.setAttribute('aria-hidden', String(!blocked));
   if (blocked) resetPanoramaGazeTarget();
+}
+
+function confirmPanoramaVrPlacement(): void {
+  if (!panorama.isStereoMode() || panorama.isVrPlacementConfirmed()) return;
+  panorama.resetView(activePanoramaScene.initialView);
+  panorama.confirmVrPlacement();
+  updatePanoramaVrOrientationState();
+  panoramaLiveStatus.textContent = 'Vista VR recolocada.';
 }
 
 function applyPanoramaVrMode(enabled: boolean): void {
@@ -1095,6 +1109,7 @@ panoramaResetButton.addEventListener('click', () => {
 panoramaVrButton.addEventListener('click', () => {
   void setPanoramaVrMode(!panorama.isStereoMode());
 });
+panoramaVrReadyButton.addEventListener('click', confirmPanoramaVrPlacement);
 panoramaVrExitButton.addEventListener('click', () => {
   void setPanoramaVrMode(false);
 });
