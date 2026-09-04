@@ -366,27 +366,6 @@ app.innerHTML = `
       </dialog>
     </div>
 
-    <div class="panorama-media-dialog" id="panorama-media-dialog" role="dialog" aria-modal="true" aria-labelledby="panorama-media-title" hidden>
-      <div class="panorama-media-dialog-content">
-        <button class="panorama-panel-close panorama-media-close" id="close-panorama-media" type="button" aria-label="Cerrar selector">×</button>
-        <p class="panorama-media-eyebrow">Paisaje 360°</p>
-        <h2 id="panorama-media-title">Elige el formato</h2>
-        <div class="panorama-media-options" aria-label="Formatos de paisaje">
-          <button class="panorama-media-option" id="open-panorama-photos" type="button">
-            <span class="panorama-media-option-icon panorama-media-option-icon--photos" aria-hidden="true"></span>
-            <strong>Fotos 360</strong>
-            <small>Recorrido panorámico actual</small>
-          </button>
-          <button class="panorama-media-option" id="open-panorama-videos" type="button">
-            <span class="panorama-media-option-icon panorama-media-option-icon--videos" aria-hidden="true"></span>
-            <strong>Vídeos 360</strong>
-            <small>Lo preparamos en el siguiente paso</small>
-          </button>
-        </div>
-        <p class="panorama-media-status" id="panorama-media-status" role="status" aria-live="polite"></p>
-      </div>
-    </div>
-
     <section id="panorama-view" class="panorama-view" aria-label="Recorrido panorámico de Paranal" aria-hidden="true">
       <svg class="panorama-vr-clip" width="0" height="0" aria-hidden="true" focusable="false">
         <defs>
@@ -535,11 +514,6 @@ const modelPreviewCanvases = new Map(
   ]),
 );
 const openPanoramaButton = getRequiredElement<HTMLButtonElement>('#open-panorama');
-const panoramaMediaDialog = getRequiredElement<HTMLElement>('#panorama-media-dialog');
-const closePanoramaMediaButton = getRequiredElement<HTMLButtonElement>('#close-panorama-media');
-const openPanoramaPhotosButton = getRequiredElement<HTMLButtonElement>('#open-panorama-photos');
-const openPanoramaVideosButton = getRequiredElement<HTMLButtonElement>('#open-panorama-videos');
-const panoramaMediaStatus = getRequiredElement<HTMLElement>('#panorama-media-status');
 const closePanoramaButton = getRequiredElement<HTMLButtonElement>('#close-panorama');
 const panoramaView = getRequiredElement<HTMLElement>('#panorama-view');
 const panoramaStage = getRequiredElement<HTMLElement>('#panorama-stage');
@@ -2507,32 +2481,7 @@ function openPanorama(recordAction = true): void {
     });
 }
 
-function openPanoramaMediaDialog(): void {
-  panoramaMediaStatus.textContent = '';
-  panoramaMediaDialog.hidden = false;
-  document.body.classList.add('panorama-media-active');
-  openPanoramaPhotosButton.focus();
-}
-
-function closePanoramaMediaDialog(): void {
-  panoramaMediaDialog.hidden = true;
-  document.body.classList.remove('panorama-media-active');
-  openPanoramaButton.focus();
-}
-
-openPanoramaButton.addEventListener('click', openPanoramaMediaDialog);
-closePanoramaMediaButton.addEventListener('click', closePanoramaMediaDialog);
-openPanoramaPhotosButton.addEventListener('click', () => {
-  panoramaMediaDialog.hidden = true;
-  document.body.classList.remove('panorama-media-active');
-  openPanorama();
-});
-openPanoramaVideosButton.addEventListener('click', () => {
-  panoramaMediaStatus.textContent = 'Vídeos 360 listo como opción. Ahora falta decidir qué vídeos cargamos y sus controles.';
-});
-panoramaMediaDialog.addEventListener('click', (event) => {
-  if (event.target === panoramaMediaDialog) closePanoramaMediaDialog();
-});
+openPanoramaButton.addEventListener('click', () => openPanorama());
 
 function closePanorama(): void {
   flushPanoramaCheckpoint('panorama:close', 'landing');
@@ -2556,8 +2505,6 @@ closePanoramaButton.addEventListener('click', closePanorama);
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && qrScannerDialog.open) {
     closeQrScannerDialog();
-  } else if (event.key === 'Escape' && !panoramaMediaDialog.hidden) {
-    closePanoramaMediaDialog();
   } else if (event.key === 'Escape' && document.body.classList.contains('panorama-active')) {
     if (!panoramaInfoCard.hidden) {
       closePanoramaInfo();
