@@ -34,8 +34,12 @@ button, a { font: inherit; }
   flex-direction: column;
 }
 
-.brand { display: flex; align-items: center; gap: 12px; padding: 28px 0; color: #b9c7c1; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 28px 0; color: #b9c7c1; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; }
+.brand-identity { display: inline-flex; align-items: center; min-width: 0; gap: 12px; }
+.brand-identity > span:last-child { line-height: 1.35; }
 .brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid rgba(111, 238, 186, .45); border-radius: 9px; color: #6feeba; font-weight: 800; }
+.app-version { flex: 0 0 auto; display: grid; justify-items: end; gap: 2px; padding: 7px 11px; border: 1px solid rgba(111, 238, 186, .26); border-radius: 14px; color: #9fe9cc; background: rgba(111, 238, 186, .06); font-size: .64rem; font-weight: 850; letter-spacing: .08em; line-height: 1.25; text-align: right; }
+.app-version span:last-child { color: #7f968d; font-size: .56rem; font-weight: 720; letter-spacing: .04em; }
 .hero-grid { flex: 1; display: grid; grid-template-columns: 1.08fr .92fr; align-items: center; gap: clamp(30px, 7vw, 100px); padding: 30px 0 54px; }
 .hero-copy { max-width: 620px; }
 .eyebrow { margin: 0 0 18px; color: #6feeba; font-size: .74rem; font-weight: 750; letter-spacing: .18em; text-transform: uppercase; }

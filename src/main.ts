@@ -63,6 +63,11 @@ function getProgressStorage(): ProgressStorage | null {
 
 const app = getRequiredElement<HTMLDivElement>('#app');
 const qrFileName = import.meta.env.VITE_QR_FILE_NAME || 'qr-app-museo.png';
+const appVersion = __APP_VERSION__;
+const appUpdatedAt = new Intl.DateTimeFormat('es-ES', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+}).format(new Date(__APP_UPDATED_AT__));
 
 app.innerHTML = `
   <main class="app-shell">
@@ -71,7 +76,13 @@ app.innerHTML = `
     <div class="xr-stage" id="xr-stage" aria-hidden="true"></div>
 
     <section class="landing" aria-labelledby="page-title">
-      <div class="brand"><span class="brand-mark">M</span><span>App Museo · Laboratorio AR</span></div>
+      <div class="brand">
+        <span class="brand-identity"><span class="brand-mark">M</span><span>App Museo · Laboratorio AR</span></span>
+        <span class="app-version" aria-label="Versión de la app y fecha del último cambio">
+          <span>v${appVersion}</span>
+          <span>Actualizado ${appUpdatedAt}</span>
+        </span>
+      </div>
       <div class="hero-grid">
         <div class="hero-copy">
           <p class="eyebrow">Experiencia AR · Android + iOS</p>
