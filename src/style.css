@@ -114,26 +114,30 @@ h1 span { color: transparent; -webkit-text-stroke: 1.5px rgba(244, 247, 245, .78
 .test-button-icon::before { left: -2px; top: -2px; width: 1.5px; height: 22px; transform: skewY(-28deg); transform-origin: bottom; }
 .test-button-icon::after { left: -2px; top: -2px; width: 22px; height: 1.5px; transform: skewX(-28deg); transform-origin: right; }
 .panorama-media-dialog {
-  width: min(620px, calc(100% - 30px));
-  margin: auto;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid rgba(180, 212, 199, .2);
-  border-radius: 24px;
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 15px;
+  overflow: auto;
   color: #f4f7f5;
-  background:
-    radial-gradient(circle at 88% 12%, rgba(111, 238, 186, .12), transparent 16rem),
-    #0b1914;
-  box-shadow: 0 28px 90px rgba(0, 0, 0, .58);
-}
-.panorama-media-dialog::backdrop {
   background: rgba(2, 8, 6, .78);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
+.panorama-media-dialog[hidden] { display: none; }
 .panorama-media-dialog-content {
   position: relative;
+  width: min(620px, 100%);
   padding: clamp(24px, 5vw, 38px);
+  overflow: hidden;
+  border: 1px solid rgba(180, 212, 199, .2);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(111, 238, 186, .12), transparent 16rem),
+    #0b1914;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .58);
 }
 .panorama-media-close {
   right: 18px;
@@ -636,6 +640,7 @@ footer a { color: #8be6c1; text-decoration: none; }
 .qr-scanner-status { margin: 14px 0 0; color: #9cb1a8; font-size: .78rem; line-height: 1.5; }
 .qr-scanner-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
+body.panorama-media-active { overflow: hidden; }
 body.xr-active .landing { visibility: hidden; }
 body.xr-active .app-shell { background: transparent; }
 body.xr-active .xr-stage { visibility: visible; }
