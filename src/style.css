@@ -113,6 +113,136 @@ h1 span { color: transparent; -webkit-text-stroke: 1.5px rgba(244, 247, 245, .78
 .test-button-icon::before, .test-button-icon::after { content: ""; position: absolute; background: currentColor; opacity: .72; }
 .test-button-icon::before { left: -2px; top: -2px; width: 1.5px; height: 22px; transform: skewY(-28deg); transform-origin: bottom; }
 .test-button-icon::after { left: -2px; top: -2px; width: 22px; height: 1.5px; transform: skewX(-28deg); transform-origin: right; }
+.panorama-media-dialog {
+  width: min(620px, calc(100% - 30px));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(180, 212, 199, .2);
+  border-radius: 24px;
+  color: #f4f7f5;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(111, 238, 186, .12), transparent 16rem),
+    #0b1914;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .58);
+}
+.panorama-media-dialog::backdrop {
+  background: rgba(2, 8, 6, .78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.panorama-media-dialog-content {
+  position: relative;
+  padding: clamp(24px, 5vw, 38px);
+}
+.panorama-media-close {
+  right: 18px;
+  top: 18px;
+}
+.panorama-media-eyebrow {
+  margin: 0 0 8px;
+  color: #6feeba;
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.panorama-media-dialog h2 {
+  margin: 0 42px 22px 0;
+  font-size: clamp(1.9rem, 7vw, 3.2rem);
+  line-height: .95;
+  letter-spacing: 0;
+}
+.panorama-media-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.panorama-media-option {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  min-height: 164px;
+  padding: 18px;
+  border: 1px solid rgba(180, 212, 199, .16);
+  border-radius: 16px;
+  color: #f4f7f5;
+  background: rgba(255,255,255,.035);
+  text-align: left;
+  cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+.panorama-media-option:hover,
+.panorama-media-option:focus-visible {
+  border-color: rgba(111,238,186,.68);
+  background: rgba(111,238,186,.085);
+}
+.panorama-media-option:active {
+  transform: scale(.98);
+}
+.panorama-media-option strong,
+.panorama-media-option small {
+  display: block;
+}
+.panorama-media-option strong {
+  margin-top: auto;
+  font-size: 1rem;
+}
+.panorama-media-option small {
+  color: #95a9a0;
+  font-size: .76rem;
+  line-height: 1.35;
+}
+.panorama-media-option-icon {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 34px;
+  color: #6feeba;
+}
+.panorama-media-option-icon--photos {
+  border: 2px solid currentColor;
+  border-radius: 10px;
+}
+.panorama-media-option-icon--photos::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  bottom: 8px;
+  width: 24px;
+  height: 14px;
+  background: linear-gradient(135deg, transparent 48%, currentColor 50% 58%, transparent 60%);
+}
+.panorama-media-option-icon--photos::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.panorama-media-option-icon--videos {
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+.panorama-media-option-icon--videos::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 9px;
+  border-left: 12px solid currentColor;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+}
+.panorama-media-status {
+  min-height: 20px;
+  margin: 16px 0 0;
+  color: #a8beb5;
+  font-size: .78rem;
+  line-height: 1.45;
+}
 .compatibility { min-height: 20px; margin: 13px 0 0; color: #73877e; font-size: .75rem; }
 .ios-ar-link { position: fixed; width: 1px; height: 1px; left: -10px; bottom: -10px; overflow: hidden; opacity: .001; pointer-events: none; }
 .ios-ar-link img { width: 1px; height: 1px; }
@@ -1115,6 +1245,8 @@ body.panorama-active .panorama-view { display: block; }
   .hero-actions { display: grid; }
   .test-button { width: 100%; }
   .panorama-button { width: 100%; }
+  .panorama-media-options { grid-template-columns: 1fr; }
+  .panorama-media-option { min-height: 128px; }
   .visual { order: -1; min-height: 245px; }
   .css-mushroom { width: 112px; height: 112px; }
   .orbit { width: 210px; height: 210px; } .orbit-two { width: 260px; height: 260px; }
