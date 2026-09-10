@@ -10,6 +10,7 @@ export interface AppProgress {
   view: ResumableView;
   panoramaSceneId: string;
   panorama: PanoramaViewState;
+  completedObjectives: string[];
   lastAction: string;
   updatedAt: number;
 }
@@ -17,6 +18,7 @@ export interface AppProgress {
 export interface ProgressStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
 }
 
 export const DEFAULT_PANORAMA_VIEW: PanoramaViewState = {
@@ -30,6 +32,7 @@ export const DEFAULT_APP_PROGRESS: AppProgress = {
   view: 'landing',
   panoramaSceneId: DEFAULT_PANORAMA_SCENE_ID,
   panorama: DEFAULT_PANORAMA_VIEW,
+  completedObjectives: [],
   lastAction: 'app:initial',
   updatedAt: 0,
 };
@@ -66,6 +69,13 @@ function normalizeProgress(value: unknown): AppProgress | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Partial<AppProgress>;
   if (candidate.version !== 1) return null;
+  const completedObjectives = Array.isArray(candidate.completedObjectives)
+    ? [...new Set(
+      candidate.completedObjectives
+        .filter((objective): objective is string => typeof objective === 'string')
+        .map((objective) => objective.slice(0, 80)),
+    )].slice(0, 40)
+    : [];
 
   return {
     version: 1,
@@ -74,6 +84,7 @@ function normalizeProgress(value: unknown): AppProgress | null {
       ? candidate.panoramaSceneId.slice(0, 80)
       : DEFAULT_PANORAMA_SCENE_ID,
     panorama: normalizePanoramaView(candidate.panorama),
+    completedObjectives,
     lastAction: typeof candidate.lastAction === 'string'
       ? candidate.lastAction.slice(0, 120)
       : DEFAULT_APP_PROGRESS.lastAction,
@@ -107,6 +118,7 @@ export function saveAppProgress(
     view: progress.view === 'panorama' ? 'panorama' : 'landing',
     panoramaSceneId: progress.panoramaSceneId.slice(0, 80),
     panorama: normalizePanoramaView(progress.panorama),
+    completedObjectives: [...new Set(progress.completedObjectives.map((objective) => objective.slice(0, 80)))].slice(0, 40),
     lastAction: progress.lastAction.slice(0, 120),
     updatedAt: Math.max(0, finiteNumber(updatedAt, 0)),
   };
@@ -119,4 +131,13 @@ export function saveAppProgress(
   }
 
   return normalized;
+}
+
+export function clearAppProgress(storage: ProgressStorage | null): void {
+  try {
+    storage?.removeItem?.(APP_PROGRESS_KEY);
+  } catch {
+    // Same defensive posture as saveAppProgress: blocked storage should not
+    // prevent the app from continuing.
+  }
 }

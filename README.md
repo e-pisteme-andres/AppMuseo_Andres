@@ -1,14 +1,39 @@
-# Museo AR · Cinco modelos 3D
+# Museo AR · Seis modelos 3D
 
-Aplicación de realidad aumentada para colocar cinco modelos 3D con efectos
+## Resumen
+
+AppMuseo_Andres es una aplicacion inmersiva de museo con seis modelos 3D,
+realidad aumentada web, fallback iOS, recorrido 360 y app nativa iOS. Este
+README es la entrada general: explica que ofrece la app, como probarla y donde
+esta la documentacion principal.
+
+## Indice
+
+- [Documentacion](#documentación)
+- [Uso](#uso)
+- [Marcadores ArUco](#marcadores-aruco)
+- [Interacciones de los modelos](#interacciones-de-los-modelos)
+- [Panorama 360](#panorama-360)
+- [Desarrollo](#desarrollo)
+- [Publicacion](#publicación)
+
+Aplicación de realidad aumentada para colocar seis modelos 3D con efectos
 sobre una mesa o el suelo: seta roja, cristal aurora, medusa celeste, tótem
-solar y flor cósmica. El repositorio incluye:
+solar, flor cósmica y casa vacía. El repositorio incluye:
 
 - la experiencia web con WebXR y ARCore para Chrome en Android;
 - un fallback web con AR Quick Look para Safari en iPhone y iPad;
 - la aplicación nativa de iOS con ARKit y RealityKit en [`ios/`](ios/README.md),
   que conserva la malla, el corte, la escala, las esporas, la rotación y la
   oclusión avanzada.
+
+## Documentación
+
+La puerta de entrada para desarrolladores está en
+[`docs/principales/README.md`](docs/principales/README.md). Desde ahí se
+ordenan la guía técnica, la bitácora de decisiones, el cumplimiento contra
+requisitos, las mediciones de penumbra, la trazabilidad del bacilo esquemático
+y el módulo 360 empaquetado.
 
 ## Uso
 
@@ -17,7 +42,7 @@ solar y flor cósmica. El repositorio incluye:
 2. Pulsa **Ver modelos en AR** y concede permiso para usar la cámara.
 3. Mueve lentamente el teléfono hasta que la retícula confirme una superficie horizontal.
 4. Toca la pantalla para fijar una malla cian de 1 × 1 metro sobre la superficie.
-5. Elige uno de los cinco modelos para colocarlo; la malla permanecerá visible.
+5. Elige uno de los seis modelos para colocarlo; la malla permanecerá visible.
 6. Arrastra con un dedo para girar en dos ejes o gira dos dedos para el tercer eje.
 
 El modelo no admite desplazamiento libre: permanece fijado a la superficie. Su tamaño solo cambia mediante el control de escala. Un anchor de WebXR mantiene la ubicación física cuando el dispositivo lo soporta; en caso contrario se conserva la pose local detectada.
@@ -64,7 +89,8 @@ La hoja de ejemplo publicada para probar la seta está en:
 ## Interacciones de los modelos
 
 Cada modelo dispone de una acción exclusiva —liberar esporas, cargar energía,
-dar impulso, despertar el tótem o florecer— y de una ficha **Descubrir**. Las
+dar impulso, despertar el tótem, florecer o iluminar una casa vacía— y de una
+ficha **Descubrir**. Las
 acciones pueden repetirse, refuerzan temporalmente las partículas y muestran
 un punto luminoso sobre la pieza. El sonido sintetizado es opcional y comienza
 desactivado; los móviles compatibles reciben una vibración breve. Los botones
@@ -96,13 +122,50 @@ pnpm generate:assets
 pnpm dev
 ```
 
+Para probar cambios en el movil sin publicar en GitHub Pages puedes usar el
+servidor local con tunel HTTPS:
+
+```bash
+pnpm dev:tunnel
+```
+
+El comando muestra un enlace temporal `https://...loca.lt` que puedes abrir en
+el telefono. Para probar una rama aislada, sin mover la rama actual del repo:
+
+```bash
+pnpm dev:tunnel -- -Branch nombre-de-la-rama
+```
+
+Si la rama no existe, el script la crea dentro de `.worktrees/`; si ya existe,
+reutiliza su worktree. Para probar solo en este ordenador o en la misma Wi-Fi,
+sin tunel publico:
+
+```bash
+pnpm dev:local
+```
+
+Si el enlace de `localtunnel` no responde, usa Cloudflare Quick Tunnel:
+
+```bash
+pnpm dev:cloudflare
+```
+
+El visor incluye un video 360 en `public/videos/eagle-360.mp4`.
+Al pulsar `Explorar paisaje`, la app pregunta si quieres abrir `Foto 360` o
+`Video 360`. Foto mantiene el recorrido panoramico original; Video carga el MP4
+inmersivo. Despues de elegir foto o video, la app pregunta si quieres verlo en
+modo normal o usar VR. En normal puedes mover el movil o arrastrar sin bloquear
+la pantalla; en VR solicita sensores, intenta pantalla completa y pide
+girar/colocar el movil antes de confirmar con OK. El video arranca silenciado
+para que pueda reproducirse automaticamente en iPhone y Android.
+
 Las pruebas se ejecutan con `pnpm test` y la compilación de producción con `pnpm build`.
 
 `pnpm download:panoramas` prepara las dos escenas adicionales del recorrido
 desde los archivos de publicación de ESO. El flujo de GitHub Pages ejecuta este
 paso automáticamente para la vista de prueba de la ampliación 360.
 
-`pnpm generate:assets` genera los cinco GLB web, los códigos QR, el USDZ de la
+`pnpm generate:assets` genera los seis GLB web, los códigos QR, el USDZ de la
 seta para iOS normalizado a 20 cm y los iconos compartidos. Para compilar la aplicación nativa consulta
 [`ios/README.md`](ios/README.md); Xcode y las pruebas AR requieren macOS y un
 dispositivo físico.

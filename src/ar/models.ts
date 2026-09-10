@@ -1,6 +1,7 @@
 export const MODEL_CATALOG = [
   {
     id: 'mushroom',
+    pieceNumber: 1,
     name: 'Seta roja',
     placedLabel: 'Seta roja colocada',
     actionLabel: 'Liberar esporas',
@@ -22,6 +23,7 @@ export const MODEL_CATALOG = [
   },
   {
     id: 'crystal',
+    pieceNumber: 2,
     name: 'Cristal aurora',
     placedLabel: 'Cristal aurora colocado',
     actionLabel: 'Cargar energía',
@@ -43,6 +45,7 @@ export const MODEL_CATALOG = [
   },
   {
     id: 'jellyfish',
+    pieceNumber: 3,
     name: 'Medusa celeste',
     placedLabel: 'Medusa celeste colocada',
     actionLabel: 'Dar impulso',
@@ -64,6 +67,7 @@ export const MODEL_CATALOG = [
   },
   {
     id: 'totem',
+    pieceNumber: 4,
     name: 'Tótem solar',
     placedLabel: 'Tótem solar colocado',
     actionLabel: 'Despertar tótem',
@@ -85,6 +89,7 @@ export const MODEL_CATALOG = [
   },
   {
     id: 'cosmic-flower',
+    pieceNumber: 5,
     name: 'Flor cósmica',
     placedLabel: 'Flor cósmica colocada',
     actionLabel: 'Hacer florecer',
@@ -106,6 +111,7 @@ export const MODEL_CATALOG = [
   },
   {
     id: 'empty-house',
+    pieceNumber: 6,
     name: 'Casa vacia',
     placedLabel: 'Casa vacia colocada',
     actionLabel: 'Iluminar interior',

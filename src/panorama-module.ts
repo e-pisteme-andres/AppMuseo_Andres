@@ -8,6 +8,7 @@ import type {
   PanoramaInfoHotspot,
   PanoramaScene,
 } from './panorama-types';
+import { getPanoramaSceneMedia } from './panorama-types';
 
 export interface PanoramaModuleTextSection {
   id: string;
@@ -270,7 +271,7 @@ class PanoramaModuleControllerImpl implements PanoramaModuleController {
 
     this.viewer = new PanoramaViewer({
       container: this.stage,
-      imageUrl: this.activeScene.imageUrl,
+      media: getPanoramaSceneMedia(this.activeScene),
       initialView: this.activeScene.initialView,
       canvasAriaLabel: options.labels.canvasLabel,
       hotspotsAriaLabel: options.labels.hotspotsLabel,
@@ -310,7 +311,7 @@ class PanoramaModuleControllerImpl implements PanoramaModuleController {
     this.applySceneMetadata();
     this.closeInfoPanel();
     this.viewer.setHotspots(nextScene.hotspots, (hotspot) => this.handleHotspot(hotspot));
-    await this.viewer.changePanorama(nextScene.imageUrl, nextScene.initialView);
+    await this.viewer.changePanorama(getPanoramaSceneMedia(nextScene), nextScene.initialView);
   }
 
   private createToolButton(text: string, className: string): HTMLButtonElement {

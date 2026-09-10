@@ -1,8 +1,10 @@
 node_modules/
 .pnpm-store/
 dist/
+tmp/
 *.tsbuildinfo
 .vite/
+.worktrees/
 .DS_Store
 ios/**/xcuserdata/
 ios/**/*.xcuserstate

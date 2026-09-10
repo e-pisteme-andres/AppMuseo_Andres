@@ -12,13 +12,16 @@ import { playModelSound } from './ar/model-sound';
 import { selectARMode, supportsAppleQuickLook, type ARMode } from './ar/platform';
 import { XRExperience } from './ar/xr-experience';
 import type { ExperienceState } from './ar/state';
+import packageJson from '../package.json';
 import {
   getPanoramaAngularDistance,
   PanoramaViewer,
+  type PanoramaMediaPlaybackState,
   type PanoramaVrDevicePosture,
 } from './panorama-viewer';
 import {
   createPanoramaTour,
+  DEFAULT_PANORAMA_SCENE_ID,
   findPanoramaScene,
 } from './panorama-tour';
 import type {
@@ -26,8 +29,10 @@ import type {
   PanoramaInfoHotspot,
   PanoramaNavigationHotspot,
 } from './panorama-types';
+import { getPanoramaSceneMedia } from './panorama-types';
 import { VirtualExperience } from './virtual-experience';
 import {
+  clearAppProgress,
   loadAppProgress,
   saveAppProgress,
   type ProgressStorage,
@@ -67,11 +72,87 @@ function getProgressStorage(): ProgressStorage | null {
 
 const app = getRequiredElement<HTMLDivElement>('#app');
 const qrFileName = import.meta.env.VITE_QR_FILE_NAME || 'qr-app-museo.png';
-const appVersion = __APP_VERSION__;
+const appVersion = packageJson.version;
+const appUpdatedAtSource = import.meta.env.DEV ? new Date().toISOString() : __APP_UPDATED_AT__;
 const appUpdatedAt = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'short',
   timeStyle: 'short',
-}).format(new Date(__APP_UPDATED_AT__));
+}).format(new Date(appUpdatedAtSource));
+const MODEL_CATALOG_BY_PIECE = [...MODEL_CATALOG].sort(
+  (first, second) => first.pieceNumber - second.pieceNumber,
+);
+const MUSEUM_PIECES = [
+  {
+    pieceNumber: 7,
+    title: 'Fragmento de vasija azul',
+    period: 'Cerámica contemporánea',
+    description: 'Restos de una pieza esmaltada usada para estudiar color, grieta y reparación visible.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-07/640/420',
+  },
+  {
+    pieceNumber: 12,
+    title: 'Máscara de madera clara',
+    period: 'Objeto ritual inventariado',
+    description: 'Máscara tallada con marcas frontales y policromía tenue alrededor de los ojos.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-12/640/420',
+  },
+  {
+    pieceNumber: 18,
+    title: 'Cuaderno de campo',
+    period: 'Archivo de expedición',
+    description: 'Libreta con anotaciones, manchas de humedad y bocetos de formas orgánicas.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-18/640/420',
+  },
+  {
+    pieceNumber: 23,
+    title: 'Lámpara de gabinete',
+    period: 'Instrumental de sala',
+    description: 'Pequeña lámpara usada para observar relieves delicados sin exponerlos a luz intensa.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-23/640/420',
+  },
+  {
+    pieceNumber: 31,
+    title: 'El bosque que llevas dentro',
+    period: 'Microbioma intestinal',
+    description: 'Pieza dedicada a comunidades microscópicas, escala ampliada y convivencia biológica.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-31/640/420',
+  },
+  {
+    pieceNumber: 38,
+    title: 'Mapa de polvo mineral',
+    period: 'Geología visual',
+    description: 'Panel fotográfico con acumulaciones de arena, cristal y pigmentos del terreno.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-38/640/420',
+  },
+  {
+    pieceNumber: 44,
+    title: 'Molde de raíz seca',
+    period: 'Botánica expandida',
+    description: 'Registro volumétrico de una raíz, conservado como huella de crecimiento bajo tierra.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-44/640/420',
+  },
+  {
+    pieceNumber: 52,
+    title: 'Placa de vidrio ámbar',
+    period: 'Fotografía experimental',
+    description: 'Placa translúcida con veladuras cálidas y pequeñas marcas de manipulación manual.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-52/640/420',
+  },
+  {
+    pieceNumber: 67,
+    title: 'Herramienta de medición',
+    period: 'Tecnología museográfica',
+    description: 'Instrumento de escala usado para comparar objetos reales con modelos aumentados.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-67/640/420',
+  },
+  {
+    pieceNumber: 75,
+    title: 'Tela de sombra',
+    period: 'Instalación lumínica',
+    description: 'Textil oscuro que filtra la luz y modifica la percepción de volumen en sala.',
+    imageUrl: 'https://picsum.photos/seed/app-museo-pieza-75/640/420',
+  },
+] as const;
 
 app.innerHTML = `
   <main class="app-shell">
@@ -79,13 +160,19 @@ app.innerHTML = `
     <div class="ambient ambient-two"></div>
     <div class="xr-stage" id="xr-stage" aria-hidden="true"></div>
 
-    <section class="landing" aria-labelledby="page-title">
+    <section class="landing app-page" id="landing-screen" aria-labelledby="page-title">
       <div class="brand">
         <span class="brand-identity"><span class="brand-mark">M</span><span>App Museo · Laboratorio AR</span></span>
-        <span class="app-version" aria-label="Versión de la app y fecha del último cambio">
-          <span>v${appVersion}</span>
-          <span>Actualizado ${appUpdatedAt}</span>
-        </span>
+        <div class="brand-actions">
+          <nav class="app-nav" aria-label="Secciones de la aplicación">
+            <button class="app-nav-button" id="open-catalog-section" type="button">Catálogo</button>
+            <button class="app-nav-button" id="open-settings-section" type="button">Ajustes</button>
+          </nav>
+          <span class="app-version" aria-label="Versión de la app y fecha del último cambio">
+            <span>v${appVersion}</span>
+            <span>Actualizado ${appUpdatedAt}</span>
+          </span>
+        </div>
       </div>
       <div class="hero-grid">
         <div class="hero-copy">
@@ -143,6 +230,100 @@ app.innerHTML = `
         <span>Compatible con ARCore en Android y ARKit en iPhone/iPad</span>
         <a href="${import.meta.env.BASE_URL}${qrFileName}" download="${qrFileName}">Descargar QR</a>
       </footer>
+    </section>
+
+    <section class="app-section catalog-screen" id="catalog-screen" aria-labelledby="piece-catalog-title" hidden>
+      <div class="section-shell">
+        <header class="section-header">
+          <button class="section-back" id="catalog-back" type="button">Inicio</button>
+          <span>Inventario AR</span>
+          <div class="section-title-row">
+            <h2 id="piece-catalog-title">Catálogo de piezas</h2>
+            <strong id="piece-catalog-count">0/${MODEL_CATALOG_BY_PIECE.length}</strong>
+          </div>
+          <p>Las piezas aparecen como siluetas hasta que se visitan con la app. Cada desbloqueo queda guardado en este dispositivo.</p>
+        </header>
+        <div class="piece-catalog" id="piece-catalog">
+          <div class="piece-catalog-grid" id="piece-catalog-grid">
+            ${MODEL_CATALOG_BY_PIECE.map(
+              (model) => `
+                <article
+                  class="piece-card"
+                  data-catalog-model-id="${model.id}"
+                  data-unlocked="false"
+                  aria-label="Pieza ${String(model.pieceNumber).padStart(2, '0')}: sin visitar"
+                >
+                  <div class="piece-card-topline">
+                    <span>Pieza ${String(model.pieceNumber).padStart(2, '0')}</span>
+                    <small class="piece-card-status">Sin visitar</small>
+                  </div>
+                  <div class="piece-card-preview">
+                    <span class="piece-silhouette piece-silhouette--${model.id}" aria-hidden="true"></span>
+                    <canvas id="catalog-${model.id}-preview" width="120" height="120" hidden aria-hidden="true"></canvas>
+                  </div>
+                  <strong class="piece-card-name">Silueta reservada</strong>
+                  <p class="piece-card-description">Pieza pendiente de visita.</p>
+                </article>
+              `,
+            ).join('')}
+          </div>
+        </div>
+        <section class="museum-search" aria-labelledby="museum-search-title">
+          <div class="museum-search-heading">
+            <span>Archivo general</span>
+            <div>
+              <h3 id="museum-search-title">Buscar pieza por número</h3>
+              <strong id="museum-search-count">${MUSEUM_PIECES.length} piezas</strong>
+            </div>
+          </div>
+          <label class="museum-search-field" for="museum-piece-search">
+            <span>Número de pieza</span>
+            <input id="museum-piece-search" type="search" inputmode="numeric" autocomplete="off" placeholder="Ej. 31">
+          </label>
+          <div class="museum-piece-results" id="museum-piece-results">
+            ${MUSEUM_PIECES.map(
+              (piece) => `
+                <article class="museum-piece-card" data-museum-piece-number="${piece.pieceNumber}">
+                  <img src="${piece.imageUrl}" alt="Foto de ${piece.title}" loading="lazy">
+                  <div>
+                    <span>Pieza ${String(piece.pieceNumber).padStart(2, '0')}</span>
+                    <h4>${piece.title}</h4>
+                    <small>${piece.period}</small>
+                    <p>${piece.description}</p>
+                  </div>
+                </article>
+              `,
+            ).join('')}
+          </div>
+          <p class="museum-search-empty" id="museum-search-empty" hidden>No hay ninguna pieza con ese número.</p>
+        </section>
+      </div>
+    </section>
+
+    <section class="app-section settings-screen" id="settings-screen" aria-labelledby="settings-title" hidden>
+      <div class="section-shell settings-shell">
+        <header class="section-header">
+          <button class="section-back" id="settings-back" type="button">Inicio</button>
+          <span>Preferencias</span>
+          <div class="section-title-row">
+            <h2 id="settings-title">Ajustes</h2>
+          </div>
+          <p>Gestiona los datos guardados localmente por la experiencia.</p>
+        </header>
+        <section class="visit-progress" id="visit-progress" aria-labelledby="visit-progress-title">
+          <div class="visit-progress-copy">
+            <span id="visit-progress-status" class="visit-progress-status">0/${MODEL_CATALOG_BY_PIECE.length}</span>
+            <h3 id="visit-progress-title">Progreso del catálogo</h3>
+            <p>Las piezas visitadas quedan registradas en este dispositivo para continuar la colección al volver.</p>
+          </div>
+          <div class="visit-progress-actions">
+            <button class="visit-progress-reset" id="reset-visit-progress" type="button">
+              Borrar progreso
+            </button>
+          </div>
+        </section>
+        <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
+      </div>
     </section>
 
     <dialog
@@ -303,7 +484,7 @@ app.innerHTML = `
         </div>
         <div class="xr-model-panel" id="forms-panel" aria-label="Formas disponibles" hidden>
           <span class="xr-panel-title">Formas disponibles</span>
-          ${MODEL_CATALOG.map(
+          ${MODEL_CATALOG_BY_PIECE.map(
             (model) => `
               <button class="xr-model-option" id="place-${model.id}" type="button" data-model-id="${model.id}">
                 <span class="xr-model-preview">
@@ -366,6 +547,26 @@ app.innerHTML = `
       </dialog>
     </div>
 
+    <dialog class="panorama-choice-dialog" id="panorama-choice-dialog" aria-labelledby="panorama-choice-title">
+      <div class="panorama-choice-content">
+        <div class="panorama-choice-heading">
+          <span id="panorama-choice-kicker">Vista inmersiva</span>
+          <h2 id="panorama-choice-title">Paisaje 360°</h2>
+        </div>
+        <div class="panorama-choice-actions">
+          <button class="panorama-choice-option" id="panorama-choice-primary" type="button">
+            <strong id="panorama-choice-primary-title">Foto 360</strong>
+            <small id="panorama-choice-primary-detail">Recorrido panorámico</small>
+          </button>
+          <button class="panorama-choice-option" id="panorama-choice-secondary" type="button">
+            <strong id="panorama-choice-secondary-title">Video 360</strong>
+            <small id="panorama-choice-secondary-detail">Marte inmersivo</small>
+          </button>
+        </div>
+        <button class="panorama-choice-close" id="panorama-choice-close" type="button">Cancelar</button>
+      </div>
+    </dialog>
+
     <section id="panorama-view" class="panorama-view" aria-label="Recorrido panorámico de Paranal" aria-hidden="true">
       <svg class="panorama-vr-clip" width="0" height="0" aria-hidden="true" focusable="false">
         <defs>
@@ -413,6 +614,8 @@ app.innerHTML = `
           <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-out" type="button" aria-label="Alejar">−</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-reset-view" type="button" aria-label="Centrar vista">◎</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-zoom-in" type="button" aria-label="Acercar">+</button>
+          <button class="panorama-tool panorama-icon-tool panorama-media-tool" id="panorama-video-play" type="button" aria-label="Pausar video 360" hidden>II</button>
+          <button class="panorama-tool panorama-icon-tool panorama-media-tool" id="panorama-video-mute" type="button" aria-label="Activar sonido del video 360" hidden>♪</button>
           <button class="panorama-tool panorama-icon-tool panorama-vr-tool" id="panorama-vr-mode" type="button" aria-label="Activar modo gafas VR" aria-pressed="false">VR</button>
           <button class="panorama-tool panorama-icon-tool" id="panorama-fullscreen" type="button" aria-label="Mostrar en pantalla completa">⛶</button>
         </div>
@@ -454,11 +657,41 @@ app.innerHTML = `
 
 const stage = getRequiredElement<HTMLElement>('#xr-stage');
 const overlay = getRequiredElement<HTMLElement>('#xr-overlay');
+const landingScreen = getRequiredElement<HTMLElement>('#landing-screen');
+const catalogScreen = getRequiredElement<HTMLElement>('#catalog-screen');
+const settingsScreen = getRequiredElement<HTMLElement>('#settings-screen');
+const openCatalogSectionButton = getRequiredElement<HTMLButtonElement>('#open-catalog-section');
+const openSettingsSectionButton = getRequiredElement<HTMLButtonElement>('#open-settings-section');
+const catalogBackButton = getRequiredElement<HTMLButtonElement>('#catalog-back');
+const settingsBackButton = getRequiredElement<HTMLButtonElement>('#settings-back');
 const startButton = getRequiredElement<HTMLButtonElement>('#start-ar');
 const openScanButton = getRequiredElement<HTMLButtonElement>('#open-scan');
 const openTestButton = getRequiredElement<HTMLButtonElement>('#open-test');
 const startLabel = getRequiredElement<HTMLElement>('#start-label');
 const compatibility = getRequiredElement<HTMLElement>('#compatibility');
+const visitProgress = getRequiredElement<HTMLElement>('#visit-progress');
+const visitProgressStatus = getRequiredElement<HTMLElement>('#visit-progress-status');
+const resetVisitProgressButton = getRequiredElement<HTMLButtonElement>('#reset-visit-progress');
+const settingsFeedback = getRequiredElement<HTMLElement>('#settings-feedback');
+const pieceCatalogCount = getRequiredElement<HTMLElement>('#piece-catalog-count');
+const pieceCatalogCards = new Map(
+  MODEL_CATALOG_BY_PIECE.map((model) => [
+    model.id,
+    getRequiredElement<HTMLElement>(`[data-catalog-model-id="${model.id}"]`),
+  ]),
+);
+const pieceCatalogPreviewCanvases = new Map(
+  MODEL_CATALOG_BY_PIECE.map((model) => [
+    model.id,
+    getRequiredElement<HTMLCanvasElement>(`#catalog-${model.id}-preview`),
+  ]),
+);
+const museumPieceSearchInput = getRequiredElement<HTMLInputElement>('#museum-piece-search');
+const museumPieceCards = [
+  ...document.querySelectorAll<HTMLElement>('[data-museum-piece-number]'),
+];
+const museumSearchCount = getRequiredElement<HTMLElement>('#museum-search-count');
+const museumSearchEmpty = getRequiredElement<HTMLElement>('#museum-search-empty');
 const cameraDialog = getRequiredElement<HTMLDialogElement>('#camera-dialog');
 const cameraCheck = getRequiredElement<HTMLElement>('#camera-check');
 const cameraCheckTitle = getRequiredElement<HTMLElement>('#camera-check-title');
@@ -502,18 +735,28 @@ const scanQrToggle = getRequiredElement<HTMLButtonElement>('#scan-qr-toggle');
 const formsPanel = getRequiredElement<HTMLElement>('#forms-panel');
 const handsToggle = getRequiredElement<HTMLButtonElement>('#hands-toggle');
 const modelButtons = new Map(
-  MODEL_CATALOG.map((model) => [
+  MODEL_CATALOG_BY_PIECE.map((model) => [
     model.id,
     getRequiredElement<HTMLButtonElement>(`#place-${model.id}`),
   ]),
 );
 const modelPreviewCanvases = new Map(
-  MODEL_CATALOG.map((model) => [
+  MODEL_CATALOG_BY_PIECE.map((model) => [
     model.id,
     getRequiredElement<HTMLCanvasElement>(`#${model.id}-preview`),
   ]),
 );
 const openPanoramaButton = getRequiredElement<HTMLButtonElement>('#open-panorama');
+const panoramaChoiceDialog = getRequiredElement<HTMLDialogElement>('#panorama-choice-dialog');
+const panoramaChoiceKicker = getRequiredElement<HTMLElement>('#panorama-choice-kicker');
+const panoramaChoiceTitle = getRequiredElement<HTMLElement>('#panorama-choice-title');
+const panoramaChoicePrimaryButton = getRequiredElement<HTMLButtonElement>('#panorama-choice-primary');
+const panoramaChoicePrimaryTitle = getRequiredElement<HTMLElement>('#panorama-choice-primary-title');
+const panoramaChoicePrimaryDetail = getRequiredElement<HTMLElement>('#panorama-choice-primary-detail');
+const panoramaChoiceSecondaryButton = getRequiredElement<HTMLButtonElement>('#panorama-choice-secondary');
+const panoramaChoiceSecondaryTitle = getRequiredElement<HTMLElement>('#panorama-choice-secondary-title');
+const panoramaChoiceSecondaryDetail = getRequiredElement<HTMLElement>('#panorama-choice-secondary-detail');
+const panoramaChoiceCloseButton = getRequiredElement<HTMLButtonElement>('#panorama-choice-close');
 const closePanoramaButton = getRequiredElement<HTMLButtonElement>('#close-panorama');
 const panoramaView = getRequiredElement<HTMLElement>('#panorama-view');
 const panoramaStage = getRequiredElement<HTMLElement>('#panorama-stage');
@@ -538,6 +781,8 @@ const closePanoramaInfoButton = getRequiredElement<HTMLButtonElement>('#close-pa
 const panoramaZoomOutButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-out');
 const panoramaZoomInButton = getRequiredElement<HTMLButtonElement>('#panorama-zoom-in');
 const panoramaResetButton = getRequiredElement<HTMLButtonElement>('#panorama-reset-view');
+const panoramaVideoPlayButton = getRequiredElement<HTMLButtonElement>('#panorama-video-play');
+const panoramaVideoMuteButton = getRequiredElement<HTMLButtonElement>('#panorama-video-mute');
 const panoramaVrButton = getRequiredElement<HTMLButtonElement>('#panorama-vr-mode');
 const panoramaFullscreenButton = getRequiredElement<HTMLButtonElement>('#panorama-fullscreen');
 const panoramaVrOrientation = getRequiredElement<HTMLElement>('#panorama-vr-orientation');
@@ -565,13 +810,36 @@ const qrScannerConfirmArButton = getRequiredElement<HTMLButtonElement>('#qr-scan
 const qrScannerCloseButton = getRequiredElement<HTMLButtonElement>('#qr-scanner-close');
 let arMode: ARMode = 'unavailable';
 
-const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL);
+function resolvePanoramaMediaUrl(url: string | undefined): string | undefined {
+  const trimmedUrl = url?.trim();
+  if (!trimmedUrl) return undefined;
+  if (/^(https?:)?\/\//.test(trimmedUrl) || trimmedUrl.startsWith('/')) return trimmedUrl;
+  const normalizedBase = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`;
+  return `${normalizedBase}${trimmedUrl.replace(/^\/+/, '')}`;
+}
+
+const panoramaScenes = createPanoramaTour(import.meta.env.BASE_URL, {
+  videoUrl: resolvePanoramaMediaUrl(import.meta.env.VITE_360_VIDEO_URL ?? 'videos/eagle-360.mp4'),
+  videoPosterUrl: resolvePanoramaMediaUrl(import.meta.env.VITE_360_VIDEO_POSTER_URL),
+});
+type PanoramaMode = 'photo' | 'video';
+type PanoramaChoiceStep = 'media' | 'viewing';
+type AppSection = 'home' | 'catalog' | 'settings';
+const PANORAMA_VIDEO_SCENE_ID = 'video-360';
 const PANORAMA_GAZE_TARGET_DEGREES = 7.5;
 const PANORAMA_GAZE_DWELL_MS = 1300;
 const PANORAMA_GAZE_TELEPORT_TIMEOUT_MS = 8000;
+const MODEL_VISIT_OBJECTIVE_PREFIX = 'model-visited:';
 const progressStorage = getProgressStorage();
 let appProgress = loadAppProgress(progressStorage);
 let activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panoramaSceneId);
+let activePanoramaMode: PanoramaMode = getPanoramaSceneMedia(activePanoramaScene).kind === 'video'
+  ? 'video'
+  : 'photo';
+let panoramaChoiceStep: PanoramaChoiceStep = 'media';
+let pendingPanoramaMode: PanoramaMode = 'photo';
 let resumableView: ResumableView = appProgress.view;
 let panoramaCheckpointTimer: number | undefined;
 let panoramaWakeLock: WakeLockSentinel | null = null;
@@ -605,13 +873,117 @@ const qrScannerAnalysisContext = qrScannerAnalysisCanvas.getContext('2d', { will
 const QR_SCANNER_CONFIRMATION_FRAMES = 6;
 const QR_SCANNER_LOST_FRAME_TOLERANCE = 8;
 
+function showAppSection(section: AppSection): void {
+  landingScreen.hidden = section !== 'home';
+  catalogScreen.hidden = section !== 'catalog';
+  settingsScreen.hidden = section !== 'settings';
+  document.body.dataset.appSection = section;
+  settingsFeedback.textContent = '';
+  renderVisitProgress();
+  renderMuseumPieceSearch();
+
+  if (section === 'home') startButton.focus();
+  else if (section === 'catalog') catalogBackButton.focus();
+  else settingsBackButton.focus();
+}
+
 function checkpoint(action: string, view: ResumableView = resumableView): void {
   appProgress = saveAppProgress(progressStorage, {
     view,
     panoramaSceneId: activePanoramaScene.id,
     panorama: panorama.getViewState(),
+    completedObjectives: appProgress.completedObjectives,
     lastAction: action,
   });
+}
+
+function getModelVisitObjectiveId(modelId: ModelId): string {
+  return `${MODEL_VISIT_OBJECTIVE_PREFIX}${modelId}`;
+}
+
+function isModelUnlocked(modelId: ModelId): boolean {
+  return appProgress.completedObjectives.includes(getModelVisitObjectiveId(modelId));
+}
+
+function getUnlockedModelCount(): number {
+  return MODEL_CATALOG_BY_PIECE.filter((model) => isModelUnlocked(model.id)).length;
+}
+
+function renderPieceCatalog(): void {
+  MODEL_CATALOG_BY_PIECE.forEach((model) => {
+    const unlocked = isModelUnlocked(model.id);
+    const card = pieceCatalogCards.get(model.id)!;
+    const previewCanvas = pieceCatalogPreviewCanvases.get(model.id)!;
+    const preview = pieceCatalogModelPreviews.get(model.id);
+    const silhouette = card.querySelector<HTMLElement>('.piece-silhouette')!;
+    const status = card.querySelector<HTMLElement>('.piece-card-status')!;
+    const name = card.querySelector<HTMLElement>('.piece-card-name')!;
+    const description = card.querySelector<HTMLElement>('.piece-card-description')!;
+
+    card.dataset.unlocked = String(unlocked);
+    card.setAttribute(
+      'aria-label',
+      `Pieza ${String(model.pieceNumber).padStart(2, '0')}: ${unlocked ? model.name : 'sin visitar'}`,
+    );
+    previewCanvas.hidden = !unlocked;
+    silhouette.hidden = unlocked;
+    if (unlocked && !catalogScreen.hidden) preview?.start();
+    else preview?.stop();
+    status.textContent = unlocked ? 'Desbloqueada' : 'Sin visitar';
+    name.textContent = unlocked ? model.name : 'Silueta reservada';
+    description.textContent = unlocked ? model.description : 'Pieza pendiente de visita.';
+  });
+}
+
+function renderVisitProgress(): void {
+  const unlockedCount = getUnlockedModelCount();
+  visitProgress.dataset.completed = String(unlockedCount === MODEL_CATALOG_BY_PIECE.length);
+  visitProgressStatus.textContent = `${unlockedCount}/${MODEL_CATALOG_BY_PIECE.length}`;
+  pieceCatalogCount.textContent = `${unlockedCount}/${MODEL_CATALOG_BY_PIECE.length}`;
+  renderPieceCatalog();
+}
+
+function renderMuseumPieceSearch(): void {
+  const query = museumPieceSearchInput.value.replace(/\D/g, '');
+  let visibleCount = 0;
+
+  museumPieceCards.forEach((card) => {
+    const pieceNumber = card.dataset.museumPieceNumber ?? '';
+    const visible = query === '' || pieceNumber.includes(query);
+    card.hidden = !visible;
+    if (visible) visibleCount += 1;
+  });
+
+  museumSearchCount.textContent = query === ''
+    ? `${MUSEUM_PIECES.length} piezas`
+    : `${visibleCount} resultado${visibleCount === 1 ? '' : 's'}`;
+  museumSearchEmpty.hidden = visibleCount > 0;
+}
+
+function rememberModelVisit(modelId: ModelId): void {
+  const objectiveId = getModelVisitObjectiveId(modelId);
+  if (appProgress.completedObjectives.includes(objectiveId)) return;
+
+  appProgress = saveAppProgress(progressStorage, {
+    view: resumableView,
+    panoramaSceneId: activePanoramaScene.id,
+    panorama: panorama.getViewState(),
+    completedObjectives: [...appProgress.completedObjectives, objectiveId],
+    lastAction: `${activeExperienceMode ?? 'ar'}:model-unlocked:${modelId}`,
+  });
+  renderVisitProgress();
+}
+
+function resetVisitProgress(): void {
+  clearAppProgress(progressStorage);
+  appProgress = loadAppProgress(progressStorage);
+  activePanoramaScene = findPanoramaScene(panoramaScenes, appProgress.panoramaSceneId);
+  activePanoramaMode = getPanoramaSceneMedia(activePanoramaScene).kind === 'video'
+    ? 'video'
+    : 'photo';
+  resumableView = appProgress.view;
+  renderVisitProgress();
+  settingsFeedback.textContent = 'Progreso local borrado. La visita vuelve a empezar desde cero.';
 }
 
 function schedulePanoramaCheckpoint(): void {
@@ -632,7 +1004,7 @@ function flushPanoramaCheckpoint(action: string, view: ResumableView = resumable
 
 const panorama = new PanoramaViewer({
   container: panoramaStage,
-  imageUrl: activePanoramaScene.imageUrl,
+  media: getPanoramaSceneMedia(activePanoramaScene),
   initialView: activePanoramaScene.id === appProgress.panoramaSceneId
     ? appProgress.panorama
     : activePanoramaScene.initialView,
@@ -655,6 +1027,7 @@ const panorama = new PanoramaViewer({
     }
   },
   onViewChange: schedulePanoramaCheckpoint,
+  onMediaStateChange: updatePanoramaMediaControls,
   onVrPostureChange: updatePanoramaVrOrientationState,
 });
 
@@ -674,6 +1047,44 @@ function showPanoramaAlert(message: string, timeout = 4200): void {
       panoramaAlertTimeout = undefined;
     }, timeout);
   }
+}
+
+function updatePanoramaMediaControls(
+  state: PanoramaMediaPlaybackState = panorama.getMediaPlaybackState(),
+): void {
+  const isVideo = state.kind === 'video';
+  panoramaVideoPlayButton.hidden = !isVideo;
+  panoramaVideoMuteButton.hidden = !isVideo;
+  if (!isVideo) return;
+
+  panoramaVideoPlayButton.textContent = state.paused ? '▶' : 'II';
+  panoramaVideoPlayButton.setAttribute(
+    'aria-label',
+    state.paused ? 'Reproducir video 360' : 'Pausar video 360',
+  );
+  panoramaVideoMuteButton.textContent = state.muted ? '♪' : 'ON';
+  panoramaVideoMuteButton.setAttribute(
+    'aria-label',
+    state.muted ? 'Activar sonido del video 360' : 'Silenciar video 360',
+  );
+}
+
+function getPanoramaScenesForMode(): typeof panoramaScenes {
+  return activePanoramaMode === 'photo'
+    ? panoramaScenes.filter((scene) => getPanoramaSceneMedia(scene).kind === 'image')
+    : panoramaScenes.filter((scene) => scene.id === PANORAMA_VIDEO_SCENE_ID);
+}
+
+function getInitialSceneForPanoramaMode(mode: PanoramaMode): typeof activePanoramaScene {
+  if (mode === 'video') {
+    return panoramaScenes.find((scene) => scene.id === PANORAMA_VIDEO_SCENE_ID)
+      ?? panoramaScenes.find((scene) => getPanoramaSceneMedia(scene).kind === 'video')
+      ?? findPanoramaScene(panoramaScenes, DEFAULT_PANORAMA_SCENE_ID);
+  }
+
+  return panoramaScenes.find((scene) => scene.id === DEFAULT_PANORAMA_SCENE_ID)
+    ?? panoramaScenes.find((scene) => getPanoramaSceneMedia(scene).kind === 'image')
+    ?? findPanoramaScene(panoramaScenes, DEFAULT_PANORAMA_SCENE_ID);
 }
 
 function setPanoramaTourOpen(open: boolean): void {
@@ -702,7 +1113,7 @@ function showPanoramaInfo(hotspot: PanoramaInfoHotspot): void {
 
 function renderPanoramaSceneList(): void {
   panoramaSceneList.replaceChildren();
-  panoramaScenes.forEach((scene, index) => {
+  getPanoramaScenesForMode().forEach((scene, index) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'panorama-scene-option';
@@ -715,7 +1126,9 @@ function renderPanoramaSceneList(): void {
     const title = document.createElement('strong');
     title.textContent = scene.title;
     const location = document.createElement('small');
-    location.textContent = scene.location.split(' · ').at(-1) ?? scene.location;
+    const sceneMedia = getPanoramaSceneMedia(scene);
+    const mediaLabel = sceneMedia.kind === 'video' ? 'Video 360' : 'Foto 360';
+    location.textContent = `${mediaLabel} · ${scene.location.split(' · ').at(-1) ?? scene.location}`;
     copy.append(title, location);
     button.append(number, copy);
     button.addEventListener('click', () => {
@@ -726,12 +1139,17 @@ function renderPanoramaSceneList(): void {
 }
 
 function updatePanoramaSceneUi(): void {
-  const sceneIndex = panoramaScenes.findIndex((scene) => scene.id === activePanoramaScene.id);
+  const visibleScenes = getPanoramaScenesForMode();
+  const sceneIndex = visibleScenes.findIndex((scene) => scene.id === activePanoramaScene.id);
   panoramaLocation.textContent = activePanoramaScene.location;
   panoramaSceneTitle.textContent = activePanoramaScene.title;
-  panoramaTourProgress.textContent = `Recorrido · ${sceneIndex + 1}/${panoramaScenes.length}`;
-  panoramaCredit.textContent = `Fotografía: ${activePanoramaScene.creditLabel}`;
+  panoramaTourProgress.textContent = activePanoramaMode === 'photo'
+    ? `Recorrido · ${sceneIndex + 1}/${visibleScenes.length}`
+    : 'Video 360';
+  panoramaTourToggle.hidden = activePanoramaMode === 'video';
+  panoramaCredit.textContent = `${getPanoramaSceneMedia(activePanoramaScene).kind === 'video' ? 'Video' : 'Fotografía'}: ${activePanoramaScene.creditLabel}`;
   panoramaCredit.href = activePanoramaScene.creditUrl;
+  updatePanoramaMediaControls();
   renderPanoramaSceneList();
 }
 
@@ -762,9 +1180,10 @@ async function activatePanoramaScene(
   panoramaLoaderLabel.textContent = `Cargando ${scene.title}…`;
   panoramaView.classList.add('is-changing-scene');
   try {
-    await panorama.changePanorama(scene.imageUrl, scene.initialView);
+    await panorama.changePanorama(getPanoramaSceneMedia(scene), scene.initialView);
     if (requestId !== panoramaSceneRequestId) return;
     activePanoramaScene = scene;
+    activePanoramaMode = getPanoramaSceneMedia(scene).kind === 'video' ? 'video' : 'photo';
     panorama.setHotspots(scene.hotspots, handlePanoramaHotspot);
     updatePanoramaSceneUi();
     panoramaLiveStatus.textContent = `Parada cargada: ${scene.title}`;
@@ -1017,19 +1436,22 @@ function applyPanoramaVrMode(enabled: boolean): void {
   }
 }
 
-async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Promise<void> {
-  if (panorama.isStereoMode() === enabled) return;
+async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Promise<boolean> {
+  if (panorama.isStereoMode() === enabled) return enabled;
 
   if (enabled) {
     const motionAccess = await panorama.enableMotionControls();
     if (motionAccess !== 'granted') {
-      showPanoramaAlert(
-        motionAccess === 'unsupported'
+      const message = motionAccess === 'insecure'
+        ? 'El modo gafas necesita HTTPS para acceder a los sensores. Abre el enlace HTTPS del tunel en vez del enlace Wi-Fi http.'
+        : motionAccess === 'unsupported'
           ? 'Este dispositivo no ofrece sensores de movimiento para modo gafas.'
-          : 'iOS ha bloqueado el movimiento. Permite el acceso cuando Safari lo solicite.',
+          : 'iOS ha bloqueado el movimiento. Permite el acceso cuando Safari lo solicite.';
+      showPanoramaAlert(
+        message,
         6500,
       );
-      return;
+      return false;
     }
 
     if (manageFullscreen && typeof panoramaView.requestFullscreen === 'function') {
@@ -1048,13 +1470,13 @@ async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Pro
     await lockPanoramaLandscape();
     if (panorama.getControlMode() === 'drag') {
       showPanoramaAlert('No llegan datos de movimiento. En iPhone revisa Ajustes > Safari > Movimiento y orientacion.', 6500);
-      return;
+      return false;
     }
     applyPanoramaVrMode(true);
     checkpoint('panorama:vr:on', 'panorama');
     panoramaLiveStatus.textContent = 'Modo gafas VR activado.';
     await requestPanoramaWakeLock();
-    return;
+    return true;
   }
 
   applyPanoramaVrMode(false);
@@ -1067,6 +1489,7 @@ async function setPanoramaVrMode(enabled: boolean, manageFullscreen = true): Pro
   } else {
     panoramaVrEnteredFullscreen = false;
   }
+  return true;
 }
 
 function updatePanoramaFullscreenButton(): void {
@@ -1106,6 +1529,19 @@ panoramaResetButton.addEventListener('click', () => {
   panorama.resetView(activePanoramaScene.initialView);
   panoramaLiveStatus.textContent = 'Vista centrada.';
 });
+panoramaVideoPlayButton.addEventListener('click', () => {
+  void panorama.togglePlayback().then((state) => {
+    updatePanoramaMediaControls(state);
+    panoramaLiveStatus.textContent = state.paused ? 'Video 360 pausado.' : 'Video 360 en reproduccion.';
+    checkpoint(`panorama:video:${state.paused ? 'pause' : 'play'}`, 'panorama');
+  });
+});
+panoramaVideoMuteButton.addEventListener('click', () => {
+  const state = panorama.toggleMute();
+  updatePanoramaMediaControls(state);
+  panoramaLiveStatus.textContent = state.muted ? 'Video 360 silenciado.' : 'Sonido del video 360 activado.';
+  checkpoint(`panorama:video:${state.muted ? 'mute' : 'sound'}`, 'panorama');
+});
 panoramaVrButton.addEventListener('click', () => {
   void setPanoramaVrMode(!panorama.isStereoMode());
 });
@@ -1121,9 +1557,18 @@ screen.orientation?.addEventListener?.('change', updatePanoramaVrOrientationStat
 window.addEventListener('resize', updatePanoramaVrOrientationState);
 
 const modelPreviews = new Map(
-  MODEL_CATALOG.map((model) => [
+  MODEL_CATALOG_BY_PIECE.map((model) => [
     model.id,
     new ModelPreview(modelPreviewCanvases.get(model.id)!),
+  ]),
+);
+const pieceCatalogModelPreviews = new Map(
+  MODEL_CATALOG_BY_PIECE.map((model) => [
+    model.id,
+    new ModelPreview(pieceCatalogPreviewCanvases.get(model.id)!, {
+      width: 120,
+      height: 120,
+    }),
   ]),
 );
 const qrScannerModelPreview = new ModelPreview(qrScannerModelCanvas, {
@@ -1221,6 +1666,7 @@ function resetInteractiveControls(): void {
 function applySelectedModel(modelId: ModelId): boolean {
   if (!getActiveModelExperience().placeModel(modelId)) return false;
   configureModelActions(modelId);
+  rememberModelVisit(modelId);
   closeModelMenus();
   checkpoint(`${activeExperienceMode ?? 'ar'}:model-placed:${modelId}`, 'landing');
   return true;
@@ -1439,13 +1885,17 @@ async function checkCompatibility(): Promise<void> {
   if (!previewModelsLoaded) {
     try {
       await Promise.all(
-        MODEL_CATALOG.map((model) =>
-          modelPreviews
-            .get(model.id)!
-            .load(`${import.meta.env.BASE_URL}models/${model.file}`),
-        ),
+        MODEL_CATALOG_BY_PIECE.flatMap((model) => {
+          const modelUrl = `${import.meta.env.BASE_URL}models/${model.file}`;
+
+          return [
+            modelPreviews.get(model.id)!.load(modelUrl),
+            pieceCatalogModelPreviews.get(model.id)!.load(modelUrl),
+          ];
+        }),
       );
       previewModelsLoaded = true;
+      renderVisitProgress();
     } catch {
       // El modelo principal muestra el error si el recurso tampoco puede cargarse.
     }
@@ -2178,6 +2628,7 @@ async function beginArSession(): Promise<void> {
 
 startButton.addEventListener('click', () => {
   if (arMode === 'quick-look') {
+    rememberModelVisit('mushroom');
     checkpoint('ios:quick-look-open', 'landing');
     iosARLink.click();
     compatibility.textContent = 'AR Quick Look abierto · vuelve a esta página para continuar';
@@ -2466,22 +2917,128 @@ modelButtons.forEach((button, modelId) => {
   });
 });
 
-function openPanorama(recordAction = true): void {
+openCatalogSectionButton.addEventListener('click', () => {
+  showAppSection('catalog');
+});
+openSettingsSectionButton.addEventListener('click', () => {
+  showAppSection('settings');
+});
+catalogBackButton.addEventListener('click', () => {
+  showAppSection('home');
+});
+settingsBackButton.addEventListener('click', () => {
+  showAppSection('home');
+});
+museumPieceSearchInput.addEventListener('input', renderMuseumPieceSearch);
+resetVisitProgressButton.addEventListener('click', resetVisitProgress);
+
+function openPanoramaChoice(): void {
+  renderPanoramaMediaChoice();
+  if (!panoramaChoiceDialog.open) {
+    if (typeof panoramaChoiceDialog.showModal === 'function') panoramaChoiceDialog.showModal();
+    else panoramaChoiceDialog.setAttribute('open', '');
+  }
+  panoramaChoicePrimaryButton.focus();
+}
+
+function closePanoramaChoice(): void {
+  if (panoramaChoiceDialog.open) panoramaChoiceDialog.close();
+  else panoramaChoiceDialog.removeAttribute('open');
+}
+
+function renderPanoramaMediaChoice(): void {
+  panoramaChoiceStep = 'media';
+  panoramaChoiceKicker.textContent = 'Vista inmersiva';
+  panoramaChoiceTitle.textContent = 'Paisaje 360°';
+  panoramaChoicePrimaryTitle.textContent = 'Foto 360';
+  panoramaChoicePrimaryDetail.textContent = 'Recorrido panorámico';
+  panoramaChoiceSecondaryTitle.textContent = 'Video 360';
+  panoramaChoiceSecondaryDetail.textContent = 'Marte inmersivo';
+  panoramaChoiceCloseButton.textContent = 'Cancelar';
+}
+
+function renderPanoramaViewingChoice(mode: PanoramaMode): void {
+  panoramaChoiceStep = 'viewing';
+  pendingPanoramaMode = mode;
+  panoramaChoiceKicker.textContent = mode === 'photo' ? 'Foto 360' : 'Video 360';
+  panoramaChoiceTitle.textContent = '¿Cómo quieres verlo?';
+  panoramaChoicePrimaryTitle.textContent = 'Ver normal';
+  panoramaChoicePrimaryDetail.textContent = 'Mover el móvil o arrastrar';
+  panoramaChoiceSecondaryTitle.textContent = 'Usar VR';
+  panoramaChoiceSecondaryDetail.textContent = 'Gafas y móvil en horizontal';
+  panoramaChoiceCloseButton.textContent = 'Atrás';
+  panoramaChoicePrimaryButton.focus();
+}
+
+function handlePanoramaChoice(primary: boolean): void {
+  if (panoramaChoiceStep === 'media') {
+    renderPanoramaViewingChoice(primary ? 'photo' : 'video');
+    return;
+  }
+
+  closePanoramaChoice();
+  void openPanorama(pendingPanoramaMode, true, !primary);
+}
+
+async function openPanorama(
+  mode: PanoramaMode = activePanoramaMode,
+  recordAction = true,
+  requireVrPlacement = false,
+): Promise<void> {
+  const targetScene = getInitialSceneForPanoramaMode(mode);
+  activePanoramaMode = mode;
   resumableView = 'panorama';
   document.body.classList.add('panorama-active');
   panoramaView.setAttribute('aria-hidden', 'false');
   closePanoramaButton.focus();
-  if (recordAction) checkpoint('panorama:open', 'panorama');
-  panoramaLoaderLabel.textContent = `Cargando ${activePanoramaScene.title}…`;
-  void panorama.open()
-    .then(() => requestPanoramaWakeLock())
-    .catch(() => {
-      panoramaLoader.hidden = false;
-      panoramaLoaderLabel.textContent = 'No se pudo cargar el paisaje.';
-    });
+  panoramaLoaderLabel.textContent = `Cargando ${targetScene.title}…`;
+
+  try {
+    const vrPrepared = requireVrPlacement
+      ? await setPanoramaVrMode(true)
+      : false;
+    if (!requireVrPlacement && panorama.isStereoMode()) {
+      await setPanoramaVrMode(false, false);
+    }
+    if (vrPrepared) {
+      panoramaLiveStatus.textContent = 'Coloca el móvil en horizontal y pulsa OK cuando esté listo.';
+    }
+
+    panoramaLoaderLabel.textContent = `Cargando ${targetScene.title}…`;
+    if (targetScene.id !== activePanoramaScene.id) {
+      await activatePanoramaScene(targetScene.id, 'menu');
+    } else {
+      activePanoramaMode = mode;
+      panorama.setHotspots(activePanoramaScene.hotspots, handlePanoramaHotspot);
+      updatePanoramaSceneUi();
+      await panorama.open();
+    }
+    if (recordAction) checkpoint(`panorama:open:${mode}`, 'panorama');
+    await requestPanoramaWakeLock();
+  } catch {
+    panoramaLoader.hidden = false;
+    panoramaLoaderLabel.textContent = 'No se pudo cargar el paisaje.';
+  }
 }
 
-openPanoramaButton.addEventListener('click', () => openPanorama());
+openPanoramaButton.addEventListener('click', openPanoramaChoice);
+panoramaChoicePrimaryButton.addEventListener('click', () => handlePanoramaChoice(true));
+panoramaChoiceSecondaryButton.addEventListener('click', () => handlePanoramaChoice(false));
+panoramaChoiceCloseButton.addEventListener('click', () => {
+  if (panoramaChoiceStep === 'viewing') {
+    renderPanoramaMediaChoice();
+    panoramaChoicePrimaryButton.focus();
+    return;
+  }
+  closePanoramaChoice();
+  openPanoramaButton.focus();
+});
+panoramaChoiceDialog.addEventListener('click', (event) => {
+  if (event.target === panoramaChoiceDialog) {
+    closePanoramaChoice();
+    openPanoramaButton.focus();
+  }
+});
 
 function closePanorama(): void {
   flushPanoramaCheckpoint('panorama:close', 'landing');
@@ -2503,7 +3060,15 @@ function closePanorama(): void {
 
 closePanoramaButton.addEventListener('click', closePanorama);
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && qrScannerDialog.open) {
+  if (event.key === 'Escape' && panoramaChoiceDialog.open) {
+    if (panoramaChoiceStep === 'viewing') {
+      renderPanoramaMediaChoice();
+      panoramaChoicePrimaryButton.focus();
+    } else {
+      closePanoramaChoice();
+      openPanoramaButton.focus();
+    }
+  } else if (event.key === 'Escape' && qrScannerDialog.open) {
     closeQrScannerDialog();
   } else if (event.key === 'Escape' && document.body.classList.contains('panorama-active')) {
     if (!panoramaInfoCard.hidden) {
@@ -2520,6 +3085,10 @@ document.addEventListener('keydown', (event) => {
   } else if (event.key === 'Escape' && testViewerActive) {
     checkpoint('test-viewer:escape', 'landing');
     void testCubeViewer.end();
+  } else if (event.key === 'Escape' && catalogScreen.hidden === false) {
+    showAppSection('home');
+  } else if (event.key === 'Escape' && settingsScreen.hidden === false) {
+    showAppSection('home');
   }
 });
 
@@ -2589,5 +3158,6 @@ window.addEventListener('pageshow', () => {
   if (testExperienceActive) void testExperience.interrupt().catch(() => undefined);
 });
 
-if (appProgress.view === 'panorama') openPanorama(false);
+if (appProgress.view === 'panorama') void openPanorama(activePanoramaMode, false);
+renderVisitProgress();
 void checkCompatibility();

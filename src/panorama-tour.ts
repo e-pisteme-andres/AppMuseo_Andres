@@ -8,18 +8,25 @@ export type {
 
 export const DEFAULT_PANORAMA_SCENE_ID = 'paranal-overlook';
 
+export interface PanoramaTourOptions {
+  videoUrl?: string;
+  videoPosterUrl?: string;
+}
+
 function withBaseUrl(baseUrl: string, path: string): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   return `${normalizedBase}${path.replace(/^\/+/, '')}`;
 }
 
-export function createPanoramaTour(baseUrl: string): PanoramaScene[] {
-  return [
+export function createPanoramaTour(baseUrl: string, options: PanoramaTourOptions = {}): PanoramaScene[] {
+  const totalScenes = options.videoUrl ? 4 : 3;
+  const scenes: PanoramaScene[] = [
     {
       id: 'paranal-overlook',
       title: 'Entorno de Paranal',
-      location: 'Parada 1 de 3 · Cerro Paranal',
+      location: `Parada 1 de ${totalScenes} · Cerro Paranal`,
       imageUrl: withBaseUrl(baseUrl, 'panoramas/paranal-360.jpg'),
+      media: { kind: 'image', url: withBaseUrl(baseUrl, 'panoramas/paranal-360.jpg') },
       initialView: { longitude: 92, latitude: -7, fov: 68 },
       creditLabel: 'ESO · CC BY 4.0',
       creditUrl: 'https://www.eso.org/public/spain/images/res-mount-sunrise-pan/',
@@ -65,8 +72,9 @@ export function createPanoramaTour(baseUrl: string): PanoramaScene[] {
     {
       id: 'vlt-platform',
       title: 'Plataforma del VLT',
-      location: 'Parada 2 de 3 · Very Large Telescope',
+      location: `Parada 2 de ${totalScenes} · Very Large Telescope`,
       imageUrl: withBaseUrl(baseUrl, 'panoramas/paranal-vlt-platform-360.jpg'),
+      media: { kind: 'image', url: withBaseUrl(baseUrl, 'panoramas/paranal-vlt-platform-360.jpg') },
       initialView: { longitude: -176, latitude: -7, fov: 66 },
       creditLabel: 'M. Cabral / ESO',
       creditUrl: 'https://www.eso.org/public/images/ESO_Paranal_360_Marcio_Cabral_Chile_07-CC/',
@@ -112,8 +120,9 @@ export function createPanoramaTour(baseUrl: string): PanoramaScene[] {
     {
       id: 'residencia',
       title: 'La Residencia',
-      location: 'Parada 3 de 3 · Oasis interior',
+      location: `Parada 3 de ${totalScenes} · Oasis interior`,
       imageUrl: withBaseUrl(baseUrl, 'panoramas/paranal-residencia-360.jpg'),
+      media: { kind: 'image', url: withBaseUrl(baseUrl, 'panoramas/paranal-residencia-360.jpg') },
       initialView: { longitude: -178, latitude: -8, fov: 70 },
       creditLabel: 'ESO',
       creditUrl: 'https://www.eso.org/public/images/reception-area-pano/',
@@ -157,6 +166,37 @@ export function createPanoramaTour(baseUrl: string): PanoramaScene[] {
       ],
     },
   ];
+
+  if (options.videoUrl) {
+    scenes.push({
+      id: 'video-360',
+      title: 'Vuelo 360°',
+      location: `Parada ${scenes.length + 1} de ${totalScenes} · Eagle 360`,
+      media: {
+        kind: 'video',
+        url: options.videoUrl,
+        posterUrl: options.videoPosterUrl,
+        muted: true,
+        loop: true,
+        autoplay: true,
+      },
+      initialView: { longitude: 0, latitude: -4, fov: 72 },
+      creditLabel: 'videojs-vr sample',
+      creditUrl: 'https://github.com/videojs/videojs-vr/blob/main/samples/eagle-360.mp4',
+      hotspots: [
+        {
+          id: 'video-to-overview',
+          kind: 'navigation',
+          longitude: 24,
+          latitude: -9,
+          label: 'Volver al entorno de Paranal',
+          targetSceneId: 'paranal-overlook',
+        },
+      ],
+    });
+  }
+
+  return scenes;
 }
 
 export function findPanoramaScene(

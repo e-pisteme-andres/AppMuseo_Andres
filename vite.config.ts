@@ -32,8 +32,13 @@ const appUpdatedAt = new Date(
   Math.max(...appSourcePaths.map((path) => getLatestModifiedTime(resolve(__dirname, path)))),
 ).toISOString();
 
-export default defineConfig({
-  base: isPanoramaModuleBuild ? './' : (process.env.VITE_BASE_PATH ?? '/AppMuseo_Andres/'),
+export default defineConfig(({ command }) => ({
+  base: isPanoramaModuleBuild
+    ? './'
+    : (process.env.VITE_BASE_PATH ?? (command === 'serve' ? '/' : '/AppMuseo_Andres/')),
+  server: {
+    allowedHosts: ['.trycloudflare.com', '.loca.lt'],
+  },
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version ?? '0.0.0'),
     __APP_UPDATED_AT__: JSON.stringify(appUpdatedAt),
@@ -58,4 +63,4 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
-});
+}));

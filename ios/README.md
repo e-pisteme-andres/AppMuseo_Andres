@@ -1,5 +1,19 @@
 # App Museo para iOS
 
+## Resumen
+
+Guia de la aplicacion nativa iOS de App Museo. Describe requisitos, generacion
+del proyecto, firma, equivalencias con la experiencia web y validaciones
+necesarias antes de distribuir.
+
+## Indice
+
+- [Requisitos](#requisitos)
+- [Generar activos y proyecto](#generar-activos-y-proyecto)
+- [Configuracion de firma](#configuracion-de-firma)
+- [Correspondencia funcional](#correspondencia-funcional)
+- [Validacion antes de distribucion](#validacion-antes-de-distribucion)
+
 La carpeta `ios/` contiene la implementacion nativa de la experiencia para
 iPhone y iPad. La aplicacion usa SwiftUI para la interfaz, ARKit y RealityKit
 para la experiencia aumentada, Metal para el corte vertical y Core Motion para

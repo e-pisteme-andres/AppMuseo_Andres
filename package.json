@@ -1,10 +1,13 @@
 {
   "name": "app-museo-ar",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.8",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:local": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-tunnel.ps1 -Tunnel none",
+    "dev:tunnel": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-tunnel.ps1 -Tunnel localtunnel",
+    "dev:cloudflare": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-tunnel.ps1 -Tunnel cloudflared",
     "build": "tsc -b && vite build",
     "build:panorama-module": "powershell -Command \"$env:VITE_BUILD_TARGET='panorama-module'; node .\\node_modules\\typescript\\bin\\tsc -b; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node .\\node_modules\\vite\\bin\\vite.js build\"",
     "test": "vitest run",

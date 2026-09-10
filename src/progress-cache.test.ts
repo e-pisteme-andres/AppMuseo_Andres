@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   APP_PROGRESS_KEY,
+  clearAppProgress,
   DEFAULT_APP_PROGRESS,
   loadAppProgress,
   normalizePanoramaView,
@@ -15,6 +16,9 @@ function createStorage(initialValue: string | null = null): ProgressStorage {
     setItem: vi.fn((_key: string, nextValue: string) => {
       value = nextValue;
     }),
+    removeItem: vi.fn(() => {
+      value = null;
+    }),
   };
 }
 
@@ -25,6 +29,7 @@ describe('caché del progreso de la aplicación', () => {
       view: 'panorama',
       panoramaSceneId: 'vlt-platform',
       panorama: { longitude: 24, latitude: 12, fov: 58 },
+      completedObjectives: ['objetivo-prueba-local-storage'],
       lastAction: 'panorama:navigate',
     }, 1234);
 
@@ -35,6 +40,28 @@ describe('caché del progreso de la aplicación', () => {
   it('descarta datos corruptos sin impedir que la aplicación arranque', () => {
     const storage = createStorage('{no-es-json');
 
+    expect(loadAppProgress(storage)).toEqual(DEFAULT_APP_PROGRESS);
+  });
+
+  it('normaliza objetivos completados al recuperar progreso', () => {
+    const storage = createStorage(JSON.stringify({
+      ...DEFAULT_APP_PROGRESS,
+      completedObjectives: [
+        'objetivo-prueba-local-storage',
+        'objetivo-prueba-local-storage',
+        12,
+      ],
+    }));
+
+    expect(loadAppProgress(storage).completedObjectives).toEqual(['objetivo-prueba-local-storage']);
+  });
+
+  it('borra el progreso local de la aplicación', () => {
+    const storage = createStorage(JSON.stringify(DEFAULT_APP_PROGRESS));
+
+    clearAppProgress(storage);
+
+    expect(storage.removeItem).toHaveBeenCalledWith(APP_PROGRESS_KEY);
     expect(loadAppProgress(storage)).toEqual(DEFAULT_APP_PROGRESS);
   });
 
@@ -65,6 +92,7 @@ describe('caché del progreso de la aplicación', () => {
       view: 'landing',
       panoramaSceneId: 'paranal-overlook',
       panorama: DEFAULT_APP_PROGRESS.panorama,
+      completedObjectives: [],
       lastAction: 'app:hidden',
     })).not.toThrow();
   });

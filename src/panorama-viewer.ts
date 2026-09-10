@@ -11,18 +11,28 @@ import {
   Texture,
   TextureLoader,
   Vector3,
+  VideoTexture,
   WebGLRenderer,
 } from 'three';
-import type { PanoramaHotspot } from './panorama-types';
+import type { PanoramaHotspot, PanoramaSceneMedia } from './panorama-types';
 
 export type PanoramaControlMode = 'motion-pending' | 'motion' | 'drag';
-export type PanoramaMotionAccess = 'granted' | 'denied' | 'unsupported';
+export type PanoramaMotionAccess = 'granted' | 'denied' | 'unsupported' | 'insecure';
 export type PanoramaVrDevicePosture = 'ready' | 'portrait' | 'flat' | 'tilted' | 'unknown';
 
 export interface PanoramaViewState {
   longitude: number;
   latitude: number;
   fov: number;
+}
+
+export interface PanoramaMediaPlaybackState {
+  kind: PanoramaSceneMedia['kind'];
+  paused: boolean;
+  muted: boolean;
+  duration: number;
+  currentTime: number;
+  canPlay: boolean;
 }
 
 export interface PanoramaDeviceOrientation {
@@ -33,10 +43,11 @@ export interface PanoramaDeviceOrientation {
 
 interface PanoramaViewerOptions {
   container: HTMLElement;
-  imageUrl: string;
+  media: PanoramaSceneMedia;
   onLoadingChange?: (loading: boolean) => void;
   onControlModeChange?: (mode: PanoramaControlMode) => void;
   onViewChange?: (view: PanoramaViewState) => void;
+  onMediaStateChange?: (state: PanoramaMediaPlaybackState) => void;
   onVrPostureChange?: (posture: PanoramaVrDevicePosture) => void;
   initialView?: PanoramaViewState;
   canvasAriaLabel?: string;
@@ -51,6 +62,11 @@ interface PointerSnapshot {
 interface GazeTargetMarker {
   mesh: Mesh<SphereGeometry, MeshBasicMaterial>;
   material: MeshBasicMaterial;
+}
+
+interface LoadedPanoramaMedia {
+  texture: Texture;
+  video?: HTMLVideoElement;
 }
 
 export interface StereoEyeViewport {
@@ -89,6 +105,7 @@ const hotspotDirection = new Vector3();
 const minimumLatitude = -82;
 const maximumLatitude = 82;
 const panoramaTextureLoadTimeoutMs = 12000;
+const panoramaVideoLoadTimeoutMs = 16000;
 const stereoLensX = 0.08;
 const stereoLensY = 0.06;
 const stereoLensWidth = 0.39;
@@ -212,6 +229,7 @@ export function isTouchPanoramaMotionDevice(): boolean {
 export async function requestDeviceOrientationAccess(
   orientationEvent: DeviceOrientationConstructor | undefined,
 ): Promise<PanoramaMotionAccess> {
+  if (typeof window !== 'undefined' && !window.isSecureContext) return 'insecure';
   if (!orientationEvent) return 'unsupported';
   if (!orientationEvent.requestPermission) return 'granted';
 
@@ -224,10 +242,11 @@ export async function requestDeviceOrientationAccess(
 
 export class PanoramaViewer {
   private readonly container: HTMLElement;
-  private imageUrl: string;
+  private media: PanoramaSceneMedia;
   private readonly onLoadingChange?: (loading: boolean) => void;
   private readonly onControlModeChange?: (mode: PanoramaControlMode) => void;
   private readonly onViewChange?: (view: PanoramaViewState) => void;
+  private readonly onMediaStateChange?: (state: PanoramaMediaPlaybackState) => void;
   private readonly onVrPostureChange?: (posture: PanoramaVrDevicePosture) => void;
   private readonly canvasAriaLabel: string;
   private readonly hotspotsAriaLabel: string;
@@ -238,6 +257,7 @@ export class PanoramaViewer {
   private frameId?: number;
   private resizeObserver?: ResizeObserver;
   private panoramaMaterial?: MeshBasicMaterial;
+  private activeVideo?: HTMLVideoElement;
   private gazeTargetGeometry?: SphereGeometry;
   private readonly gazeTargetMarkers = new Map<string, GazeTargetMarker>();
   private hotspotLayer?: HTMLElement;
@@ -269,20 +289,22 @@ export class PanoramaViewer {
 
   constructor({
     container,
-    imageUrl,
+    media,
     onLoadingChange,
     onControlModeChange,
     onViewChange,
+    onMediaStateChange,
     onVrPostureChange,
     initialView,
     canvasAriaLabel,
     hotspotsAriaLabel,
   }: PanoramaViewerOptions) {
     this.container = container;
-    this.imageUrl = imageUrl;
+    this.media = media;
     this.onLoadingChange = onLoadingChange;
     this.onControlModeChange = onControlModeChange;
     this.onViewChange = onViewChange;
+    this.onMediaStateChange = onMediaStateChange;
     this.onVrPostureChange = onVrPostureChange;
     this.canvasAriaLabel = canvasAriaLabel ?? 'Panorama interactivo';
     this.hotspotsAriaLabel = hotspotsAriaLabel ?? 'Puntos de interés de la panorámica';
@@ -299,6 +321,37 @@ export class PanoramaViewer {
       latitude: this.latitude,
       fov: this.camera?.fov ?? this.fieldOfView,
     };
+  }
+
+  getMediaPlaybackState(): PanoramaMediaPlaybackState {
+    const video = this.activeVideo;
+    const duration = video?.duration ?? 0;
+    const currentTime = video?.currentTime ?? 0;
+    return {
+      kind: this.media.kind,
+      paused: video?.paused ?? true,
+      muted: video?.muted ?? true,
+      duration: Number.isFinite(duration) ? duration : 0,
+      currentTime: Number.isFinite(currentTime) ? currentTime : 0,
+      canPlay: Boolean(video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA),
+    };
+  }
+
+  async togglePlayback(): Promise<PanoramaMediaPlaybackState> {
+    const video = this.activeVideo;
+    if (!video) return this.getMediaPlaybackState();
+    if (video.paused) await video.play().catch(() => undefined);
+    else video.pause();
+    this.notifyMediaState();
+    return this.getMediaPlaybackState();
+  }
+
+  toggleMute(): PanoramaMediaPlaybackState {
+    const video = this.activeVideo;
+    if (!video) return this.getMediaPlaybackState();
+    video.muted = !video.muted;
+    this.notifyMediaState();
+    return this.getMediaPlaybackState();
   }
 
   isStereoMode(): boolean {
@@ -382,11 +435,11 @@ export class PanoramaViewer {
   }
 
   async changePanorama(
-    imageUrl: string,
+    media: PanoramaSceneMedia,
     initialView: PanoramaViewState,
   ): Promise<void> {
     if (!this.renderer || !this.panoramaMaterial) {
-      this.imageUrl = imageUrl;
+      this.media = media;
       this.applyView(initialView);
       await this.open();
       return;
@@ -395,19 +448,21 @@ export class PanoramaViewer {
     const requestId = ++this.textureRequestId;
     this.onLoadingChange?.(true);
     try {
-      const texture = await this.loadTexture(imageUrl);
+      const loadedMedia = await this.loadMediaTexture(media);
       if (requestId !== this.textureRequestId) {
-        texture.dispose();
+        loadedMedia.texture.dispose();
+        this.disposeVideoElement(loadedMedia.video);
         return;
       }
-      texture.colorSpace = SRGBColorSpace;
-      this.panoramaMaterial.map?.dispose();
-      this.panoramaMaterial.map = texture;
+      this.disposeActiveMedia();
+      this.activeVideo = loadedMedia.video;
+      this.panoramaMaterial.map = loadedMedia.texture;
       this.panoramaMaterial.needsUpdate = true;
-      this.imageUrl = imageUrl;
+      this.media = media;
       this.applyView(initialView);
       this.motionCalibration = undefined;
       this.onViewChange?.(this.getViewState());
+      this.notifyMediaState();
     } finally {
       if (requestId === this.textureRequestId) this.onLoadingChange?.(false);
     }
@@ -445,18 +500,19 @@ export class PanoramaViewer {
 
     try {
       await this.prepareControls();
-      const texture = await this.loadTexture(this.imageUrl);
-      texture.colorSpace = SRGBColorSpace;
+      const loadedMedia = await this.loadMediaTexture(this.media);
       const geometry = new SphereGeometry(500, 72, 48);
       geometry.scale(-1, 1, 1);
-      const material = new MeshBasicMaterial({ map: texture });
+      const material = new MeshBasicMaterial({ map: loadedMedia.texture });
       scene.add(new Mesh(geometry, material));
       this.panoramaMaterial = material;
+      this.activeVideo = loadedMedia.video;
 
       this.createHotspotLayer();
       this.addEventListeners();
       this.resize();
       this.startRendering();
+      this.notifyMediaState();
     } catch (error) {
       this.dispose();
       throw error;
@@ -481,6 +537,7 @@ export class PanoramaViewer {
     this.renderer?.domElement.removeEventListener('wheel', this.handleWheel);
     window.removeEventListener('deviceorientation', this.handleDeviceOrientation, true);
     if (this.orientationTimeoutId !== undefined) window.clearTimeout(this.orientationTimeoutId);
+    this.disposeActiveVideo();
 
     this.scene?.traverse((object) => {
       if (!(object instanceof Mesh)) return;
@@ -497,6 +554,7 @@ export class PanoramaViewer {
     this.scene = undefined;
     this.camera = undefined;
     this.panoramaMaterial = undefined;
+    this.activeVideo = undefined;
     this.gazeTargetGeometry = undefined;
     this.gazeTargetMarkers.clear();
     this.hotspotLayer = undefined;
@@ -699,7 +757,12 @@ export class PanoramaViewer {
     render();
   }
 
-  private loadTexture(imageUrl: string): Promise<Texture> {
+  private loadMediaTexture(media: PanoramaSceneMedia): Promise<LoadedPanoramaMedia> {
+    if (media.kind === 'video') return this.loadVideoTexture(media);
+    return this.loadImageTexture(media.url);
+  }
+
+  private loadImageTexture(imageUrl: string): Promise<LoadedPanoramaMedia> {
     return new Promise((resolve, reject) => {
       let settled = false;
       const timeoutId = window.setTimeout(() => {
@@ -717,7 +780,8 @@ export class PanoramaViewer {
               return;
             }
             settled = true;
-            resolve(texture);
+            texture.colorSpace = SRGBColorSpace;
+            resolve({ texture });
           },
           undefined,
           (error) => {
@@ -734,6 +798,88 @@ export class PanoramaViewer {
         reject(error instanceof Error ? error : new Error('Panorama texture load failed.'));
       }
     });
+  }
+
+  private loadVideoTexture(media: Extract<PanoramaSceneMedia, { kind: 'video' }>): Promise<LoadedPanoramaMedia> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const video = document.createElement('video');
+      video.src = media.url;
+      video.crossOrigin = 'anonymous';
+      video.loop = media.loop ?? true;
+      video.muted = media.muted ?? true;
+      video.autoplay = media.autoplay ?? true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      if (media.posterUrl) video.poster = media.posterUrl;
+
+      const cleanup = (): void => {
+        window.clearTimeout(timeoutId);
+        video.removeEventListener('loadeddata', handleLoadedData);
+        video.removeEventListener('canplay', handleLoadedData);
+        video.removeEventListener('error', handleError);
+      };
+      const fail = (message: string): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        reject(new Error(message));
+      };
+      const handleLoadedData = (): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        const texture = new VideoTexture(video);
+        texture.colorSpace = SRGBColorSpace;
+        this.addVideoStateListeners(video);
+        if (video.autoplay) void video.play().catch(() => this.notifyMediaState());
+        resolve({ texture, video });
+        this.notifyMediaState();
+      };
+      const handleError = (): void => fail('Panorama video load failed.');
+      const timeoutId = window.setTimeout(
+        () => fail('Panorama video load timed out.'),
+        panoramaVideoLoadTimeoutMs,
+      );
+
+      video.addEventListener('loadeddata', handleLoadedData, { once: true });
+      video.addEventListener('canplay', handleLoadedData, { once: true });
+      video.addEventListener('error', handleError, { once: true });
+      video.load();
+    });
+  }
+
+  private addVideoStateListeners(video: HTMLVideoElement): void {
+    const notify = (): void => this.notifyMediaState();
+    video.addEventListener('play', notify);
+    video.addEventListener('pause', notify);
+    video.addEventListener('volumechange', notify);
+    video.addEventListener('loadedmetadata', notify);
+    video.addEventListener('timeupdate', notify);
+  }
+
+  private disposeActiveMedia(): void {
+    this.panoramaMaterial?.map?.dispose();
+    this.disposeActiveVideo();
+  }
+
+  private disposeActiveVideo(): void {
+    this.disposeVideoElement(this.activeVideo);
+    this.activeVideo = undefined;
+  }
+
+  private disposeVideoElement(video: HTMLVideoElement | undefined): void {
+    if (!video) return;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+  }
+
+  private notifyMediaState(): void {
+    this.onMediaStateChange?.(this.getMediaPlaybackState());
   }
 
   private renderScene(): void {

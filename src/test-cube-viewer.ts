@@ -93,10 +93,13 @@ export class TestCubeViewer {
   async prepareFromUserGesture(): Promise<boolean> {
     const motionAccess = await this.requestMotionControls();
     if (motionAccess !== 'granted') {
-      this.options.onMessage(
-        motionAccess === 'unsupported'
+      const message = motionAccess === 'insecure'
+        ? 'El visor tipo gafas necesita HTTPS para acceder a los sensores. Abre el enlace HTTPS del tunel.'
+        : motionAccess === 'unsupported'
           ? 'Este móvil no ofrece sensores de movimiento para un visor tipo gafas.'
-          : 'No se pudo activar el movimiento. En iPhone permite el acceso a orientación y movimiento.',
+          : 'No se pudo activar el movimiento. En iPhone permite el acceso a orientación y movimiento.';
+      this.options.onMessage(
+        message,
       );
       return false;
     }
@@ -336,4 +339,3 @@ export class TestCubeViewer {
     this.updateOrientationBlock();
   };
 }
-

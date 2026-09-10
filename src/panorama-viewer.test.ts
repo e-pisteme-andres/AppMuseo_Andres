@@ -137,6 +137,21 @@ describe('vista de movimiento panoramica', () => {
     await expect(requestDeviceOrientationAccess(undefined)).resolves.toBe('unsupported');
   });
 
+  it('detecta cuando el navegador bloquea sensores por no usar HTTPS', async () => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { isSecureContext: false },
+    });
+
+    await expect(requestDeviceOrientationAccess({
+      requestPermission: async () => 'granted',
+    } as unknown as typeof DeviceOrientationEvent & {
+      requestPermission: () => Promise<'granted'>;
+    })).resolves.toBe('insecure');
+
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
   it('extrae longitud y latitud desde la orientacion absoluta de la camara', () => {
     const targetDirection = getSphericalPosition(32, 18, 1).normalize();
     const cameraQuaternion = new Quaternion().setFromUnitVectors(
