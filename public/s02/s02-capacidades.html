@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>S-02 · Capacidades del dispositivo</title>
+<!--
+  INSTRUMENTO DE SPIKE. Código desechable (docs/tests/README.md, regla del spike).
+  Responde: ¿qué ruta de RA elegiría <model-viewer> en ESTE móvil, y por qué?
+
+  No carga la biblioteca a propósito: replica su lógica de selección
+  (lib/constants.js y lib/features/ar.js de @google/model-viewer 4.3.1) para
+  poder ver la decisión ANTES de que exista un botón. Si esta página dice
+  «ninguna», el botón «Ver en RA» no debe aparecer.
+
+  Sin estilos del sistema de diseño y sin tokens.css: esto es un aparato de
+  medida, no una pantalla. Nada de lo que se ve aquí decide interfaz.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:12px; background:#000; color:#eee;
+         font:14px/1.45 ui-monospace, "SF Mono", Consolas, monospace; }
+  h1 { font-size:15px; margin:0 0 4px; }
+  p.sub { margin:0 0 14px; color:#999; font-size:12px; }
+  h2 { font-size:13px; margin:18px 0 6px; color:#9cf; text-transform:uppercase;
+       letter-spacing:.06em; }
+  table { border-collapse:collapse; width:100%; }
+  td { padding:5px 4px; border-bottom:1px solid #222; vertical-align:top;
+       word-break:break-word; }
+  td:first-child { color:#aaa; width:52%; }
+  .si   { color:#6f6; }
+  .no   { color:#f77; }
+  .ua { font-size:11px; color:#888; word-break:break-all; }
+  button { font:inherit; padding:12px 16px; min-height:48px; width:100%;
+           margin-top:12px; background:#222; color:#eee; border:1px solid #555; }
+</style>
+</head>
+<body>
+
+<h1>S-02 · Capacidades del dispositivo <a href="s02.html" style="float:right;color:#9cf">← puerta</a></h1>
+<p class="sub">Qué ruta de RA elegiría <code>&lt;model-viewer&gt;</code> 4.3.1 aquí,
+y por qué. Réplica de su lógica, sin cargar la biblioteca.</p>
+
+<div class="rotulo" id="rotulo"></div>
+
+<h2>Contexto de la página</h2>
+<table id="t-contexto"></table>
+
+<h2>Señales de plataforma (cadena de agente)</h2>
+<table id="t-plataforma"></table>
+
+<h2>Señales de capacidad (detección real)</h2>
+<table id="t-capacidad"></table>
+
+<h2>Candidaturas, como las calcula la biblioteca</h2>
+<table id="t-candidatos"></table>
+
+<button id="copiar">Copiar todo como texto</button>
+
+<script src="s02-recursos/ruta-ra.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // La réplica de lib/constants.js vive en un solo sitio, s02-recursos/ruta-ra.js,
+  // y las tres páginas la comparten. Dos copias de la misma réplica es cómo se
+  // consigue que dos instrumentos den respuestas distintas del mismo móvil.
+  const S = RutaRA.señales;
+  const ua = RutaRA.ua;
+
+  const IS_ANDROID = S.IS_ANDROID;
+  const IS_IOS = S.IS_IOS;
+  const IS_FIREFOX = S.IS_FIREFOX;
+  const IS_SAFARI = /Safari\//.test(ua);
+  const IS_IOS_THIRDPARTY = S.IS_IOS_THIRDPARTY;
+  const IS_IOS_GSA = S.IS_IOS_GSA;
+  const IS_WKWEBVIEW = Boolean(window.webkit && window.webkit.messageHandlers);
+  const HAS_WEBXR_HIT_TEST_API = S.HAS_WEBXR_HIT_TEST;
+  const IS_WEBXR_AR_CANDIDATE = S.HAS_WEBXR_HIT_TEST;
+  const IS_SCENEVIEWER_CANDIDATE = S.IS_SCENEVIEWER_CANDIDATE;
+  const IS_AR_QUICKLOOK_CANDIDATE = S.IS_AR_QUICKLOOK_CANDIDATE;
+
+  // --- WebGL, que es el suelo del nivel 2 -----------------------------------
+  function infoWebGL() {
+    const c = document.createElement('canvas');
+    const gl2 = c.getContext('webgl2');
+    const gl  = gl2 || c.getContext('webgl');
+    if (!gl) return { version: 'ninguno', renderer: '—', maxTex: '—' };
+    let renderer = '(no expuesto)';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    if (dbg) renderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+    return {
+      version: gl2 ? 'WebGL 2' : 'WebGL 1 (sin 2)',
+      renderer: renderer,
+      maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' px'
+    };
+  }
+  const webgl = infoWebGL();
+
+  const filas = { contexto: [], plataforma: [], capacidad: [], candidatos: [] };
+
+  function fila(grupo, k, v, clase) { filas[grupo].push([k, v, clase || '']); }
+  function sino(b) { return b ? 'sí' : 'no'; }
+  function clase(b) { return b ? 'si' : 'no'; }
+
+  // Contexto
+  fila('contexto', 'Contexto seguro (isSecureContext)', sino(self.isSecureContext), clase(self.isSecureContext));
+  fila('contexto', 'Origen', self.location.origin);
+  fila('contexto', 'Pantalla (CSS px)', innerWidth + ' × ' + innerHeight +
+       '  ·  DPR ' + (devicePixelRatio || 1));
+  fila('contexto', 'Orientación', (screen.orientation && screen.orientation.type) || '—');
+  fila('contexto', 'Memoria declarada (deviceMemory)',
+       (navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'no expuesta'));
+  fila('contexto', 'Núcleos (hardwareConcurrency)', navigator.hardwareConcurrency || 'no expuesto');
+  fila('contexto', 'Red (effectiveType)',
+       (navigator.connection && navigator.connection.effectiveType) || 'no expuesta');
+  fila('contexto', 'Service worker registrado',
+       ('serviceWorker' in navigator) ? 'API presente' : 'sin API');
+
+  // Plataforma (cadena de agente)
+  fila('plataforma', 'IS_ANDROID', sino(IS_ANDROID), clase(IS_ANDROID));
+  fila('plataforma', 'IS_IOS', sino(IS_IOS), clase(IS_IOS));
+  fila('plataforma', 'IS_SAFARI', sino(IS_SAFARI));
+  fila('plataforma', 'IS_FIREFOX', sino(IS_FIREFOX));
+  fila('plataforma', 'IS_IOS_THIRDPARTY (Chrome/Edge/Firefox/DDG en iOS)', sino(IS_IOS_THIRDPARTY));
+  fila('plataforma', 'IS_IOS_GSA (app de Google en iOS)', sino(IS_IOS_GSA));
+  fila('plataforma', 'IS_WKWEBVIEW', sino(IS_WKWEBVIEW));
+  fila('plataforma', 'Cadena completa', '<span class="ua">' + ua + '</span>');
+
+  // Capacidad
+  fila('capacidad', 'WebGL', webgl.version, clase(webgl.version === 'WebGL 2'));
+  fila('capacidad', 'Renderizador GPU', webgl.renderer);
+  fila('capacidad', 'MAX_TEXTURE_SIZE', webgl.maxTex);
+  fila('capacidad', 'navigator.xr presente', sino(navigator.xr != null), clase(navigator.xr != null));
+  fila('capacidad', 'XRSession.requestHitTestSource', sino(HAS_WEBXR_HIT_TEST_API), clase(HAS_WEBXR_HIT_TEST_API));
+  fila('capacidad', 'immersive-ar soportado', 'consultando…', '', 'xr-ar');
+  fila('capacidad', 'anchor.relList.supports("ar")',
+       sino(!!(document.createElement('a').relList && document.createElement('a').relList.supports &&
+               document.createElement('a').relList.supports('ar'))));
+  fila('capacidad', 'API de cámara (getUserMedia)',
+       sino(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)));
+
+  // Candidatos
+  fila('candidatos', 'IS_WEBXR_AR_CANDIDATE', sino(IS_WEBXR_AR_CANDIDATE), clase(IS_WEBXR_AR_CANDIDATE));
+  fila('candidatos', 'IS_SCENEVIEWER_CANDIDATE <b>(solo cadena de agente)</b>',
+       sino(IS_SCENEVIEWER_CANDIDATE), clase(IS_SCENEVIEWER_CANDIDATE));
+  fila('candidatos', 'IS_AR_QUICKLOOK_CANDIDATE', sino(IS_AR_QUICKLOOK_CANDIDATE), clase(IS_AR_QUICKLOOK_CANDIDATE));
+
+  function pinta() {
+    for (const g of Object.keys(filas)) {
+      const t = document.getElementById('t-' + g);
+      t.innerHTML = filas[g].map(function (f) {
+        return '<tr><td>' + f[0] + '</td><td class="' + f[2] + '">' + f[1] + '</td></tr>';
+      }).join('');
+    }
+  }
+
+  pinta();
+
+  // El rótulo calcula y muestra la ruta. Aquí solo se completa la fila de
+  // immersive-ar, que es asíncrona y es la que de verdad decide si hay WebXR.
+  RutaRA.rotulo('rotulo');
+
+  if (navigator.xr && navigator.xr.isSessionSupported) {
+    navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
+      filas.capacidad[5] = ['immersive-ar soportado', sino(ok), clase(ok)];
+      pinta();
+    }).catch(function (e) {
+      filas.capacidad[5] = ['immersive-ar soportado', 'error: ' + e.name, 'no'];
+      pinta();
+    });
+  } else {
+    filas.capacidad[5] = ['immersive-ar soportado', 'sin API', 'no'];
+    pinta();
+  }
+
+  document.getElementById('copiar').addEventListener('click', function () {
+    const lineas = ['S-02 capacidades · ' + new Date().toISOString()];
+    for (const g of Object.keys(filas)) {
+      lineas.push('', '[' + g + ']');
+      for (const f of filas[g]) {
+        lineas.push('  ' + f[0].replace(/<[^>]+>/g, '') + ': ' +
+                    String(f[1]).replace(/<[^>]+>/g, ''));
+      }
+    }
+    lineas.push('', 'RÓTULO: ' +
+                document.getElementById('rotulo').textContent.replace(/\s+/g, ' ').trim());
+    const txt = lineas.join('\n');
+    if (navigator.clipboard) navigator.clipboard.writeText(txt);
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.width = '100%'; ta.rows = 12;
+    document.body.appendChild(ta); ta.select();
+  });
+})();
+</script>
+</body>
+</html>

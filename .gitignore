@@ -1,6 +1,13 @@
 node_modules/
 .pnpm-store/
 dist/
+tmp/
 *.tsbuildinfo
 .vite/
+.worktrees/
 .DS_Store
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/DerivedData/
+public/panoramas/paranal-residencia-360.jpg
+public/panoramas/paranal-vlt-platform-360.jpg
